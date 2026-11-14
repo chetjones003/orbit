@@ -1,6 +1,588 @@
 @import 'tailwindcss';
-@plugin "daisyui" {
-  themes:
-    dark --default,
-    light;
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #17171d;
+  --surface: #1e1e26;
+  --raised: #25252f;
+  --hover: #2e2d39;
+  --line: #34333e;
+  --text: #f2f0f7;
+  --muted: #a09daa;
+  --subtle: #777483;
+  --accent: #a78bfa;
+  --accent-soft: #332a4b;
+  --danger: #f2a6a6;
+}
+
+:root[data-theme='light'],
+:root:not([data-theme]) {
+  color-scheme: light;
+  --canvas: #f4f3f6;
+  --surface: #ffffff;
+  --raised: #f8f7fa;
+  --hover: #f0edf6;
+  --line: #e6e3eb;
+  --text: #25232d;
+  --muted: #706d7b;
+  --subtle: #9995a3;
+  --accent: #7654c9;
+  --accent-soft: #eee8fb;
+  --danger: #b44141;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 13px;
+}
+button {
+  color: inherit;
+  font: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.orbit-shell {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  min-width: 680px;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.rail {
+  width: 68px;
+  flex: 0 0 68px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 17px 0 14px;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 17px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #9475e8, #6543b1);
+  color: white;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 4px 14px #7454c533;
+}
+.rail-button,
+.icon-button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.rail-button {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 19px;
+}
+.rail-button:hover,
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.rail-button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rail-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.rail-spacer {
+  flex: 1;
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #a78bfa66;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+.workspace {
+  min-width: 360px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.topbar {
+  height: 76px;
+  flex: 0 0 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.workspace-heading h1 {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.eyebrow {
+  color: var(--subtle);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 18px;
+}
+.build-label {
+  color: var(--subtle);
+  font-size: 11px;
+}
+.account-indicator {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sign-out-action {
+  padding: 7px 10px;
+  font-size: 10px;
+}
+.repo-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 25px 30px 18px;
+}
+.repo-toolbar h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.repo-toolbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.session-notice {
+  margin: 0 30px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.toggle-label input {
+  accent-color: var(--accent);
+}
+.repo-list {
+  margin: 0 20px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.repo-row {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.12s ease;
+}
+.repo-row:last-child {
+  border-bottom: 0;
+}
+.repo-row:hover,
+.repo-row.selected {
+  background: var(--raised);
+}
+.repo-select {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 14px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-avatar {
+  width: 37px;
+  height: 37px;
+  flex: 0 0 37px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--raised);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+.repo-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.repo-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.private-mark {
+  color: var(--subtle);
+  font-size: 8px;
+}
+.repo-description {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-badge {
+  margin-right: 8px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.pin-button {
+  width: 38px;
+  height: 38px;
+  margin-right: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--subtle);
+  font-size: 17px;
+  cursor: pointer;
+}
+.pin-button:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+.pin-button.pinned {
+  color: var(--accent);
+}
+.empty-state {
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+}
+.workspace-footer {
+  margin-top: auto;
+  padding: 14px 30px;
+  color: var(--subtle);
+  font-size: 10px;
+}
+.welcome-state {
+  width: min(500px, 90%);
+  margin: auto;
+  padding: 35px 20px 75px;
+  text-align: center;
+}
+.welcome-orbit {
+  width: 66px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 25px;
+  border: 1px solid #a78bfa3d;
+  border-radius: 22px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 34px;
+}
+.welcome-state h2 {
+  margin: 9px 0;
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.welcome-copy {
+  max-width: 360px;
+  margin: 0 auto;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.app-meta {
+  margin-top: 30px;
+  color: var(--subtle);
+  font-size: 10px;
+}
+.auth-actions {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 25px;
+}
+.auth-actions p {
+  margin: 4px 0;
+  color: var(--muted);
+}
+.primary-action {
+  min-width: 210px;
+  display: flex;
+  justify-content: center;
+  padding: 12px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: white;
+  font-weight: 650;
+  cursor: pointer;
+}
+.primary-action:hover {
+  filter: brightness(1.08);
+}
+.secondary-action {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.secondary-action:hover {
+  background: var(--hover);
+}
+.text-action {
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.device-code {
+  color: var(--text) !important;
+  font-family: ui-monospace, monospace;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.device-expiry {
+  font-size: 11px;
+}
+.device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.details-panel {
+  height: 100%;
+  flex: 0 0 auto;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+.details-header {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.resize-handle {
+  width: 5px;
+  flex: 0 0 5px;
+  margin-right: -2px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.resize-handle:hover,
+.resize-handle:focus-visible {
+  background: var(--accent);
+}
+.details-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 110px 22px 20px;
+  text-align: center;
+}
+.details-glyph {
+  color: var(--accent);
+  font-size: 35px;
+}
+.details-empty h2 {
+  margin: 15px 0 6px;
+  font-size: 14px;
+}
+.details-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.repo-details {
+  padding: 25px 20px;
+}
+.detail-repo-avatar {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+  color: var(--accent);
+  font-size: 19px;
+  font-weight: 700;
+}
+.repo-details h2 {
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+  font-size: 16px;
+}
+.detail-description {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.read-only-notice {
+  margin: 17px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 11px;
+}
+.repo-details dl {
+  margin: 25px 0;
+  border-top: 1px solid var(--line);
+}
+.repo-details dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+}
+.repo-details dt {
+  color: var(--muted);
+}
+.repo-details dd {
+  max-width: 60%;
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-link {
+  color: var(--accent);
+  font-size: 11px;
+  text-decoration: none;
+}
+.expand-details {
+  width: 30px;
+  align-self: stretch;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.expand-details:hover {
+  color: var(--accent);
+}
+.toast-error {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 5;
+  max-width: min(440px, 90%);
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--danger);
+  box-shadow: 0 8px 30px #0002;
+}
+
+@media (max-width: 950px) {
+  .details-panel {
+    width: 280px !important;
+  }
+  .topbar {
+    padding: 0 20px;
+  }
+  .repo-toolbar {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+  .repo-list {
+    margin-right: 12px;
+    margin-left: 12px;
+  }
 }

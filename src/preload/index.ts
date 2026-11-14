@@ -24,6 +24,11 @@ const api: OrbitApi = {
         ipcRenderer.removeListener(IpcChannels.authStatusChanged, handler);
       };
     }
+  },
+  repos: { list: () => ipcRenderer.invoke(IpcChannels.reposList) },
+  settings: {
+    get: () => ipcRenderer.invoke(IpcChannels.settingsGet),
+    update: (update) => ipcRenderer.invoke(IpcChannels.settingsUpdate, update)
   }
 };
 

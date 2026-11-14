@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../../src/renderer/src/App';
 import type { AuthStatus } from '../../../src/shared/auth';
 import type { OrbitApi } from '../../../src/shared/ipc';
+import type { OrbitSettings, PersonalRepo } from '../../../src/shared/ipc';
 
 type StatusListener = (status: AuthStatus) => void;
 
@@ -11,9 +12,16 @@ function installBridge(
   overrides: {
     getInfo?: OrbitApi['app']['getInfo'];
     status?: AuthStatus;
+    repos?: PersonalRepo[];
   } = {}
-): { listeners: Set<StatusListener>; api: OrbitApi } {
+): { listeners: Set<StatusListener>; api: OrbitApi; settings: OrbitSettings } {
   const listeners = new Set<StatusListener>();
+  const settings: OrbitSettings = {
+    pinnedRepoIds: [],
+    customViews: [],
+    theme: 'dark',
+    windowState: { width: 1100, height: 720, maximized: false, detailsWidth: 320 }
+  };
   const api: OrbitApi = {
     app: {
       getInfo: overrides.getInfo ?? (async () => ({ name: 'Orbit', version: '0.1.0', platform: 'win32' })),
@@ -28,10 +36,15 @@ function installBridge(
         listeners.add(listener);
         return () => listeners.delete(listener);
       }
+    },
+    repos: { list: vi.fn(async () => overrides.repos ?? []) },
+    settings: {
+      get: vi.fn(async () => settings),
+      update: vi.fn(async (update) => Object.assign(settings, update))
     }
   };
   window.orbit = api;
-  return { listeners, api };
+  return { listeners, api, settings };
 }
 
 describe('App', () => {
@@ -175,5 +188,85 @@ describe('App', () => {
       }
     });
     expect(await screen.findByText('Signed in as @chetjones003')).toBeInTheDocument();
+  });
+
+  it('renders accessible workspace landmarks and loads personal repos after sign-in', async () => {
+    const repo: PersonalRepo = {
+      id: 10,
+      name: 'orbit',
+      fullName: 'chetjones003/orbit',
+      description: 'Work tracker',
+      isPrivate: false,
+      isFork: false,
+      isArchived: false,
+      defaultBranch: 'main',
+      updatedAt: '2026-01-01',
+      htmlUrl: 'https://github.com/chetjones003/orbit'
+    };
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true },
+      repos: [repo]
+    });
+    render(<App />);
+    expect(await screen.findByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
+    expect(api.repos.list).toHaveBeenCalledOnce();
+    expect(screen.getByRole('complementary', { name: 'Repository details' })).toBeInTheDocument();
+  });
+
+  it('pins repositories, filters forks and archived repos, and shows archived repositories as read only', async () => {
+    const repos: PersonalRepo[] = [
+      {
+        id: 10,
+        name: 'normal',
+        fullName: 'chet/normal',
+        description: null,
+        isPrivate: false,
+        isFork: false,
+        isArchived: false,
+        defaultBranch: 'main',
+        updatedAt: '2026-01-01',
+        htmlUrl: 'https://github.com/chet/normal'
+      },
+      {
+        id: 11,
+        name: 'fork',
+        fullName: 'chet/fork',
+        description: null,
+        isPrivate: false,
+        isFork: true,
+        isArchived: false,
+        defaultBranch: 'main',
+        updatedAt: '2026-01-01',
+        htmlUrl: 'https://github.com/chet/fork'
+      },
+      {
+        id: 12,
+        name: 'old',
+        fullName: 'chet/old',
+        description: null,
+        isPrivate: false,
+        isFork: false,
+        isArchived: true,
+        defaultBranch: 'main',
+        updatedAt: '2026-01-01',
+        htmlUrl: 'https://github.com/chet/old'
+      }
+    ];
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chet', persistent: true },
+      repos
+    });
+    render(<App />);
+    const normal = await screen.findByRole('button', { name: 'Open chet/normal' });
+    expect(screen.queryByRole('button', { name: 'Open chet/fork' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Pin normal' }));
+    await waitFor(() => expect(api.settings.update).toHaveBeenCalledWith({ pinnedRepoIds: [10] }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show forks & archived' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chet/old, read only' }));
+    expect(await screen.findByText('Archived repositories are read only.')).toBeInTheDocument();
+    fireEvent.click(normal);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse details panel' }));
+    expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
   });
 });
