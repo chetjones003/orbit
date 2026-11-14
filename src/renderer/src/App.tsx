@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent
+} from 'react';
 import type { AppInfo, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
@@ -6,6 +14,8 @@ import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
+/** Focus refetches only when the last successful refresh is at least this old. */
+const FOCUS_REFRESH_MS = 60_000;
 
 /** Single-window Orbit shell. GitHub data stays in memory and is fetched through main. */
 export function App() {
@@ -110,6 +120,27 @@ export function App() {
     const timer = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  // Refetch when the user returns to Orbit and the data is older than FOCUS_REFRESH_MS, and when the
+  // network comes back. Focus uses wake(), not the manual refresh, so it never uses up the cooldown.
+  const latestRefresh = useRef<ConnectionStatus | null>(null);
+  latestRefresh.current = refreshStatus;
+  useEffect(() => {
+    const onFocus = (): void => {
+      const last = latestRefresh.current?.lastSuccessAt ?? 0;
+      if (Date.now() - last < FOCUS_REFRESH_MS) return;
+      void window.orbit.refresh.wake().catch(() => undefined);
+    };
+    const onOnline = (): void => {
+      void window.orbit.refresh.wake().catch(() => undefined);
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
+    };
+  }, []);
 
   useEffect(() => {
     if (settings) document.documentElement.dataset['theme'] = settings.theme;

@@ -28,6 +28,7 @@ const api: OrbitApi = {
   },
   refresh: {
     getStatus: () => ipcRenderer.invoke(IpcChannels.refreshGetStatus),
+    wake: () => ipcRenderer.invoke(IpcChannels.refreshWake),
     onStatusChanged: (listener: (status: ConnectionStatus) => void) => {
       const handler = (_event: IpcRendererEvent, status: ConnectionStatus): void => listener(status);
       ipcRenderer.on(IpcChannels.refreshStatusChanged, handler);

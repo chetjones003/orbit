@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// Parallel test runs can slow the first render; allow more time than the 1s default before failing.
+configure({ asyncUtilTimeout: 3000 });
+
 import { App } from '../../../src/renderer/src/App';
 import type { AuthStatus } from '../../../src/shared/auth';
 import type { OrbitApi } from '../../../src/shared/ipc';
@@ -42,6 +45,7 @@ function installBridge(
       }
     },
     refresh: {
+      wake: vi.fn(async () => ({ started: true }) as RefreshStart),
       getStatus: vi.fn(
         async () => overrides.refreshStatus ?? { state: 'idle', lastSuccessAt: null, nextRetryAt: null }
       ),
@@ -236,7 +240,7 @@ describe('App', () => {
     expect(
       await screen.findByText(/Offline\. Last updated 1 min ago/, {}, { timeout: 3000 })
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
     expect(screen.getByText('Changes are paused until GitHub is reachable again.')).toBeInTheDocument();
   });
 
@@ -333,6 +337,8 @@ describe('App', () => {
 });
 
 describe('App failure reporting', () => {
+  afterEach(() => cleanup());
+
   it('records a failed repo load in main by scope and code, so Copy diagnostics includes it', async () => {
     const { api } = installBridge({
       status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true }
@@ -343,5 +349,23 @@ describe('App failure reporting', () => {
     render(<App />);
     expect(await screen.findByText('GitHub is unavailable.')).toBeInTheDocument();
     expect(api.diagnostics.record).toHaveBeenCalledWith({ scope: 'repos', code: 'load-failed' });
+  });
+});
+
+describe('App refresh triggers', () => {
+  afterEach(() => cleanup());
+
+  it('refetches on window focus (subject to cooldown) and asks main to wake when the network returns', async () => {
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true }
+    });
+    render(<App />);
+    await waitFor(() => expect(api.repos.list).toHaveBeenCalled());
+
+    fireEvent(window, new Event('focus'));
+    expect(api.refresh.wake).toHaveBeenCalledTimes(1);
+
+    fireEvent(window, new Event('online'));
+    expect(api.refresh.wake).toHaveBeenCalledTimes(2);
   });
 });

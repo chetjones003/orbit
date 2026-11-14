@@ -35,6 +35,21 @@ jobs:
       - name: Integration tests (real Electron under xvfb)
         run: xvfb-run --auto-servernum npm run test:integration
 
+  e2e:
+    name: End-to-end (Windows, unpacked build, fake GitHub)
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Playwright flows against the controlled GitHub stand-in
+        run: npm run test:e2e
+
   package:
     name: Package and smoke (${{ matrix.label }})
     needs: verify

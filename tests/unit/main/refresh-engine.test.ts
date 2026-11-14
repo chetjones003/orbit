@@ -207,3 +207,59 @@ describe('RefreshEngine sign-in guard', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+describe('RefreshEngine wake', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-01-01T00:00:00Z') });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('retries at once after an outage, without waiting out the backoff', async () => {
+    const refresh = vi
+      .fn()
+      .mockRejectedValueOnce(new GitHubRequestError('transient', 'unreachable'))
+      .mockResolvedValue(undefined);
+    const engine = new RefreshEngine({ refresh });
+
+    engine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(engine.getStatus().state).toBe('offline');
+
+    await expect(engine.wake()).resolves.toEqual({ started: true });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(engine.getStatus().state).toBe('fresh');
+    engine.stop();
+  });
+
+  it('still respects a rate limit that is in force', async () => {
+    const resetAt = Date.now() + 10 * MINUTE;
+    const refresh = vi
+      .fn()
+      .mockRejectedValue(new GitHubRequestError('rate-limited', 'limit', { status: 403, resetAt }));
+    const engine = new RefreshEngine({ refresh });
+
+    await engine.refreshNow();
+    await expect(engine.wake()).resolves.toMatchObject({ started: false, reason: 'rate-limited' });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not overlap a refresh that is already running', async () => {
+    let release: () => void = () => undefined;
+    const refresh = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const engine = new RefreshEngine({ refresh });
+
+    void engine.refreshNow();
+    await expect(engine.wake()).resolves.toMatchObject({ started: false, reason: 'in-flight' });
+    release();
+  });
+
+  it('does nothing while signed out', async () => {
+    const refresh = vi.fn(async () => undefined);
+    const engine = new RefreshEngine({ refresh, canRefresh: () => false });
+
+    await expect(engine.wake()).resolves.toEqual({ started: false, reason: 'signed-out' });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
