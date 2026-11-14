@@ -1,5 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IpcChannels, type OrbitApi } from '../shared/ipc';
+import type { AuthStatus } from '../shared/auth';
 
 /**
  * The only bridge between the sandboxed renderer and main. Each operation maps
@@ -9,6 +10,20 @@ const api: OrbitApi = {
   app: {
     getInfo: () => ipcRenderer.invoke(IpcChannels.appGetInfo),
     openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.appOpenExternal, url)
+  },
+  auth: {
+    getStatus: () => ipcRenderer.invoke(IpcChannels.authGetStatus),
+    startSignIn: () => ipcRenderer.invoke(IpcChannels.authStartSignIn),
+    cancelSignIn: () => ipcRenderer.invoke(IpcChannels.authCancelSignIn),
+    signOut: () => ipcRenderer.invoke(IpcChannels.authSignOut),
+    onStatusChanged: (listener: (status: AuthStatus) => void) => {
+      // Strip the Electron event object so the renderer only sees the status.
+      const handler = (_event: IpcRendererEvent, status: AuthStatus): void => listener(status);
+      ipcRenderer.on(IpcChannels.authStatusChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.authStatusChanged, handler);
+      };
+    }
   }
 };
 

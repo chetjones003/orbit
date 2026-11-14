@@ -22,3 +22,12 @@ _Avoid_: GitHub view
 
 **Custom view**: An Orbit-defined way to show one Project's items: Kanban, Gantt, Calendar, or Table. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view
+
+**Sign-in**: Connecting Orbit to the user's GitHub account through the OAuth device flow: Orbit shows a code, the user enters it on GitHub, and Orbit receives tokens.
+_Avoid_: Login (ambiguous with the account name), authentication (use for the general concept only)
+
+**Session**: One signed-in GitHub account as held in memory by the main process. A new session starts when the account changes. Re-signing in as the same account keeps the session, so in-memory work survives.
+_Avoid_: Connection, login state
+
+**Credential store**: Orbit's encrypted, on-disk storage for the session's tokens. It uses OS-backed encryption when available and otherwise Orbit's own local key. Tokens never leave main.
+_Avoid_: Keychain, vault, settings
