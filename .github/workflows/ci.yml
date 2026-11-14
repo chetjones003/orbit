@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (format, lint, typecheck, unit, integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build
+      - name: Linux prerequisites for real-Electron tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Integration tests (real Electron under xvfb)
+        run: xvfb-run --auto-servernum npm run test:integration
+
+  package:
+    name: Package and smoke (${{ matrix.label }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, platform: win, arch: x64, name: windows, label: windows-x64 }
+          - { os: macos-15, platform: mac, arch: arm64, name: macos, label: macos-arm64 }
+          # Apple Silicon runner builds and smoke-tests the Intel app under Rosetta.
+          - { os: macos-15, platform: mac, arch: x64, name: macos, label: macos-x64 }
+          - { os: ubuntu-latest, platform: linux, arch: x64, name: linux, label: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - name: Linux prerequisites for Electron sandbox and AppImage
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libfuse2t64 dpkg
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which the Electron sandbox needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Package
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }}
+
+      - name: Smoke test packaged app (Windows, unpacked and installed)
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          node scripts/smoke.mjs release/win-unpacked/Orbit.exe
+          $dir = Join-Path $env:RUNNER_TEMP 'orbit-installed'
+          $installer = (Get-ChildItem release -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          $p = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$dir" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          node scripts/smoke.mjs (Join-Path $dir 'Orbit.exe')
+
+      - name: Smoke test packaged app (macOS)
+        if: matrix.platform == 'mac'
+        run: |
+          dmg=$(ls release/*.dmg | head -n 1)
+          mount=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+          app_dir=$(mktemp -d)
+          cp -R "$mount/Orbit.app" "$app_dir/"
+          hdiutil detach "$mount"
+          exe="$app_dir/Orbit.app/Contents/MacOS/Orbit"
+          # The Intel build on the Apple Silicon runner needs Rosetta. The arm64 Node
+          # driver spawns the x86_64 app, which macOS runs under Rosetta automatically.
+          if [ "${{ matrix.arch }}" = "x64" ]; then
+            /usr/sbin/softwareupdate --install-rosetta --agree-to-license || true
+          fi
+          echo "Smoke binary architectures: $(lipo -archs "$exe")"
+          node scripts/smoke.mjs "$exe"
+
+      - name: Smoke test packaged app (Linux AppImage and deb)
+        if: matrix.platform == 'linux'
+        run: |
+          xvfb-run --auto-servernum node scripts/smoke.mjs "$(ls release/*.AppImage | head -n 1)"
+          deb=$(ls release/*.deb | head -n 1)
+          extract=$(mktemp -d)
+          dpkg-deb -x "$deb" "$extract"
+          xvfb-run --auto-servernum node scripts/smoke.mjs "$(find "$extract/opt" -maxdepth 2 -type f -name orbit | head -n 1)"
+
+      - name: Compute artifact name
+        id: meta
+        run: echo "short=${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-pr${{ github.event.pull_request.number || 0 }}-${{ steps.meta.outputs.short }}-${{ matrix.name }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          retention-days: 7
