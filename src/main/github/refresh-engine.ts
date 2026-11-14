@@ -91,6 +91,23 @@ export class RefreshEngine {
     return this.begin().then(() => ({ started: true as const }));
   }
 
+  /**
+   * Retries now after a suspected outage (system resume, network back). Ignores
+   * backoff and the manual cooldown, but still honours rate limits, in-flight
+   * refreshes, and sign-out, so it cannot be used to hammer GitHub.
+   */
+  wake(): Promise<RefreshStart> {
+    if (!this.canRefresh()) return Promise.resolve({ started: false, reason: 'signed-out' });
+    if (this.inFlight) return Promise.resolve({ started: false, reason: 'in-flight' });
+    const now = this.now();
+    if (isRateLimitedAt(this.status, now) && this.status.nextRetryAt !== null) {
+      return Promise.resolve({ started: false, reason: 'rate-limited', retryAt: this.status.nextRetryAt });
+    }
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    return this.begin().then(() => ({ started: true as const }));
+  }
+
   private begin(): Promise<void> {
     if (this.inFlight) return this.inFlight;
     this.inFlight = this.run().finally(() => {

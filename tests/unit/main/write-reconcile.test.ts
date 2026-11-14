@@ -47,3 +47,45 @@ describe('runWrite', () => {
     expect(attempt).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('runWrite gate and settle hook', () => {
+  it('refuses to send while writes are paused, so nothing reaches GitHub', async () => {
+    const attempt = vi.fn(async () => 'sent');
+    await expect(runWrite({ attempt, reconcile: vi.fn(), canWrite: () => false })).rejects.toMatchObject({
+      name: 'WriteBlockedError'
+    });
+    expect(attempt).not.toHaveBeenCalled();
+  });
+
+  it('calls onSettled after a successful write so data can be refreshed', async () => {
+    const onSettled = vi.fn();
+    await runWrite({ attempt: async () => 'ok', reconcile: vi.fn(), onSettled });
+    expect(onSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onSettled when reconciliation shows the write landed', async () => {
+    const onSettled = vi.fn();
+    await runWrite({
+      attempt: async () => {
+        throw new GitHubRequestError('transient', 'unreachable');
+      },
+      reconcile: async () => ({ applied: true, value: 'found' }),
+      onSettled
+    });
+    expect(onSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onSettled when the write fails outright', async () => {
+    const onSettled = vi.fn();
+    await expect(
+      runWrite({
+        attempt: async () => {
+          throw new GitHubRequestError('http', 'rejected', { status: 422 });
+        },
+        reconcile: vi.fn(),
+        onSettled
+      })
+    ).rejects.toThrow('rejected');
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+});

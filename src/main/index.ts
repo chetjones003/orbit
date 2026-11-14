@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage } from 'electron';
+import { app, BrowserWindow, powerMonitor, safeStorage } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { registerIpcHandlers } from './ipc';
@@ -63,6 +63,8 @@ if (!app.requestSingleInstanceLock()) {
       refresh: () => repos.listPersonalRepos().then(() => undefined),
       canRefresh: () => auth.getStatus().kind === 'signed-in'
     });
+    // After sleep the network may be back before the backoff timer fires; retry at once.
+    powerMonitor.on('resume', () => void engine.wake());
     let lastState = engine.getStatus().state;
     engine.onChange((status) => {
       if (status.state === lastState) return;

@@ -11,7 +11,7 @@ import type { RefreshEngine } from './github/refresh-engine';
 import type { Diagnostics } from './diagnostics';
 
 /** The part of the refresh engine that IPC needs. */
-export type RefreshPort = Pick<RefreshEngine, 'refreshNow'> & {
+export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
   getStatus(): ConnectionStatus;
   onChange(listener: (status: ConnectionStatus) => void): () => void;
 };
@@ -116,6 +116,10 @@ function registerRefreshHandlers(refresh: RefreshPort, devServerOrigin?: string)
   ipcMain.handle(IpcChannels.refreshGetStatus, (event): ConnectionStatus => {
     assertTrustedSender(event, devServerOrigin);
     return refresh.getStatus();
+  });
+  ipcMain.handle(IpcChannels.refreshWake, (event): Promise<RefreshStart> => {
+    assertTrustedSender(event, devServerOrigin);
+    return refresh.wake();
   });
   ipcMain.handle(IpcChannels.reposRefresh, (event): Promise<RefreshStart> => {
     assertTrustedSender(event, devServerOrigin);

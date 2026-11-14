@@ -16,6 +16,7 @@ export const IpcChannels = {
   authStatusChanged: 'auth:status-changed',
   reposList: 'repos:list',
   reposRefresh: 'repos:refresh',
+  refreshWake: 'refresh:wake',
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
   refreshStatusChanged: 'refresh:status-changed',
@@ -89,6 +90,8 @@ export interface OrbitApi {
   };
   refresh: {
     getStatus(): Promise<ConnectionStatus>;
+    /** Immediate retry after a suspected outage. Honours rate limits and sign-out. */
+    wake(): Promise<RefreshStart>;
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: ConnectionStatus) => void): () => void;
   };

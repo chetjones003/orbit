@@ -35,6 +35,7 @@ function fakeConnection(): RefreshPort & { emit(status: ConnectionStatus): void 
   return {
     getStatus: vi.fn(() => status),
     refreshNow: vi.fn(async () => ({ started: true as const })),
+    wake: vi.fn(async () => ({ started: true as const })),
     onChange: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -117,5 +118,23 @@ describe('diagnostics record IPC', () => {
     expect(() =>
       invoke(IpcChannels.diagnosticsRecord, untrusted, { scope: 'repos', code: 'load-failed' })
     ).toThrow('Untrusted IPC sender');
+  });
+});
+
+describe('refresh wake IPC', () => {
+  beforeEach(() => {
+    mocks.handlers.clear();
+  });
+
+  it('lets the renderer request an immediate retry after an outage, from trusted senders only', async () => {
+    const wake = vi.fn(async () => ({ started: true as const }));
+    registerIpcHandlers({
+      refresh: { ...fakeConnection(), wake },
+      diagnostics: { report: () => '', record: async () => undefined }
+    });
+
+    await expect(invoke(IpcChannels.refreshWake)).resolves.toEqual({ started: true });
+    expect(wake).toHaveBeenCalledTimes(1);
+    expect(() => invoke(IpcChannels.refreshWake, untrusted)).toThrow('Untrusted IPC sender');
   });
 });
