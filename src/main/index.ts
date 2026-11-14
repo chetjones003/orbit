@@ -1,10 +1,13 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, safeStorage } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { registerIpcHandlers } from './ipc';
 import { createMainWindow } from './window';
 import { runSmokeTest } from './smoke';
 import { registerAppProtocol, registerAppScheme } from './protocol';
+import { AuthService } from './github/auth-service';
+import { CredentialStore } from './github/credential-store';
+import { resolveGitHubEndpoints } from './github/endpoints';
 
 const devServerOrigin = process.env['ELECTRON_RENDERER_URL'];
 const smokeReportPath = process.env['ORBIT_SMOKE_REPORT'];
@@ -33,11 +36,19 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     if (!devServerOrigin) {
       registerAppProtocol(join(__dirname, '../renderer'));
     }
-    registerIpcHandlers({ devServerOrigin });
+    const auth = new AuthService({
+      ...resolveGitHubEndpoints(process.env['ORBIT_GITHUB_URL']),
+      store: new CredentialStore({ dir: app.getPath('userData'), safeStorage })
+    });
+    // A restore failure must not block launch; the user simply starts signed out.
+    await auth.initialize().catch((error: unknown) => {
+      console.error('Stored sign-in restore failed:', error instanceof Error ? error.name : 'unknown');
+    });
+    registerIpcHandlers({ devServerOrigin, auth });
     const win = createMainWindow({ devServerOrigin, show: !smokeReportPath });
     if (smokeReportPath) {
       void runSmokeTest(win, smokeReportPath);

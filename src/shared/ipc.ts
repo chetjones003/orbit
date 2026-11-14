@@ -1,10 +1,18 @@
+import type { AuthStatus } from './auth';
+
 /**
  * Contract shared by main, preload, and renderer. Keep this file free of
  * Node and DOM APIs so every process can import it.
  */
 export const IpcChannels = {
   appGetInfo: 'app:get-info',
-  appOpenExternal: 'app:open-external'
+  appOpenExternal: 'app:open-external',
+  authGetStatus: 'auth:get-status',
+  authStartSignIn: 'auth:start-sign-in',
+  authCancelSignIn: 'auth:cancel-sign-in',
+  authSignOut: 'auth:sign-out',
+  /** Main-to-renderer push. Payload is an AuthStatus. */
+  authStatusChanged: 'auth:status-changed'
 } as const;
 
 export interface AppInfo {
@@ -22,6 +30,14 @@ export interface OrbitApi {
   app: {
     getInfo(): Promise<AppInfo>;
     openExternal(url: string): Promise<OpenExternalResult>;
+  };
+  auth: {
+    getStatus(): Promise<AuthStatus>;
+    startSignIn(): Promise<AuthStatus>;
+    cancelSignIn(): Promise<AuthStatus>;
+    signOut(): Promise<AuthStatus>;
+    /** Subscribes to status changes. Returns an unsubscribe function. */
+    onStatusChanged(listener: (status: AuthStatus) => void): () => void;
   };
 }
 
