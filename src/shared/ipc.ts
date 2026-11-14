@@ -1,4 +1,5 @@
 import type { AuthStatus } from './auth';
+import type { ConnectionStatus, RefreshStart } from './connection';
 
 /**
  * Contract shared by main, preload, and renderer. Keep this file free of
@@ -14,6 +15,11 @@ export const IpcChannels = {
   /** Main-to-renderer push. Payload is an AuthStatus. */
   authStatusChanged: 'auth:status-changed',
   reposList: 'repos:list',
+  reposRefresh: 'repos:refresh',
+  connectionGetStatus: 'connection:get-status',
+  /** Main-to-renderer push. Payload is a ConnectionStatus. */
+  connectionStatusChanged: 'connection:status-changed',
+  diagnosticsGetReport: 'diagnostics:get-report',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update'
 } as const;
@@ -80,7 +86,20 @@ export interface OrbitApi {
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: AuthStatus) => void): () => void;
   };
-  repos: { list(): Promise<PersonalRepo[]> };
+  connection: {
+    getStatus(): Promise<ConnectionStatus>;
+    /** Subscribes to status changes. Returns an unsubscribe function. */
+    onStatusChanged(listener: (status: ConnectionStatus) => void): () => void;
+  };
+  repos: {
+    list(): Promise<PersonalRepo[]>;
+    /** Asks main to refresh now, subject to cooldowns and rate limits. */
+    refresh(): Promise<RefreshStart>;
+  };
+  diagnostics: {
+    /** Redacted, in-memory diagnostics text for the user to copy. Never uploaded. */
+    getReport(): Promise<string>;
+  };
   settings: {
     get(): Promise<OrbitSettings>;
     update(update: SettingsUpdate): Promise<OrbitSettings>;

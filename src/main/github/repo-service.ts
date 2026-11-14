@@ -1,5 +1,6 @@
 import type { PersonalRepo } from '../../shared/ipc';
 import type { AuthService } from './auth-service';
+import { GitHubClient } from './github-client';
 
 interface GitHubRepoResponse {
   id: number;
@@ -18,19 +19,20 @@ interface GitHubRepoResponse {
 export interface RepoServiceOptions {
   auth: Pick<AuthService, 'getStatus' | 'getAccessToken'>;
   apiBaseUrl: string;
+  /** Shared client, so ETags are reused across refreshes. Created internally when omitted. */
+  client?: GitHubClient;
   fetch?: typeof fetch;
 }
 
 /** Fetches the signed-in user's own repositories without persisting GitHub data. */
 export class RepoService {
   private readonly auth: RepoServiceOptions['auth'];
-  private readonly apiBaseUrl: string;
-  private readonly apiFetch: typeof fetch;
+  private readonly client: GitHubClient;
 
   constructor(options: RepoServiceOptions) {
     this.auth = options.auth;
-    this.apiBaseUrl = options.apiBaseUrl.replace(/\/$/, '');
-    this.apiFetch = options.fetch ?? fetch;
+    this.client =
+      options.client ?? new GitHubClient({ apiBaseUrl: options.apiBaseUrl, fetch: options.fetch });
   }
 
   async listPersonalRepos(): Promise<PersonalRepo[]> {
@@ -38,14 +40,13 @@ export class RepoService {
     if (status.kind !== 'signed-in') throw new Error('Sign in to GitHub to load repositories.');
     const sessionId = status.sessionId;
     const token = await this.auth.getAccessToken();
+    const scope = String(sessionId);
     const repos: PersonalRepo[] = [];
     for (let page = 1; ; page++) {
-      const response = await this.apiFetch(
-        `${this.apiBaseUrl}/user/repos?type=owner&sort=updated&per_page=100&page=${page}`,
-        { headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' } }
+      const body = await this.client.get<unknown>(
+        `/user/repos?type=owner&sort=updated&per_page=100&page=${page}`,
+        { token, scope }
       );
-      if (!response.ok) throw new Error(`GitHub could not load repositories (${response.status}).`);
-      const body = (await response.json()) as unknown;
       if (!Array.isArray(body)) throw new Error('GitHub returned an invalid repository list.');
       const latestStatus = this.auth.getStatus();
       if (latestStatus.kind !== 'signed-in' || latestStatus.sessionId !== sessionId) {

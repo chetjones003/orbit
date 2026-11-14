@@ -9,6 +9,9 @@ import { AuthService } from './github/auth-service';
 import { CredentialStore } from './github/credential-store';
 import { resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
+import { GitHubClient } from './github/github-client';
+import { RefreshEngine } from './github/refresh-engine';
+import { Diagnostics } from './diagnostics';
 import { SettingsStore } from './settings';
 
 const devServerOrigin = process.env['ELECTRON_RENDERER_URL'];
@@ -47,16 +50,42 @@ if (!app.requestSingleInstanceLock()) {
       store: new CredentialStore({ dir: app.getPath('userData'), safeStorage })
     });
     const settings = new SettingsStore(app.getPath('userData'));
+    const diagnostics = new Diagnostics({ dir: join(app.getPath('userData'), 'logs') });
     // A restore failure must not block launch; the user simply starts signed out.
     await auth.initialize().catch((error: unknown) => {
       console.error('Stored sign-in restore failed:', error instanceof Error ? error.name : 'unknown');
     });
     const endpoints = resolveGitHubEndpoints(process.env['ORBIT_GITHUB_URL']);
+    const client = new GitHubClient({ apiBaseUrl: endpoints.apiBaseUrl });
+    const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
+    // Visible data refreshes only while signed in. The ETag cache stays in memory.
+    const engine = new RefreshEngine({ refresh: () => repos.listPersonalRepos().then(() => undefined) });
+    let lastState = engine.getStatus().state;
+    engine.onChange((status) => {
+      if (status.state === lastState) return;
+      lastState = status.state;
+      void diagnostics.record({
+        level: status.state === 'fresh' ? 'info' : 'warn',
+        scope: 'refresh',
+        code: status.state,
+        message: status.nextRetryAt
+          ? `next attempt at ${new Date(status.nextRetryAt).toISOString()}`
+          : 'no retry scheduled'
+      });
+    });
+    const syncRefresh = (signedIn: boolean): void => {
+      engine.stop();
+      if (signedIn) engine.start();
+    };
+    auth.onStatusChange((status) => syncRefresh(status.kind === 'signed-in'));
+    syncRefresh(auth.getStatus().kind === 'signed-in');
     registerIpcHandlers({
       devServerOrigin,
       auth,
-      repos: new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl }),
-      settings
+      repos,
+      settings,
+      connection: engine,
+      diagnostics
     });
     const win = createMainWindow({
       devServerOrigin,

@@ -6,6 +6,15 @@ import { isAppUrl } from './security';
 import type { AuthService } from './github/auth-service';
 import type { RepoService } from './github/repo-service';
 import type { SettingsStore } from './settings';
+import type { ConnectionStatus, RefreshStart } from '../shared/connection';
+import type { RefreshEngine } from './github/refresh-engine';
+import type { Diagnostics } from './diagnostics';
+
+/** The part of the refresh engine that IPC needs. */
+export type ConnectionPort = Pick<RefreshEngine, 'refreshNow'> & {
+  getStatus(): ConnectionStatus;
+  onChange(listener: (status: ConnectionStatus) => void): () => void;
+};
 
 /** The part of the auth service that IPC needs. Tests can supply a plain object. */
 export type AuthPort = Pick<
@@ -18,6 +27,8 @@ export interface IpcOptions {
   auth?: AuthPort;
   repos?: Pick<RepoService, 'listPersonalRepos'>;
   settings?: SettingsStore;
+  connection?: ConnectionPort;
+  diagnostics?: Pick<Diagnostics, 'report'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -29,7 +40,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings } = options;
+  const { devServerOrigin, auth, repos, settings, connection, diagnostics } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -42,6 +53,13 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
   });
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
+  if (connection) registerConnectionHandlers(connection, devServerOrigin);
+  if (diagnostics) {
+    ipcMain.handle(IpcChannels.diagnosticsGetReport, (event): string => {
+      assertTrustedSender(event, devServerOrigin);
+      return diagnostics.report();
+    });
+  }
   if (repos) {
     ipcMain.handle(IpcChannels.reposList, async (event) => {
       assertTrustedSender(event, devServerOrigin);
@@ -85,6 +103,22 @@ function registerAuthHandlers(auth: AuthPort, devServerOrigin?: string): void {
   auth.onStatusChange((status) => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.authStatusChanged, status);
+    }
+  });
+}
+
+function registerConnectionHandlers(connection: ConnectionPort, devServerOrigin?: string): void {
+  ipcMain.handle(IpcChannels.connectionGetStatus, (event): ConnectionStatus => {
+    assertTrustedSender(event, devServerOrigin);
+    return connection.getStatus();
+  });
+  ipcMain.handle(IpcChannels.reposRefresh, (event): Promise<RefreshStart> => {
+    assertTrustedSender(event, devServerOrigin);
+    return connection.refreshNow();
+  });
+  connection.onChange((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(IpcChannels.connectionStatusChanged, status);
     }
   });
 }

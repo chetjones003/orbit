@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { AppInfo, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
+import type { ConnectionStatus } from '../../shared/connection';
+import { writesAllowed } from '../../shared/connection';
+import { ConnectionBanner, InlineError, Toast } from './Feedback';
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
 
@@ -15,6 +18,8 @@ export function App() {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [connection, setConnection] = useState<ConnectionStatus | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const updateSettings = useCallback(async (update: SettingsUpdate) => {
     const next = await window.orbit.settings.update(update);
@@ -40,6 +45,15 @@ export function App() {
       pushed = true;
       if (!cancelled) setStatus(next);
     });
+    const unsubscribeConnection = window.orbit.connection.onStatusChanged((next) => {
+      if (!cancelled) setConnection(next);
+    });
+    void window.orbit.connection.getStatus().then(
+      (next) => {
+        if (!cancelled) setConnection((current) => current ?? next);
+      },
+      () => undefined
+    );
     void Promise.all([
       window.orbit.app.getInfo(),
       window.orbit.auth.getStatus(),
@@ -58,6 +72,7 @@ export function App() {
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeConnection();
     };
   }, []);
 
@@ -68,6 +83,18 @@ export function App() {
       setSelectedRepoId(null);
     }
   }, [status, loadRepos]);
+
+  // Each successful background or manual refresh pushes a new lastSuccessAt; reload the list then.
+  const lastSuccessAt = connection?.lastSuccessAt ?? null;
+  useEffect(() => {
+    if (status?.kind === 'signed-in' && lastSuccessAt !== null) void loadRepos();
+  }, [lastSuccessAt]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     if (settings) document.documentElement.dataset['theme'] = settings.theme;
@@ -143,6 +170,38 @@ export function App() {
     });
   };
 
+  const refreshNow = (): void => {
+    setActionError(null);
+    void window.orbit.repos.refresh().then(
+      (result) => {
+        if (result.started) return;
+        setToast(
+          result.reason === 'cooldown'
+            ? 'Refresh is cooling down. Try again in a moment.'
+            : result.reason === 'rate-limited'
+              ? 'GitHub is rate limiting Orbit. Refresh resumes automatically.'
+              : 'A refresh is already running.'
+        );
+      },
+      () => setActionError('Could not start a refresh. Try again.')
+    );
+  };
+
+  const copyDiagnostics = (): void => {
+    void window.orbit.diagnostics
+      .getReport()
+      .then((text) => navigator.clipboard.writeText(text))
+      .then(
+        () => setToast('Diagnostics copied. Nothing was uploaded.'),
+        () => setToast('Could not copy diagnostics.')
+      );
+  };
+
+  const rateLimitBlocked =
+    connection?.state === 'rate-limited' &&
+    connection.nextRetryAt !== null &&
+    Date.now() < connection.nextRetryAt;
+
   const signOut = (): void => {
     if (!window.confirm('Sign out of Orbit? The saved sign-in will be removed from this computer.')) return;
     run(() => window.orbit.auth.signOut());
@@ -196,7 +255,7 @@ export function App() {
             {status?.kind === 'signed-in' && (
               <button
                 className="icon-button"
-                onClick={() => void loadRepos()}
+                onClick={refreshNow}
                 disabled={loadingRepos}
                 aria-label="Refresh repositories"
                 title="Refresh"
@@ -273,6 +332,18 @@ export function App() {
                 {status.notice}
               </p>
             )}
+            {connection && (
+              <ConnectionBanner
+                status={connection}
+                onRefresh={refreshNow}
+                refreshBlocked={rateLimitBlocked}
+              />
+            )}
+            {connection && !writesAllowed(connection) && (
+              <p className="session-notice" role="note">
+                Changes are paused until GitHub is reachable again.
+              </p>
+            )}
             <div className="repo-list" role="list" aria-label="Personal repositories">
               {loadingRepos && (
                 <p className="empty-state" role="status">
@@ -330,10 +401,13 @@ export function App() {
           </>
         )}
         {actionError && (
-          <p role="alert" className="toast-error">
-            {actionError}
-          </p>
+          <InlineError
+            message={actionError}
+            onRetry={status?.kind === 'signed-in' ? () => void loadRepos() : undefined}
+            onCopyDiagnostics={copyDiagnostics}
+          />
         )}
+        {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
       </section>
 
       {status?.kind === 'signed-in' && detailsOpen && (
