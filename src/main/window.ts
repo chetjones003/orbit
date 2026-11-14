@@ -3,10 +3,13 @@ import { join } from 'node:path';
 import { parseExternalUrl } from '../shared/ipc';
 import { buildContentSecurityPolicy, isAppUrl } from './security';
 import { APP_ENTRY_URL } from './protocol';
+import type { WindowState } from '../shared/ipc';
 
 export interface WindowOptions {
   devServerOrigin?: string;
   show?: boolean;
+  windowState?: WindowState | null;
+  saveWindowState?: (state: WindowState) => void;
 }
 
 /** Web preferences every renderer window uses. Never relaxed, including for tests. */
@@ -29,10 +32,13 @@ export const HARDENED_WEB_PREFERENCES = {
  */
 export function createMainWindow(options: WindowOptions = {}): BrowserWindow {
   const { devServerOrigin } = options;
+  const restored = options.windowState;
 
   const win = new BrowserWindow({
-    width: 1100,
-    height: 720,
+    x: restored?.x,
+    y: restored?.y,
+    width: restored?.width ?? 1100,
+    height: restored?.height ?? 720,
     minWidth: 800,
     minHeight: 540,
     show: options.show ?? true,
@@ -40,6 +46,24 @@ export function createMainWindow(options: WindowOptions = {}): BrowserWindow {
       ...HARDENED_WEB_PREFERENCES,
       preload: join(__dirname, '../preload/index.js')
     }
+  });
+  if (restored?.maximized) win.maximize();
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  const persistState = (): void => {
+    const bounds = win.getNormalBounds();
+    options.saveWindowState?.({ ...bounds, maximized: win.isMaximized() });
+  };
+  const saveState = (): void => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistState, 250);
+  };
+  win.on('resize', saveState);
+  win.on('move', saveState);
+  win.on('maximize', saveState);
+  win.on('unmaximize', saveState);
+  win.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    persistState();
   });
 
   const csp = buildContentSecurityPolicy({ devServerOrigin });

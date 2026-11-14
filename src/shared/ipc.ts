@@ -12,8 +12,49 @@ export const IpcChannels = {
   authCancelSignIn: 'auth:cancel-sign-in',
   authSignOut: 'auth:sign-out',
   /** Main-to-renderer push. Payload is an AuthStatus. */
-  authStatusChanged: 'auth:status-changed'
+  authStatusChanged: 'auth:status-changed',
+  reposList: 'repos:list',
+  settingsGet: 'settings:get',
+  settingsUpdate: 'settings:update'
 } as const;
+
+export interface PersonalRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  description: string | null;
+  isPrivate: boolean;
+  isFork: boolean;
+  isArchived: boolean;
+  defaultBranch: string;
+  updatedAt: string;
+  htmlUrl: string;
+}
+
+export interface WindowState {
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+  detailsWidth?: number;
+}
+
+export interface OrbitSettings {
+  pinnedRepoIds: number[];
+  customViews: Array<{
+    id: string;
+    name: string;
+    projectId: string;
+    layout: 'kanban' | 'gantt' | 'calendar' | 'table';
+  }>;
+  theme: 'light' | 'dark';
+  windowState: WindowState | null;
+}
+
+export type SettingsUpdate = Partial<Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme'>> & {
+  detailsWidth?: number;
+};
 
 export interface AppInfo {
   name: string;
@@ -38,6 +79,11 @@ export interface OrbitApi {
     signOut(): Promise<AuthStatus>;
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: AuthStatus) => void): () => void;
+  };
+  repos: { list(): Promise<PersonalRepo[]> };
+  settings: {
+    get(): Promise<OrbitSettings>;
+    update(update: SettingsUpdate): Promise<OrbitSettings>;
   };
 }
 

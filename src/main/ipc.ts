@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { IpcChannels, type AppInfo, type OpenExternalResult } from '../shared/ipc';
+import { IpcChannels, type AppInfo, type OpenExternalResult, type SettingsUpdate } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
 import { openExternalIfAllowed } from './window';
 import { isAppUrl } from './security';
 import type { AuthService } from './github/auth-service';
+import type { RepoService } from './github/repo-service';
+import type { SettingsStore } from './settings';
 
 /** The part of the auth service that IPC needs. Tests can supply a plain object. */
 export type AuthPort = Pick<
@@ -14,6 +16,8 @@ export type AuthPort = Pick<
 export interface IpcOptions {
   devServerOrigin?: string;
   auth?: AuthPort;
+  repos?: Pick<RepoService, 'listPersonalRepos'>;
+  settings?: SettingsStore;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -25,7 +29,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth } = options;
+  const { devServerOrigin, auth, repos, settings } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -38,6 +42,22 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
   });
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
+  if (repos) {
+    ipcMain.handle(IpcChannels.reposList, async (event) => {
+      assertTrustedSender(event, devServerOrigin);
+      return repos.listPersonalRepos();
+    });
+  }
+  if (settings) {
+    ipcMain.handle(IpcChannels.settingsGet, async (event) => {
+      assertTrustedSender(event, devServerOrigin);
+      return settings.load();
+    });
+    ipcMain.handle(IpcChannels.settingsUpdate, async (event, update: SettingsUpdate) => {
+      assertTrustedSender(event, devServerOrigin);
+      return settings.update(update);
+    });
+  }
 }
 
 /**
