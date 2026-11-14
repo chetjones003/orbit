@@ -30,6 +30,8 @@ mac:
   category: public.app-category.developer-tools
   artifactName: ${productName}-${version}-mac-${arch}.${ext}
 linux:
+  maintainer: Orbit contributors <chetjones003@users.noreply.github.com>
+  vendor: Orbit
   target:
     - target: AppImage
       arch: [x64]
