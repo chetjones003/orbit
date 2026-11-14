@@ -1,0 +1,59 @@
+{
+  "name": "orbit",
+  "version": "0.1.0",
+  "description": "Orbit: a desktop GitHub issue and PR client for personal repos",
+  "private": true,
+  "main": "./out/main/index.js",
+  "author": "Chet Jones",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "24.11.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "package": "npm run build && electron-builder",
+    "smoke": "node scripts/smoke.mjs",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "daisyui": "5.8.0",
+    "electron-vite": "6.0.0",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "tailwindcss": "4.3.5",
+    "vite": "8.3.8"
+  },
+  "devDependencies": {
+    "@electron/fuses": "1.8.0",
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.65.1",
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "24.10.1",
+    "@types/react": "19.1.10",
+    "@types/react-dom": "19.1.10",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0",
+    "eslint": "9.39.5",
+    "globals": "16.4.0",
+    "jsdom": "26.1.0",
+    "prettier": "3.10.1",
+    "sharp": "0.34.4",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.2",
+    "vitest": "4.1.12"
+  }
+}
