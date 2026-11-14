@@ -43,9 +43,9 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, platform: win, arch: x64, name: windows, label: windows-x64 }
-          - { os: macos-14, platform: mac, arch: arm64, name: macos, label: macos-arm64 }
+          - { os: macos-15, platform: mac, arch: arm64, name: macos, label: macos-arm64 }
           # Apple Silicon runner builds and smoke-tests the Intel app under Rosetta.
-          - { os: macos-14, platform: mac, arch: x64, name: macos, label: macos-x64 }
+          - { os: macos-15, platform: mac, arch: x64, name: macos, label: macos-x64 }
           - { os: ubuntu-latest, platform: linux, arch: x64, name: linux, label: linux-x64 }
     runs-on: ${{ matrix.os }}
     defaults:
