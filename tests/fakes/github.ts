@@ -15,7 +15,8 @@ export interface FakeRoute {
   path: string;
   status?: number;
   body?: unknown;
-  respond?: (req: FakeRequestInfo) => { status?: number; body?: unknown };
+  headers?: Record<string, string>;
+  respond?: (req: FakeRequestInfo) => { status?: number; body?: unknown; headers?: Record<string, string> };
 }
 
 export interface FakeGitHub {
@@ -47,8 +48,10 @@ export async function startFakeGitHub(routes: FakeRoute[] = []): Promise<FakeGit
       const computed = route?.respond?.({ method, path, body: raw, headers: req.headers });
       const status = computed?.status ?? route?.status ?? (route ? 200 : 404);
       const body = computed ? computed.body : route ? route.body : { message: 'Not Found' };
-      res.writeHead(status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(body ?? {}));
+      const headers = computed?.headers ?? route?.headers ?? {};
+      res.writeHead(status, { 'content-type': 'application/json', ...headers });
+      // A 304 carries no body; anything else gets the JSON payload.
+      res.end(status === 304 ? undefined : JSON.stringify(body ?? {}));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
