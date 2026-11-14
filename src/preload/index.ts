@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IpcChannels, type OrbitApi } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
+import type { ConnectionStatus } from '../shared/connection';
 
 /**
  * The only bridge between the sandboxed renderer and main. Each operation maps
@@ -25,7 +26,24 @@ const api: OrbitApi = {
       };
     }
   },
-  repos: { list: () => ipcRenderer.invoke(IpcChannels.reposList) },
+  refresh: {
+    getStatus: () => ipcRenderer.invoke(IpcChannels.refreshGetStatus),
+    onStatusChanged: (listener: (status: ConnectionStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: ConnectionStatus): void => listener(status);
+      ipcRenderer.on(IpcChannels.refreshStatusChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.refreshStatusChanged, handler);
+      };
+    }
+  },
+  repos: {
+    list: () => ipcRenderer.invoke(IpcChannels.reposList),
+    refresh: () => ipcRenderer.invoke(IpcChannels.reposRefresh)
+  },
+  diagnostics: {
+    getReport: () => ipcRenderer.invoke(IpcChannels.diagnosticsGetReport),
+    record: (entry) => ipcRenderer.invoke(IpcChannels.diagnosticsRecord, entry)
+  },
   settings: {
     get: () => ipcRenderer.invoke(IpcChannels.settingsGet),
     update: (update) => ipcRenderer.invoke(IpcChannels.settingsUpdate, update)

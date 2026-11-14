@@ -3,7 +3,10 @@ import type { AuthService } from '../../../src/main/github/auth-service';
 import { RepoService } from '../../../src/main/github/repo-service';
 
 function response(items: unknown[], ok = true): Response {
-  return { ok, status: ok ? 200 : 500, json: async () => items } as Response;
+  return new Response(JSON.stringify(items), {
+    status: ok ? 200 : 500,
+    headers: { 'content-type': 'application/json' }
+  });
 }
 
 describe('RepoService', () => {
@@ -78,5 +81,22 @@ describe('RepoService', () => {
     } as unknown as Pick<AuthService, 'getStatus' | 'getAccessToken'>;
     const service = new RepoService({ auth, apiBaseUrl: 'https://api.github.test', fetch: vi.fn() });
     await expect(service.listPersonalRepos()).rejects.toThrow('Sign in');
+  });
+});
+
+describe('RepoService snapshot', () => {
+  it('serves the last successful list from memory without calling GitHub again', async () => {
+    const status = { kind: 'signed-in' as const, sessionId: 5, login: 'orbit-owner', persistent: true };
+    const fetch = vi.fn(async () => response([]));
+    const auth = {
+      getStatus: () => status,
+      getAccessToken: vi.fn(async () => 'secret')
+    } as unknown as Pick<AuthService, 'getStatus' | 'getAccessToken'>;
+    const service = new RepoService({ auth, apiBaseUrl: 'https://api.github.test', fetch });
+
+    await service.listPersonalRepos();
+    await service.current();
+    await service.current();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
