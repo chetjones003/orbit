@@ -78,6 +78,16 @@ describe('Diagnostics', () => {
     expect(onDisk).toContain('[redacted]');
   });
 
+  it('creates its directory on first write so a fresh install still gets a log', async () => {
+    const fresh = join(dir, 'logs');
+    const diagnostics = new Diagnostics({ dir: fresh });
+
+    await diagnostics.record({ level: 'info', scope: 'refresh', code: 'fresh', message: 'first run' });
+    await diagnostics.flush();
+
+    expect(await readFile(join(fresh, 'diagnostics.log'), 'utf8')).toContain('first run');
+  });
+
   it('does not treat a missing log as an error when starting', async () => {
     await writeFile(join(dir, 'unrelated.txt'), 'ok');
     const diagnostics = new Diagnostics({ dir });

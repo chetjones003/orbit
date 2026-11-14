@@ -1,4 +1,4 @@
-import { appendFile, rename, stat } from 'node:fs/promises';
+import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export type DiagnosticLevel = 'info' | 'warn' | 'error';
@@ -70,6 +70,7 @@ export class Diagnostics {
   }
 
   private async append(line: string): Promise<void> {
+    await mkdir(this.dir, { recursive: true });
     const file = join(this.dir, 'diagnostics.log');
     const size = await stat(file).then(
       (s) => s.size,
