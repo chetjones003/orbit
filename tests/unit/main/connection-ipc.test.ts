@@ -24,12 +24,12 @@ vi.mock('electron', () => ({
   protocol: {}
 }));
 
-import { registerIpcHandlers, type ConnectionPort } from '../../../src/main/ipc';
+import { registerIpcHandlers, type RefreshPort } from '../../../src/main/ipc';
 
 const trusted = { senderFrame: { url: 'orbit://app/index.html' } };
 const untrusted = { senderFrame: { url: 'https://evil.example/' } };
 
-function fakeConnection(): ConnectionPort & { emit(status: ConnectionStatus): void } {
+function fakeConnection(): RefreshPort & { emit(status: ConnectionStatus): void } {
   const listeners = new Set<(status: ConnectionStatus) => void>();
   const status: ConnectionStatus = { state: 'fresh', lastSuccessAt: 1, nextRetryAt: 2 };
   return {
@@ -49,49 +49,73 @@ function invoke(channel: string, event: unknown = trusted, ...args: unknown[]): 
   return handler(event, ...args);
 }
 
-describe('connection IPC handlers', () => {
+describe('refresh IPC handlers', () => {
   beforeEach(() => {
     mocks.handlers.clear();
     mocks.sent.length = 0;
   });
 
-  it('returns the current connection status to trusted renderers only', () => {
-    registerIpcHandlers({ connection: fakeConnection(), diagnostics: { report: () => '' } });
+  it('returns the current refresh status to trusted renderers only', () => {
+    registerIpcHandlers({
+      refresh: fakeConnection(),
+      diagnostics: { report: () => '', record: async () => undefined }
+    });
 
-    expect(invoke(IpcChannels.connectionGetStatus)).toEqual({
+    expect(invoke(IpcChannels.refreshGetStatus)).toEqual({
       state: 'fresh',
       lastSuccessAt: 1,
       nextRetryAt: 2
     });
-    expect(() => invoke(IpcChannels.connectionGetStatus, untrusted)).toThrow('Untrusted IPC sender');
+    expect(() => invoke(IpcChannels.refreshGetStatus, untrusted)).toThrow('Untrusted IPC sender');
   });
 
   it('runs a manual refresh through the engine and returns its decision', async () => {
-    const connection = fakeConnection();
-    registerIpcHandlers({ connection, diagnostics: { report: () => '' } });
+    const refresh = fakeConnection();
+    registerIpcHandlers({ refresh, diagnostics: { report: () => '', record: async () => undefined } });
 
     await expect(invoke(IpcChannels.reposRefresh)).resolves.toEqual({ started: true });
-    expect(connection.refreshNow).toHaveBeenCalledTimes(1);
+    expect(refresh.refreshNow).toHaveBeenCalledTimes(1);
     expect(() => invoke(IpcChannels.reposRefresh, untrusted)).toThrow('Untrusted IPC sender');
   });
 
   it('pushes each status change to every window', () => {
-    const connection = fakeConnection();
-    registerIpcHandlers({ connection, diagnostics: { report: () => '' } });
+    const refresh = fakeConnection();
+    registerIpcHandlers({ refresh, diagnostics: { report: () => '', record: async () => undefined } });
 
     const next: ConnectionStatus = { state: 'offline', lastSuccessAt: 1, nextRetryAt: 3 };
-    connection.emit(next);
+    refresh.emit(next);
 
-    expect(mocks.sent).toEqual([{ channel: IpcChannels.connectionStatusChanged, payload: next }]);
+    expect(mocks.sent).toEqual([{ channel: IpcChannels.refreshStatusChanged, payload: next }]);
   });
 
   it('returns the redacted diagnostics report on request', () => {
     registerIpcHandlers({
-      connection: fakeConnection(),
-      diagnostics: { report: () => 'refresh offline network' }
+      refresh: fakeConnection(),
+      diagnostics: { report: () => 'refresh offline network', record: async () => undefined }
     });
 
     expect(invoke(IpcChannels.diagnosticsGetReport)).toBe('refresh offline network');
     expect(() => invoke(IpcChannels.diagnosticsGetReport, untrusted)).toThrow('Untrusted IPC sender');
+  });
+});
+
+describe('diagnostics record IPC', () => {
+  beforeEach(() => {
+    mocks.handlers.clear();
+  });
+
+  it('records a renderer failure by scope and code only, rejecting anything that looks like content', async () => {
+    const record = vi.fn(async () => undefined);
+    registerIpcHandlers({ refresh: fakeConnection(), diagnostics: { report: () => '', record } });
+
+    await invoke(IpcChannels.diagnosticsRecord, trusted, { scope: 'repos', code: 'load-failed' });
+    expect(record).toHaveBeenCalledWith({ level: 'warn', scope: 'repos', code: 'load-failed', message: '' });
+
+    expect(() =>
+      invoke(IpcChannels.diagnosticsRecord, trusted, { scope: 'repos', code: 'token ghp_abc123' })
+    ).toThrow('Invalid diagnostic');
+    expect(() =>
+      invoke(IpcChannels.diagnosticsRecord, untrusted, { scope: 'repos', code: 'load-failed' })
+    ).toThrow('Untrusted IPC sender');
   });
 });

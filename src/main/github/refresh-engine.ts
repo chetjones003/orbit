@@ -1,4 +1,4 @@
-import type { ConnectionStatus, RefreshStart } from '../../shared/connection';
+import { isRateLimitedAt, type ConnectionStatus, type RefreshStart } from '../../shared/connection';
 import { GitHubRequestError } from './github-client';
 export type { ConnectionState, ConnectionStatus, RefreshStart } from '../../shared/connection';
 
@@ -11,6 +11,8 @@ export interface RefreshEngineOptions {
   intervalMs?: number;
   maxBackoffMs?: number;
   manualCooldownMs?: number;
+  /** False while signed out; a manual refresh then never reaches GitHub. */
+  canRefresh?: () => boolean;
 }
 
 const MINUTE = 60_000;
@@ -26,11 +28,14 @@ export class RefreshEngine {
   private readonly intervalMs: number;
   private readonly maxBackoffMs: number;
   private readonly manualCooldownMs: number;
+  private readonly canRefresh: () => boolean;
   private readonly listeners = new Set<(status: ConnectionStatus) => void>();
   private status: ConnectionStatus = { state: 'idle', lastSuccessAt: null, nextRetryAt: null };
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight: Promise<void> | null = null;
   private running = false;
+  /** Bumped by stop() so results from a refresh started before stop are discarded. */
+  private generation = 0;
   private consecutiveFailures = 0;
   private lastManualAt: number | null = null;
 
@@ -40,6 +45,7 @@ export class RefreshEngine {
     this.intervalMs = options.intervalMs ?? MINUTE;
     this.maxBackoffMs = options.maxBackoffMs ?? 5 * MINUTE;
     this.manualCooldownMs = options.manualCooldownMs ?? 30_000;
+    this.canRefresh = options.canRefresh ?? (() => true);
   }
 
   getStatus(): ConnectionStatus {
@@ -54,24 +60,22 @@ export class RefreshEngine {
   start(): void {
     if (this.running) return;
     this.running = true;
-    this.begin();
+    if (!this.inFlight) void this.begin();
   }
 
   stop(): void {
     this.running = false;
+    this.generation += 1;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
 
   /** Runs a refresh now unless the limits in force forbid it. Never throws. */
   refreshNow(): Promise<RefreshStart> {
+    if (!this.canRefresh()) return Promise.resolve({ started: false, reason: 'signed-out' });
     if (this.inFlight) return Promise.resolve({ started: false, reason: 'in-flight' });
     const now = this.now();
-    if (
-      this.status.state === 'rate-limited' &&
-      this.status.nextRetryAt !== null &&
-      now < this.status.nextRetryAt
-    ) {
+    if (isRateLimitedAt(this.status, now) && this.status.nextRetryAt !== null) {
       return Promise.resolve({ started: false, reason: 'rate-limited', retryAt: this.status.nextRetryAt });
     }
     if (this.lastManualAt !== null && now - this.lastManualAt < this.manualCooldownMs) {
@@ -88,6 +92,7 @@ export class RefreshEngine {
   }
 
   private begin(): Promise<void> {
+    if (this.inFlight) return this.inFlight;
     this.inFlight = this.run().finally(() => {
       this.inFlight = null;
     });
@@ -95,41 +100,43 @@ export class RefreshEngine {
   }
 
   private async run(): Promise<void> {
+    const generation = this.generation;
+    let outcome: RefreshOutcome;
     try {
-      const outcome = await this.refreshFn();
-      this.consecutiveFailures = 0;
-      const now = this.now();
-      const pollIntervalMs = outcome?.pollIntervalMs ?? 0;
-      const delay = Math.max(this.intervalMs, pollIntervalMs);
-      this.set({ state: 'fresh', lastSuccessAt: now, nextRetryAt: now + delay });
-      this.schedule(delay);
+      outcome = await this.refreshFn();
     } catch (error) {
-      this.handleFailure(error);
+      if (generation === this.generation) this.handleFailure(error);
+      return;
     }
+    // A refresh that finishes after stop() must not overwrite the signed-out state.
+    if (generation !== this.generation) return;
+    this.consecutiveFailures = 0;
+    const now = this.now();
+    const delay = Math.max(this.intervalMs, outcome?.pollIntervalMs ?? 0);
+    this.setState('fresh', now + delay, now);
+    this.schedule(delay);
   }
 
   private handleFailure(error: unknown): void {
     const now = this.now();
     if (error instanceof GitHubRequestError && error.kind === 'rate-limited') {
-      const retryAt =
+      const reset =
         error.resetAt ??
         (error.retryAfterMs !== undefined ? now + error.retryAfterMs : now + this.intervalMs);
-      this.set({ state: 'rate-limited', lastSuccessAt: this.status.lastSuccessAt, nextRetryAt: retryAt });
+      // A reset time in the past must not produce a zero-delay retry loop.
+      const retryAt = Math.max(reset, now + this.intervalMs);
+      this.setState('rate-limited', retryAt);
       this.schedule(retryAt - now);
       return;
     }
     if (error instanceof GitHubRequestError && error.kind === 'transient') {
       this.consecutiveFailures += 1;
       const delay = Math.min(this.intervalMs * 2 ** (this.consecutiveFailures - 1), this.maxBackoffMs);
-      this.set({ state: 'offline', lastSuccessAt: this.status.lastSuccessAt, nextRetryAt: now + delay });
+      this.setState('offline', now + delay);
       this.schedule(delay);
       return;
     }
-    this.set({
-      state: 'stale',
-      lastSuccessAt: this.status.lastSuccessAt,
-      nextRetryAt: now + this.intervalMs
-    });
+    this.setState('stale', now + this.intervalMs);
     this.schedule(this.intervalMs);
   }
 
@@ -139,14 +146,16 @@ export class RefreshEngine {
     this.timer = setTimeout(
       () => {
         this.timer = null;
-        if (!this.inFlight) this.begin();
+        void this.begin();
       },
       Math.max(0, delayMs)
     );
   }
 
-  private set(next: ConnectionStatus): void {
-    this.status = next;
-    for (const listener of this.listeners) listener({ ...next });
+  /** Keeps lastSuccessAt across failures; a successful refresh passes its own time. */
+  private setState(state: ConnectionStatus['state'], nextRetryAt: number, successAt?: number): void {
+    const lastSuccessAt = successAt ?? this.status.lastSuccessAt;
+    this.status = { state, lastSuccessAt, nextRetryAt };
+    for (const listener of this.listeners) listener({ ...this.status });
   }
 }

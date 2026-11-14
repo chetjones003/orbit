@@ -116,3 +116,16 @@ describe('GitHubClient', () => {
     expect(result.pollIntervalMs).toBe(90000);
   });
 });
+
+describe('GitHubClient secondary limits', () => {
+  it('treats a 403 that says the rate limit was hit as rate-limited even without rate-limit headers', async () => {
+    const client = new GitHubClient({
+      apiBaseUrl: 'https://api.github.test',
+      fetch: vi.fn(async () => jsonResponse(403, { message: 'You have exceeded a secondary rate limit.' }))
+    });
+
+    await expect(client.get('/x', { token: 't', scope: 's' })).rejects.toMatchObject({
+      kind: 'rate-limited'
+    });
+  });
+});

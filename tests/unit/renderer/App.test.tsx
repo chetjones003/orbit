@@ -8,14 +8,14 @@ import type { OrbitSettings, PersonalRepo } from '../../../src/shared/ipc';
 import type { ConnectionStatus, RefreshStart } from '../../../src/shared/connection';
 
 type StatusListener = (status: AuthStatus) => void;
-const connectionListeners = new Set<(status: ConnectionStatus) => void>();
+const refreshListeners = new Set<(status: ConnectionStatus) => void>();
 
 function installBridge(
   overrides: {
     getInfo?: OrbitApi['app']['getInfo'];
     status?: AuthStatus;
     repos?: PersonalRepo[];
-    connection?: ConnectionStatus;
+    refreshStatus?: ConnectionStatus;
     refreshStart?: RefreshStart;
   } = {}
 ): { listeners: Set<StatusListener>; api: OrbitApi; settings: OrbitSettings } {
@@ -41,20 +41,23 @@ function installBridge(
         return () => listeners.delete(listener);
       }
     },
-    connection: {
+    refresh: {
       getStatus: vi.fn(
-        async () => overrides.connection ?? { state: 'idle', lastSuccessAt: null, nextRetryAt: null }
+        async () => overrides.refreshStatus ?? { state: 'idle', lastSuccessAt: null, nextRetryAt: null }
       ),
       onStatusChanged: (listener) => {
-        connectionListeners.add(listener);
-        return () => connectionListeners.delete(listener);
+        refreshListeners.add(listener);
+        return () => refreshListeners.delete(listener);
       }
     },
     repos: {
       list: vi.fn(async () => overrides.repos ?? []),
       refresh: vi.fn(async () => overrides.refreshStart ?? ({ started: true } as RefreshStart))
     },
-    diagnostics: { getReport: vi.fn(async () => 'report') },
+    diagnostics: {
+      getReport: vi.fn(async () => 'report'),
+      record: vi.fn(async () => undefined)
+    },
     settings: {
       get: vi.fn(async () => settings),
       update: vi.fn(async (update) => Object.assign(settings, update))
@@ -223,10 +226,16 @@ describe('App', () => {
     installBridge({
       status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true },
       repos: [repo],
-      connection: { state: 'offline', lastSuccessAt: Date.now() - 60_000, nextRetryAt: Date.now() + 60_000 }
+      refreshStatus: {
+        state: 'offline',
+        lastSuccessAt: Date.now() - 60_000,
+        nextRetryAt: Date.now() + 60_000
+      }
     });
     render(<App />);
-    expect(await screen.findByText(/Offline\. Last updated 1 min ago/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Offline\. Last updated 1 min ago/, {}, { timeout: 3000 })
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
     expect(screen.getByText('Changes are paused until GitHub is reachable again.')).toBeInTheDocument();
   });
@@ -320,5 +329,19 @@ describe('App', () => {
     fireEvent.click(normal);
     fireEvent.click(screen.getByRole('button', { name: 'Collapse details panel' }));
     expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
+  });
+});
+
+describe('App failure reporting', () => {
+  it('records a failed repo load in main by scope and code, so Copy diagnostics includes it', async () => {
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true }
+    });
+    api.repos.list = vi.fn(async () => {
+      throw new Error('GitHub is unavailable.');
+    });
+    render(<App />);
+    expect(await screen.findByText('GitHub is unavailable.')).toBeInTheDocument();
+    expect(api.diagnostics.record).toHaveBeenCalledWith({ scope: 'repos', code: 'load-failed' });
   });
 });

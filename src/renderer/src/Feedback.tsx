@@ -5,11 +5,18 @@ interface ConnectionBannerProps {
   onRefresh: () => void;
   /** True while a cooldown or rate limit forbids a manual refresh. */
   refreshBlocked: boolean;
+  /** Epoch ms used for relative times. Pass the app clock so the banner ticks. */
+  now?: number;
 }
 
 /** Persistent status for stale, offline, or rate-limited data. Loaded data stays visible beneath it. */
-export function ConnectionBanner({ status, onRefresh, refreshBlocked }: ConnectionBannerProps) {
-  const message = describeConnection(status, Date.now());
+export function ConnectionBanner({
+  status,
+  onRefresh,
+  refreshBlocked,
+  now = Date.now()
+}: ConnectionBannerProps) {
+  const message = describeConnection(status, now);
   if (!message) return null;
   return (
     <div className={`connection-banner ${message.tone}`} role="status" aria-live="polite">

@@ -145,3 +145,65 @@ describe('RefreshEngine', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('RefreshEngine lifecycle and limits', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-01-01T00:00:00Z') });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('never schedules a retry earlier than the normal interval, even if the reset time has passed', async () => {
+    const refresh = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new GitHubRequestError('rate-limited', 'limit', { status: 429, resetAt: Date.now() - 1000 })
+      )
+      .mockResolvedValue(undefined);
+    const engine = new RefreshEngine({ refresh });
+
+    engine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(engine.getStatus().nextRetryAt).toBe(Date.now() + MINUTE);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    engine.stop();
+  });
+
+  it('discards a refresh that finishes after stop, so signed-out state is not overwritten', async () => {
+    let release: () => void = () => undefined;
+    const refresh = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const engine = new RefreshEngine({ refresh });
+
+    engine.start();
+    engine.stop();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(engine.getStatus()).toMatchObject({ state: 'idle', lastSuccessAt: null });
+    await vi.advanceTimersByTimeAsync(5 * MINUTE);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a second refresh when started while one is already in flight', async () => {
+    let release: () => void = () => undefined;
+    const refresh = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const engine = new RefreshEngine({ refresh });
+
+    void engine.refreshNow();
+    engine.start();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    engine.stop();
+  });
+});
+
+describe('RefreshEngine sign-in guard', () => {
+  it('refuses a manual refresh while signed out and never calls GitHub', async () => {
+    const refresh = vi.fn(async () => undefined);
+    const engine = new RefreshEngine({ refresh, canRefresh: () => false });
+
+    await expect(engine.refreshNow()).resolves.toEqual({ started: false, reason: 'signed-out' });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

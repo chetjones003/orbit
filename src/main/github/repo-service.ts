@@ -28,11 +28,22 @@ export interface RepoServiceOptions {
 export class RepoService {
   private readonly auth: RepoServiceOptions['auth'];
   private readonly client: GitHubClient;
+  /** Last complete list for one session, held in memory only. */
+  private snapshot: { sessionId: number; repos: PersonalRepo[] } | null = null;
 
   constructor(options: RepoServiceOptions) {
     this.auth = options.auth;
     this.client =
       options.client ?? new GitHubClient({ apiBaseUrl: options.apiBaseUrl, fetch: options.fetch });
+  }
+
+  /** The list to show: the last complete one for this session, otherwise a fresh fetch. */
+  async current(): Promise<PersonalRepo[]> {
+    const status = this.auth.getStatus();
+    if (status.kind === 'signed-in' && this.snapshot?.sessionId === status.sessionId) {
+      return this.snapshot.repos;
+    }
+    return this.listPersonalRepos();
   }
 
   async listPersonalRepos(): Promise<PersonalRepo[]> {
@@ -67,7 +78,10 @@ export class RepoService {
           htmlUrl: item.html_url
         });
       }
-      if (body.length < 100) return repos;
+      if (body.length < 100) {
+        this.snapshot = { sessionId, repos };
+        return repos;
+      }
     }
   }
 }

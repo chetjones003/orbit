@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { describeConnection, writesAllowed, type ConnectionStatus } from '../../../src/shared/connection';
+import {
+  describeConnection,
+  isRateLimitedAt,
+  writesAllowed,
+  type ConnectionStatus
+} from '../../../src/shared/connection';
 
 const NOW = Date.parse('2026-01-01T12:00:00Z');
 const base = { lastSuccessAt: NOW - 2 * 60_000, nextRetryAt: null } satisfies Partial<ConnectionStatus>;
@@ -40,5 +45,18 @@ describe('writesAllowed', () => {
     expect(writesAllowed({ state: 'stale', ...base })).toBe(true);
     expect(writesAllowed({ state: 'offline', ...base })).toBe(false);
     expect(writesAllowed({ state: 'rate-limited', ...base })).toBe(false);
+  });
+});
+
+describe('isRateLimitedAt', () => {
+  it('is true only while a rate limit is in force', () => {
+    const until = NOW + 60_000;
+    expect(isRateLimitedAt({ state: 'rate-limited', lastSuccessAt: null, nextRetryAt: until }, NOW)).toBe(
+      true
+    );
+    expect(isRateLimitedAt({ state: 'rate-limited', lastSuccessAt: null, nextRetryAt: until }, until)).toBe(
+      false
+    );
+    expect(isRateLimitedAt({ state: 'offline', lastSuccessAt: null, nextRetryAt: until }, NOW)).toBe(false);
   });
 });

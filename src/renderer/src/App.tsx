@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Poi
 import type { AppInfo, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
-import { writesAllowed } from '../../shared/connection';
+import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
@@ -18,7 +18,8 @@ export function App() {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
-  const [connection, setConnection] = useState<ConnectionStatus | null>(null);
+  const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<string | null>(null);
 
   const updateSettings = useCallback(async (update: SettingsUpdate) => {
@@ -33,6 +34,8 @@ export function App() {
       setRepos(await window.orbit.repos.list());
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Could not load repositories.');
+      // Recorded in main so "Copy diagnostics" includes this failure. Only the scope and code are sent.
+      void window.orbit.diagnostics.record({ scope: 'repos', code: 'load-failed' }).catch(() => undefined);
     } finally {
       setLoadingRepos(false);
     }
@@ -45,12 +48,15 @@ export function App() {
       pushed = true;
       if (!cancelled) setStatus(next);
     });
-    const unsubscribeConnection = window.orbit.connection.onStatusChanged((next) => {
-      if (!cancelled) setConnection(next);
+    const unsubscribeRefresh = window.orbit.refresh.onStatusChanged((next) => {
+      if (!cancelled) {
+        setRefreshStatus(next);
+        setNow(Date.now());
+      }
     });
-    void window.orbit.connection.getStatus().then(
+    void window.orbit.refresh.getStatus().then(
       (next) => {
-        if (!cancelled) setConnection((current) => current ?? next);
+        if (!cancelled) setRefreshStatus((current) => current ?? next);
       },
       () => undefined
     );
@@ -72,7 +78,7 @@ export function App() {
     return () => {
       cancelled = true;
       unsubscribe();
-      unsubscribeConnection();
+      unsubscribeRefresh();
     };
   }, []);
 
@@ -85,10 +91,19 @@ export function App() {
   }, [status, loadRepos]);
 
   // Each successful background or manual refresh pushes a new lastSuccessAt; reload the list then.
-  const lastSuccessAt = connection?.lastSuccessAt ?? null;
+  const lastSuccessAt = refreshStatus?.lastSuccessAt ?? null;
   useEffect(() => {
     if (status?.kind === 'signed-in' && lastSuccessAt !== null) void loadRepos();
   }, [lastSuccessAt]);
+
+  // Banner timings ("Last updated", "Retrying in") only move while the status is not fresh; tick them.
+  const needsClock =
+    refreshStatus !== null && refreshStatus.state !== 'fresh' && refreshStatus.state !== 'idle';
+  useEffect(() => {
+    if (!needsClock) return;
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [needsClock]);
 
   useEffect(() => {
     if (!toast) return;
@@ -180,7 +195,9 @@ export function App() {
             ? 'Refresh is cooling down. Try again in a moment.'
             : result.reason === 'rate-limited'
               ? 'GitHub is rate limiting Orbit. Refresh resumes automatically.'
-              : 'A refresh is already running.'
+              : result.reason === 'signed-out'
+                ? 'Sign in to refresh your repositories.'
+                : 'A refresh is already running.'
         );
       },
       () => setActionError('Could not start a refresh. Try again.')
@@ -197,10 +214,7 @@ export function App() {
       );
   };
 
-  const rateLimitBlocked =
-    connection?.state === 'rate-limited' &&
-    connection.nextRetryAt !== null &&
-    Date.now() < connection.nextRetryAt;
+  const rateLimitBlocked = refreshStatus !== null && isRateLimitedAt(refreshStatus, now);
 
   const signOut = (): void => {
     if (!window.confirm('Sign out of Orbit? The saved sign-in will be removed from this computer.')) return;
@@ -332,14 +346,15 @@ export function App() {
                 {status.notice}
               </p>
             )}
-            {connection && (
+            {refreshStatus && (
               <ConnectionBanner
-                status={connection}
+                status={refreshStatus}
                 onRefresh={refreshNow}
                 refreshBlocked={rateLimitBlocked}
+                now={now}
               />
             )}
-            {connection && !writesAllowed(connection) && (
+            {refreshStatus && !writesAllowed(refreshStatus) && (
               <p className="session-notice" role="note">
                 Changes are paused until GitHub is reachable again.
               </p>

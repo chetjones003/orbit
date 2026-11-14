@@ -92,7 +92,9 @@ export class GitHubClient {
       const remaining = response.headers.get('x-ratelimit-remaining');
       const retryAfterMs = readSeconds(response.headers.get('retry-after'), 1000);
       const resetSeconds = readSeconds(response.headers.get('x-ratelimit-reset'), 1000);
-      if (remaining === '0' || retryAfterMs !== undefined || response.status === 429) {
+      // Secondary limits can arrive as a bare 403 that names the limit in its message.
+      const named = response.status === 403 && /rate limit/i.test(await response.text().catch(() => ''));
+      if (remaining === '0' || retryAfterMs !== undefined || response.status === 429 || named) {
         throw new GitHubRequestError('rate-limited', 'GitHub rate limit reached.', {
           status: response.status,
           resetAt: resetSeconds,

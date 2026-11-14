@@ -59,7 +59,10 @@ if (!app.requestSingleInstanceLock()) {
     const client = new GitHubClient({ apiBaseUrl: endpoints.apiBaseUrl });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
     // Visible data refreshes only while signed in. The ETag cache stays in memory.
-    const engine = new RefreshEngine({ refresh: () => repos.listPersonalRepos().then(() => undefined) });
+    const engine = new RefreshEngine({
+      refresh: () => repos.listPersonalRepos().then(() => undefined),
+      canRefresh: () => auth.getStatus().kind === 'signed-in'
+    });
     let lastState = engine.getStatus().state;
     engine.onChange((status) => {
       if (status.state === lastState) return;
@@ -73,18 +76,18 @@ if (!app.requestSingleInstanceLock()) {
           : 'no retry scheduled'
       });
     });
-    const syncRefresh = (signedIn: boolean): void => {
+    const runWhileSignedIn = (signedIn: boolean): void => {
       engine.stop();
       if (signedIn) engine.start();
     };
-    auth.onStatusChange((status) => syncRefresh(status.kind === 'signed-in'));
-    syncRefresh(auth.getStatus().kind === 'signed-in');
+    auth.onStatusChange((status) => runWhileSignedIn(status.kind === 'signed-in'));
+    runWhileSignedIn(auth.getStatus().kind === 'signed-in');
     registerIpcHandlers({
       devServerOrigin,
       auth,
       repos,
       settings,
-      connection: engine,
+      refresh: engine,
       diagnostics
     });
     const win = createMainWindow({

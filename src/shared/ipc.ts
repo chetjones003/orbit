@@ -16,10 +16,11 @@ export const IpcChannels = {
   authStatusChanged: 'auth:status-changed',
   reposList: 'repos:list',
   reposRefresh: 'repos:refresh',
-  connectionGetStatus: 'connection:get-status',
+  refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
-  connectionStatusChanged: 'connection:status-changed',
+  refreshStatusChanged: 'refresh:status-changed',
   diagnosticsGetReport: 'diagnostics:get-report',
+  diagnosticsRecord: 'diagnostics:record',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update'
 } as const;
@@ -86,7 +87,7 @@ export interface OrbitApi {
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: AuthStatus) => void): () => void;
   };
-  connection: {
+  refresh: {
     getStatus(): Promise<ConnectionStatus>;
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: ConnectionStatus) => void): () => void;
@@ -97,6 +98,8 @@ export interface OrbitApi {
     refresh(): Promise<RefreshStart>;
   };
   diagnostics: {
+    /** Records a renderer failure by scope and short code only. Never message text. */
+    record(entry: { scope: string; code: string }): Promise<void>;
     /** Redacted, in-memory diagnostics text for the user to copy. Never uploaded. */
     getReport(): Promise<string>;
   };

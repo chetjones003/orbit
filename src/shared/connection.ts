@@ -51,4 +51,10 @@ function minutesUntil(ms: number): string {
 
 /** Result of asking for a refresh. `started: false` says why it did not run. */
 export type RefreshStart =
-  { started: true } | { started: false; reason: 'in-flight' | 'cooldown' | 'rate-limited'; retryAt?: number };
+  | { started: true }
+  | { started: false; reason: 'in-flight' | 'cooldown' | 'rate-limited' | 'signed-out'; retryAt?: number };
+
+/** True while GitHub has asked Orbit to wait. Used by both the engine and the renderer, so they agree. */
+export function isRateLimitedAt(status: ConnectionStatus, now: number): boolean {
+  return status.state === 'rate-limited' && status.nextRetryAt !== null && now < status.nextRetryAt;
+}

@@ -26,13 +26,13 @@ const api: OrbitApi = {
       };
     }
   },
-  connection: {
-    getStatus: () => ipcRenderer.invoke(IpcChannels.connectionGetStatus),
+  refresh: {
+    getStatus: () => ipcRenderer.invoke(IpcChannels.refreshGetStatus),
     onStatusChanged: (listener: (status: ConnectionStatus) => void) => {
       const handler = (_event: IpcRendererEvent, status: ConnectionStatus): void => listener(status);
-      ipcRenderer.on(IpcChannels.connectionStatusChanged, handler);
+      ipcRenderer.on(IpcChannels.refreshStatusChanged, handler);
       return () => {
-        ipcRenderer.removeListener(IpcChannels.connectionStatusChanged, handler);
+        ipcRenderer.removeListener(IpcChannels.refreshStatusChanged, handler);
       };
     }
   },
@@ -40,7 +40,10 @@ const api: OrbitApi = {
     list: () => ipcRenderer.invoke(IpcChannels.reposList),
     refresh: () => ipcRenderer.invoke(IpcChannels.reposRefresh)
   },
-  diagnostics: { getReport: () => ipcRenderer.invoke(IpcChannels.diagnosticsGetReport) },
+  diagnostics: {
+    getReport: () => ipcRenderer.invoke(IpcChannels.diagnosticsGetReport),
+    record: (entry) => ipcRenderer.invoke(IpcChannels.diagnosticsRecord, entry)
+  },
   settings: {
     get: () => ipcRenderer.invoke(IpcChannels.settingsGet),
     update: (update) => ipcRenderer.invoke(IpcChannels.settingsUpdate, update)

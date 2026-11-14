@@ -11,7 +11,7 @@ import type { RefreshEngine } from './github/refresh-engine';
 import type { Diagnostics } from './diagnostics';
 
 /** The part of the refresh engine that IPC needs. */
-export type ConnectionPort = Pick<RefreshEngine, 'refreshNow'> & {
+export type RefreshPort = Pick<RefreshEngine, 'refreshNow'> & {
   getStatus(): ConnectionStatus;
   onChange(listener: (status: ConnectionStatus) => void): () => void;
 };
@@ -25,10 +25,10 @@ export type AuthPort = Pick<
 export interface IpcOptions {
   devServerOrigin?: string;
   auth?: AuthPort;
-  repos?: Pick<RepoService, 'listPersonalRepos'>;
+  repos?: Pick<RepoService, 'current'>;
   settings?: SettingsStore;
-  connection?: ConnectionPort;
-  diagnostics?: Pick<Diagnostics, 'report'>;
+  refresh?: RefreshPort;
+  diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -40,7 +40,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings, connection, diagnostics } = options;
+  const { devServerOrigin, auth, repos, settings, refresh, diagnostics } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -53,8 +53,13 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
   });
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
-  if (connection) registerConnectionHandlers(connection, devServerOrigin);
+  if (refresh) registerRefreshHandlers(refresh, devServerOrigin);
   if (diagnostics) {
+    ipcMain.handle(IpcChannels.diagnosticsRecord, (event, entry: unknown): void => {
+      assertTrustedSender(event, devServerOrigin);
+      const { scope, code } = parseRendererDiagnostic(entry);
+      void diagnostics.record({ level: 'warn', scope, code, message: '' });
+    });
     ipcMain.handle(IpcChannels.diagnosticsGetReport, (event): string => {
       assertTrustedSender(event, devServerOrigin);
       return diagnostics.report();
@@ -63,7 +68,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
   if (repos) {
     ipcMain.handle(IpcChannels.reposList, async (event) => {
       assertTrustedSender(event, devServerOrigin);
-      return repos.listPersonalRepos();
+      return repos.current();
     });
   }
   if (settings) {
@@ -107,18 +112,32 @@ function registerAuthHandlers(auth: AuthPort, devServerOrigin?: string): void {
   });
 }
 
-function registerConnectionHandlers(connection: ConnectionPort, devServerOrigin?: string): void {
-  ipcMain.handle(IpcChannels.connectionGetStatus, (event): ConnectionStatus => {
+function registerRefreshHandlers(refresh: RefreshPort, devServerOrigin?: string): void {
+  ipcMain.handle(IpcChannels.refreshGetStatus, (event): ConnectionStatus => {
     assertTrustedSender(event, devServerOrigin);
-    return connection.getStatus();
+    return refresh.getStatus();
   });
   ipcMain.handle(IpcChannels.reposRefresh, (event): Promise<RefreshStart> => {
     assertTrustedSender(event, devServerOrigin);
-    return connection.refreshNow();
+    return refresh.refreshNow();
   });
-  connection.onChange((status) => {
+  refresh.onChange((status) => {
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(IpcChannels.connectionStatusChanged, status);
+      win.webContents.send(IpcChannels.refreshStatusChanged, status);
     }
   });
+}
+
+const CODE_PATTERN = /^[a-z][a-z-]{0,39}$/;
+
+/**
+ * Renderer-reported diagnostics carry only a scope and a short code. Anything
+ * else (free text, tokens, GitHub content) is rejected before it reaches the log.
+ */
+export function parseRendererDiagnostic(input: unknown): { scope: string; code: string } {
+  if (typeof input !== 'object' || input === null) throw new Error('Invalid diagnostic');
+  const { scope, code } = input as { scope?: unknown; code?: unknown };
+  if (typeof scope !== 'string' || typeof code !== 'string') throw new Error('Invalid diagnostic');
+  if (!CODE_PATTERN.test(scope) || !CODE_PATTERN.test(code)) throw new Error('Invalid diagnostic');
+  return { scope, code };
 }

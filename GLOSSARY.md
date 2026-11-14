@@ -35,7 +35,7 @@ _Avoid_: Keychain, vault, settings
 **Refresh**: Reloading the visible data from GitHub. It runs automatically every minute while signed in, and manually from the Refresh control. Refreshes are not persisted.
 _Avoid_: Sync (implies two-way replication), reload
 
-**Connection status**: What the status banner reports: fresh, stale, offline, or rate-limited, with the last successful refresh and the next retry when known.
+**Connection status**: What the status banner reports: idle before the first refresh, then fresh, stale, offline, or rate-limited, with the last successful refresh and the next retry when known.
 _Avoid_: Connection (that word means the session in this glossary), network state
 
 **Stale data**: Data still shown after a refresh failed for a reason other than the network or a rate limit. It stays visible and is marked as possibly out of date.
@@ -49,5 +49,5 @@ _Avoid_: Throttled, blocked
 **Diagnostics**: Redacted, bounded, local records of failures and state changes, copied by the user on request. They never contain tokens, GitHub content, or editor text, and they are never uploaded automatically.
 _Avoid_: Logs (ambiguous with the log file on disk), telemetry
 
-**Uncertain write**: A GitHub write whose outcome is unknown because the request may not have reached GitHub. Orbit checks GitHub for the result before retrying, so the write is never applied twice.
+**Uncertain write**: A GitHub write whose outcome is unknown because the request may not have reached GitHub. Orbit's write helper checks GitHub for the result before retrying, so the write is never applied twice. No write feature uses the helper yet.
 _Avoid_: Failed write (it may have succeeded)
