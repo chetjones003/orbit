@@ -9,6 +9,7 @@ import { AuthService } from './github/auth-service';
 import { CredentialStore } from './github/credential-store';
 import { resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
+import { IssueService } from './github/issue-service';
 import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
 import { Diagnostics } from './diagnostics';
@@ -58,6 +59,7 @@ if (!app.requestSingleInstanceLock()) {
     const endpoints = resolveGitHubEndpoints(process.env['ORBIT_GITHUB_URL']);
     const client = new GitHubClient({ apiBaseUrl: endpoints.apiBaseUrl });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
+    const issues = new IssueService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
     // Visible data refreshes only while signed in. The ETag cache stays in memory.
     const engine = new RefreshEngine({
       refresh: () => repos.listPersonalRepos().then(() => undefined),
@@ -88,6 +90,7 @@ if (!app.requestSingleInstanceLock()) {
       devServerOrigin,
       auth,
       repos,
+      issues,
       settings,
       refresh: engine,
       diagnostics

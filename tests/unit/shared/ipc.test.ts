@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { parseExternalUrl } from '../../../src/shared/ipc';
 
 describe('parseExternalUrl', () => {
-  it('accepts absolute https URLs', () => {
+  it('accepts absolute https, http, and mailto URLs', () => {
     expect(parseExternalUrl('https://github.com/chetjones003/orbit')?.hostname).toBe('github.com');
+    expect(parseExternalUrl('http://example.com/')?.protocol).toBe('http:');
+    expect(parseExternalUrl('mailto:owner@example.com')?.protocol).toBe('mailto:');
   });
 
   it.each([
-    ['http scheme', 'http://github.com/'],
+    ['ftp scheme', 'ftp://example.com/'],
     ['file scheme', 'file:///C:/Windows/system.ini'],
     ['javascript scheme', 'javascript:alert(1)'],
     ['embedded credentials', 'https://user:pass@github.com/'],

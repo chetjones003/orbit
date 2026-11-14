@@ -11,6 +11,9 @@ export interface CspOptions {
   devServerOrigin?: string;
 }
 
+/** Origins GitHub serves issue images and video from. Nothing else may load media. */
+export const GITHUB_MEDIA_ORIGINS = 'https://github.com https://*.githubusercontent.com';
+
 /** Strict CSP. Packaged builds allow scripts and styles only from the app bundle. */
 export function buildContentSecurityPolicy(options: CspOptions = {}): string {
   const dev = options.devServerOrigin;
@@ -20,7 +23,9 @@ export function buildContentSecurityPolicy(options: CspOptions = {}): string {
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // Issue bodies may embed images and video, but only from GitHub-hosted origins.
+    `img-src 'self' data: ${GITHUB_MEDIA_ORIGINS}`,
+    `media-src 'self' ${GITHUB_MEDIA_ORIGINS}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
     "object-src 'none'",

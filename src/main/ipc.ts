@@ -9,6 +9,8 @@ import type { SettingsStore } from './settings';
 import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
 import type { Diagnostics } from './diagnostics';
+import type { IssueService } from './github/issue-service';
+import type { IssueDetail, IssueListPage, IssueListQuery } from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
 export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
@@ -29,6 +31,7 @@ export interface IpcOptions {
   settings?: SettingsStore;
   refresh?: RefreshPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
+  issues?: Pick<IssueService, 'listIssues' | 'getIssueDetail'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -40,7 +43,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings, refresh, diagnostics } = options;
+  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -70,6 +73,19 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       assertTrustedSender(event, devServerOrigin);
       return repos.current();
     });
+  }
+  if (issues) {
+    ipcMain.handle(IpcChannels.issuesList, (event, query: IssueListQuery): Promise<IssueListPage> => {
+      assertTrustedSender(event, devServerOrigin);
+      return issues.listIssues(query);
+    });
+    ipcMain.handle(
+      IpcChannels.issuesDetail,
+      (event, repoFullName: string, number: number): Promise<IssueDetail> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.getIssueDetail(repoFullName, number);
+      }
+    );
   }
   if (settings) {
     ipcMain.handle(IpcChannels.settingsGet, async (event) => {

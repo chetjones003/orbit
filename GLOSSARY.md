@@ -51,3 +51,11 @@ _Avoid_: Logs (ambiguous with the log file on disk), telemetry
 
 **Uncertain write**: A GitHub write whose outcome is unknown because the request may not have reached GitHub. Orbit's write helper checks GitHub for the result before retrying, so the write is never applied twice. No write feature uses the helper yet.
 _Avoid_: Failed write (it may have succeeded)
+
+**Issue view**: Read-only detail of one issue: its metadata, body, and comments. It opens in the details panel, and can be expanded to fill the main view.
+_Avoid_: Issue page, issue modal
+
+**Partial list**: An issue or comment list that Orbit could not fully load or read. It is shown with a notice that it may be incomplete, never as the full result.
+_Avoid_: Partial page (a list can be partial without being paged)
+
+**Owner repo link**: A link in an issue body that points to an issue or pull request in one of the signed-in owner's personal repos. It opens inside Orbit. Other http(s) and mailto links open through the controlled external open.

@@ -43,3 +43,15 @@ describe('isAppUrl', () => {
     expect(isAppUrl('https://evil.example/', 'http://localhost:5173')).toBe(false);
   });
 });
+
+describe('content security policy for GitHub media', () => {
+  it('allows images only from GitHub-hosted origins', () => {
+    const csp = buildContentSecurityPolicy();
+    expect(csp).toContain("img-src 'self' data: https://github.com https://*.githubusercontent.com;");
+  });
+
+  it('allows video only from GitHub-hosted origins', () => {
+    const csp = buildContentSecurityPolicy();
+    expect(csp).toContain("media-src 'self' https://github.com https://*.githubusercontent.com;");
+  });
+});

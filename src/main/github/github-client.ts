@@ -33,6 +33,8 @@ export interface GitHubRequestOptions {
   token: string;
   /** Cache partition, normally the session id. Bodies never cross partitions. */
   scope: string;
+  /** Media type to request. Defaults to the JSON media type. */
+  accept?: string;
 }
 
 export interface GitHubResult<T> {
@@ -68,11 +70,12 @@ export class GitHubClient {
 
   async getWithMeta<T>(path: string, options: GitHubRequestOptions): Promise<GitHubResult<T>> {
     const url = `${this.apiBaseUrl}${path}`;
-    const key = `${options.scope}\u0000${url}`;
+    const accept = options.accept ?? 'application/vnd.github+json';
+    const key = `${options.scope}\u0000${accept}\u0000${url}`;
     const cached = this.cache.get(key);
     const headers: Record<string, string> = {
       authorization: `Bearer ${options.token}`,
-      accept: 'application/vnd.github+json'
+      accept
     };
     if (cached) headers['if-none-match'] = cached.etag;
 
