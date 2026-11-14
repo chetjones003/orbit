@@ -22,3 +22,9 @@ _Avoid_: GitHub view
 
 **Custom view**: An Orbit-defined way to show one Project's items: Kanban, Gantt, Calendar, or Table. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view
+
+**Unscheduled tray**: The visible collection of a custom Gantt or Calendar view's items that lack the scheduling values needed to place them on its dates.
+_Avoid_: Backlog (items may already be in progress)
+
+**No value group**: The group in a custom Kanban or grouped Table view for items without a value in the field used to group them.
+_Avoid_: Unscheduled (this group is not specific to dates)
