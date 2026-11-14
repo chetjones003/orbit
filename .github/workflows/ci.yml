@@ -93,9 +93,14 @@ jobs:
           app_dir=$(mktemp -d)
           cp -R "$mount/Orbit.app" "$app_dir/"
           hdiutil detach "$mount"
-          # Run the Intel build under Rosetta on the Apple Silicon runner.
-          if [ "${{ matrix.arch }}" = "x64" ]; then prefix="arch -x86_64"; else prefix=""; fi
-          $prefix node scripts/smoke.mjs "$app_dir/Orbit.app/Contents/MacOS/Orbit"
+          exe="$app_dir/Orbit.app/Contents/MacOS/Orbit"
+          # The Intel build on the Apple Silicon runner needs Rosetta. The arm64 Node
+          # driver spawns the x86_64 app, which macOS runs under Rosetta automatically.
+          if [ "${{ matrix.arch }}" = "x64" ]; then
+            /usr/sbin/softwareupdate --install-rosetta --agree-to-license || true
+          fi
+          echo "Smoke binary architectures: $(lipo -archs "$exe")"
+          node scripts/smoke.mjs "$exe"
 
       - name: Smoke test packaged app (Linux AppImage and deb)
         if: matrix.platform == 'linux'
