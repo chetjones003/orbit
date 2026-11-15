@@ -173,6 +173,20 @@ describe('IssueDetailView editing', () => {
     });
   });
 
+  it('does not start a second field change while one is still saving', async () => {
+    let finish!: (summary: IssueSummary) => void;
+    api.issues.updateFields.mockReturnValueOnce(new Promise<IssueSummary>((resolve) => (finish = resolve)));
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'urgent' }));
+    expect(screen.getByRole('checkbox', { name: 'helper' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'helper' }));
+
+    expect(api.issues.updateFields).toHaveBeenCalledTimes(1);
+    finish({ ...SUMMARY, labels: [...SUMMARY.labels, { name: 'urgent', color: 'ff0000' }] });
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'helper' })).not.toBeDisabled());
+  });
+
   it('ticks only the clicked task checkbox and sends the body the user saw', async () => {
     api.issues.setTask.mockResolvedValueOnce({
       kind: 'saved',

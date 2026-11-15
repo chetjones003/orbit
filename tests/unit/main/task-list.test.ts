@@ -32,6 +32,15 @@ describe('setTaskItemChecked', () => {
     );
   });
 
+  it('ignores task-looking lines inside an indented code block, as GitHub renders them', () => {
+    const source = ['Intro', '', '    - [ ] example', '', '- [ ] real task'].join('\n');
+
+    expect(countTaskItems(source)).toBe(1);
+    expect(setTaskItemChecked(source, 0, true)).toBe(
+      ['Intro', '', '    - [ ] example', '', '- [x] real task'].join('\n')
+    );
+  });
+
   it('keeps Windows line endings', () => {
     expect(setTaskItemChecked('- [ ] a\r\n- [ ] b\r\n', 1, true)).toBe('- [ ] a\r\n- [x] b\r\n');
   });

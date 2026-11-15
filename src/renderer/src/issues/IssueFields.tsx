@@ -11,10 +11,6 @@ export interface IssueFieldsProps {
 }
 
 /**
- * Labels, assignees, and milestone of one issue. A change shows at once; it is reversed if GitHub refuses it,
- * and GitHub's reconciled summary replaces the optimistic one when it is accepted.
- */
-/**
  * The repo's open milestones, plus the issue's own milestone when it is no longer open. Without it the
  * select would show "No milestone" for an issue that still has one.
  */
@@ -23,9 +19,15 @@ function milestonesWithCurrent(offered: IssueMilestone[], current: IssueMileston
   return [current, ...offered];
 }
 
+/**
+ * Labels, assignees, and milestone of one issue. A change shows at once; it is reversed if GitHub refuses it,
+ * and GitHub's reconciled summary replaces the optimistic one when it is accepted. Only one change is sent at a
+ * time, because each sends the complete lists: overlapping requests could undo one another on GitHub.
+ */
 export function IssueFields({ repoFullName, number, summary, onChange, onError }: IssueFieldsProps) {
   const [options, setOptions] = useState<IssueRepoOptions | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +48,9 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
   }, [repoFullName]);
 
   const send = (optimistic: IssueSummary): void => {
+    if (saving) return;
     const previous = summary;
+    setSaving(true);
     onChange(optimistic);
     window.orbit.issues
       .updateFields(repoFullName, number, {
@@ -55,8 +59,12 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
         milestoneNumber: optimistic.milestone?.number ?? null
       })
       .then(
-        (saved) => onChange(saved),
+        (saved) => {
+          setSaving(false);
+          onChange(saved);
+        },
         () => {
+          setSaving(false);
           onChange(previous);
           onError('Could not save that change. It has been undone.');
         }
@@ -107,6 +115,7 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
                   type="checkbox"
                   checked={summary.labels.some((l) => l.name === label.name)}
                   onChange={() => toggleLabel(label)}
+                  disabled={saving}
                 />
                 <span>{label.name}</span>
               </label>
@@ -120,6 +129,7 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
                   type="checkbox"
                   checked={summary.assignees.includes(login)}
                   onChange={() => toggleAssignee(login)}
+                  disabled={saving}
                 />
                 <span>{login}</span>
               </label>
@@ -131,6 +141,7 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
               aria-label="Milestone"
               value={summary.milestone ? String(summary.milestone.number) : ''}
               onChange={(event) => chooseMilestone(event.target.value)}
+              disabled={saving}
             >
               <option value="">No milestone</option>
               {milestonesWithCurrent(options.milestones, summary.milestone).map((milestone) => (
