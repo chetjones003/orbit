@@ -138,11 +138,13 @@ export function scheduleWrites(
     newStart = day;
     newEnd = day;
   } else if (start !== null) {
-    newStart = start;
-    newEnd = day > start ? day : start;
+    // A day before the start cannot end the bar, so the bar becomes one day, on the dropped day.
+    newStart = day < start ? day : start;
+    newEnd = day;
   } else if (end !== null) {
-    newStart = day < end ? day : end;
-    newEnd = end;
+    // A day after the target cannot start the bar, so the bar becomes one day, on the dropped day.
+    newStart = day;
+    newEnd = day > end ? day : end;
   } else {
     newStart = day;
     newEnd = day;

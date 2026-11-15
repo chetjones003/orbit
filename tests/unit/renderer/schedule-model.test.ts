@@ -174,16 +174,22 @@ describe('scheduleWrites', () => {
     ]);
   });
 
-  it('keeps an existing start and ends the bar on the dropped day, never before the start', () => {
+  it('keeps an existing start and ends the bar on the dropped day, or makes a one-day bar on it when the day is before the start', () => {
     const a = item('a', { s: date('2026-05-04') });
     expect(scheduleWrites(a, '2026-05-07', 's', 't')).toEqual([{ role: 'end', date: '2026-05-07' }]);
-    expect(scheduleWrites(a, '2026-05-01', 's', 't')).toEqual([{ role: 'end', date: '2026-05-04' }]);
+    expect(scheduleWrites(a, '2026-05-01', 's', 't')).toEqual([
+      { role: 'start', date: '2026-05-01' },
+      { role: 'end', date: '2026-05-01' }
+    ]);
   });
 
-  it('keeps an existing target and starts the bar on the dropped day, never after the target', () => {
+  it('keeps an existing target and starts the bar on the dropped day, or makes a one-day bar on it when the day is after the target', () => {
     const a = item('a', { t: date('2026-05-08') });
     expect(scheduleWrites(a, '2026-05-06', 's', 't')).toEqual([{ role: 'start', date: '2026-05-06' }]);
-    expect(scheduleWrites(a, '2026-05-10', 's', 't')).toEqual([{ role: 'start', date: '2026-05-08' }]);
+    expect(scheduleWrites(a, '2026-05-10', 's', 't')).toEqual([
+      { role: 'start', date: '2026-05-10' },
+      { role: 'end', date: '2026-05-10' }
+    ]);
   });
 
   it('makes an item whose target is before its start a one-day bar on the dropped day', () => {

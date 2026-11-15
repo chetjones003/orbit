@@ -111,6 +111,25 @@ describe('GanttView, from start and target dates', () => {
     ]);
   });
 
+  it('uses the timeline scroll position when a drag is released, so the bar lands on the day under the pointer', async () => {
+    const { onEdit } = renderGantt({
+      items: [item('a', 'Write docs', { FLD_start: date('2026-05-04'), FLD_due: date('2026-05-08') })]
+    });
+    const bar = screen.getByLabelText('Write docs, 2026-05-04 to 2026-05-08');
+    const scroller = bar.closest('.gantt-scroll') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollLeft', { value: 0, writable: true, configurable: true });
+    const at = (type: string, x: number) => new MouseEvent(type, { clientX: x, bubbles: true });
+    bar.dispatchEvent(at('pointerdown', 100));
+    // The pointer does not move, but the timeline scrolls two days to the right under it.
+    (scroller as unknown as { scrollLeft: number }).scrollLeft = 2 * GANTT_DAY_WIDTH;
+    window.dispatchEvent(at('pointerup', 100));
+    await vi.waitFor(() => expect(onEdit).toHaveBeenCalledTimes(2));
+    expect(onEdit.mock.calls.map(([, field, value]) => [field.id, value])).toEqual([
+      ['FLD_due', { kind: 'date', date: '2026-05-10' }],
+      ['FLD_start', { kind: 'date', date: '2026-05-06' }]
+    ]);
+  });
+
   it('resizes the end handle and writes the target date', async () => {
     const { onEdit } = renderGantt({
       items: [item('a', 'Write docs', { FLD_start: date('2026-05-04'), FLD_due: date('2026-05-08') })]

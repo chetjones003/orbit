@@ -145,8 +145,17 @@ export function GanttView({
     event.preventDefault();
     cleanupRef.current?.();
     const origin = event.clientX;
-    const dayOf = (clientX: number) => Math.round((clientX - origin) / GANTT_DAY_WIDTH);
-    const onMove = (moved: PointerEvent) => setPreview({ id: item.id, mode, days: dayOf(moved.clientX) });
+    // A bar moves with the timeline's content, so scrolling counts toward the drag as well as the pointer.
+    const scroller = (event.currentTarget as HTMLElement).closest<HTMLElement>('.gantt-scroll');
+    const scrollOrigin = scroller?.scrollLeft ?? 0;
+    let lastX = origin;
+    const dayOf = (clientX: number) =>
+      Math.round((clientX - origin + (scroller?.scrollLeft ?? 0) - scrollOrigin) / GANTT_DAY_WIDTH);
+    const onMove = (moved: PointerEvent) => {
+      lastX = moved.clientX;
+      setPreview({ id: item.id, mode, days: dayOf(lastX) });
+    };
+    const onScroll = () => setPreview({ id: item.id, mode, days: dayOf(lastX) });
     const onUp = (released: PointerEvent) => {
       cleanup();
       setPreview(null);
@@ -155,10 +164,12 @@ export function GanttView({
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      scroller?.removeEventListener('scroll', onScroll);
       cleanupRef.current = null;
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    scroller?.addEventListener('scroll', onScroll);
     cleanupRef.current = cleanup;
   };
 
