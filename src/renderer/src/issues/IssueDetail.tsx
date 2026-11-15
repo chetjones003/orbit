@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
-import type { IssueComment, IssueDetail as IssueDetailData } from '../../../shared/issues';
+import { useEffect, useState } from 'react';
+import type { IssueDetail as IssueDetailData } from '../../../shared/issues';
+import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
-import { sanitizeIssueHtml } from './sanitize-issue-html';
+import { RichBody } from './RichBody';
 
 export interface IssueDetailViewProps {
   repoFullName: string;
@@ -17,10 +18,7 @@ export interface IssueDetailViewProps {
 
 export type ItemKind = 'issue' | 'pull';
 
-/** Bodies longer than this (in text characters) start collapsed behind Show full. */
-const COLLAPSE_AFTER_CHARS = 800;
-
-/** Read-only view of one issue: metadata, sanitized body, and timeline comments. */
+/** View of one issue: metadata, sanitized body, and the comment thread. */
 export function IssueDetailView({
   repoFullName,
   number,
@@ -104,22 +102,17 @@ export function IssueDetailView({
         emptyText="No description provided."
       />
 
-      <section aria-label="Comments" className="issue-comments">
-        <h3>{summary.commentCount === 1 ? '1 comment' : `${summary.commentCount} comments`}</h3>
-        {detail.commentsPartial && (
-          <p className="session-notice" role="status">
-            Only the first 100 comments are shown. Open the issue on GitHub to read the rest.
-          </p>
-        )}
-        {detail.comments.map((comment) => (
-          <CommentItem
-            key={comment.id}
-            comment={comment}
-            viewOnGitHubUrl={summary.htmlUrl}
-            onLink={routeLink}
-          />
-        ))}
-      </section>
+      <CommentThread
+        repoFullName={repoFullName}
+        number={number}
+        signedInLogin={signedInLogin}
+        commentCount={summary.commentCount}
+        initialComments={detail.comments}
+        commentsPartial={detail.commentsPartial}
+        viewOnGitHubUrl={summary.htmlUrl}
+        onLink={routeLink}
+        canWrite={kind === 'issue'}
+      />
 
       <a
         className="github-link"
@@ -133,84 +126,4 @@ export function IssueDetailView({
       </a>
     </article>
   );
-}
-
-function CommentItem({
-  comment,
-  viewOnGitHubUrl,
-  onLink
-}: {
-  comment: IssueComment;
-  viewOnGitHubUrl: string;
-  onLink: (href: string) => void;
-}) {
-  return (
-    <div className="issue-comment">
-      <p className="issue-meta">
-        @{comment.authorLogin} · {new Date(comment.createdAt).toLocaleString()}
-      </p>
-      <RichBody
-        html={comment.bodyHtml}
-        viewOnGitHubUrl={comment.htmlUrl || viewOnGitHubUrl}
-        onLink={onLink}
-        emptyText=""
-      />
-    </div>
-  );
-}
-
-/**
- * Sanitized GitHub HTML. Links are routed through `onLink`; long bodies collapse behind Show full.
- * This is the only place GitHub HTML is inserted into the DOM.
- */
-export function RichBody({
-  html,
-  viewOnGitHubUrl,
-  onLink,
-  emptyText
-}: {
-  html: string;
-  viewOnGitHubUrl: string;
-  onLink: (href: string) => void;
-  emptyText: string;
-}) {
-  const clean = useMemo(() => sanitizeIssueHtml(html, { viewOnGitHubUrl }), [html, viewOnGitHubUrl]);
-  const textLength = useMemo(() => textOf(clean).length, [clean]);
-  const collapsible = textLength > COLLAPSE_AFTER_CHARS;
-  const [expanded, setExpanded] = useState(false);
-
-  if (clean.trim() === '') {
-    return emptyText ? <p className="empty-state">{emptyText}</p> : null;
-  }
-
-  const onClick = (event: MouseEvent<HTMLDivElement>): void => {
-    const anchor = (event.target as Element).closest('a');
-    if (!anchor) return;
-    event.preventDefault();
-    const href = anchor.getAttribute('href');
-    if (!href) return;
-    // Notice links (View on GitHub for diagrams and math) always leave for GitHub.
-    if (anchor.getAttribute('data-external') === 'true') void window.orbit.app.openExternal(href);
-    else onLink(href);
-  };
-
-  return (
-    <div className="issue-body-wrap">
-      <div
-        className={`issue-body ${collapsible && !expanded ? 'collapsed' : ''}`}
-        onClick={onClick}
-        // Sanitized by sanitizeIssueHtml: scripts, handlers, and unsafe URLs are removed.
-        dangerouslySetInnerHTML={{ __html: clean }}
-      />
-      {collapsible && !expanded && (
-        <button className="secondary-action" onClick={() => setExpanded(true)}>
-          Show full
-        </button>
-      )}
-    </div>
-  );
-}
-
-function textOf(html: string): string {
-  return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
 }

@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, session, type Event as ElectronEvent } from 'electron';
+import { BrowserWindow, dialog, shell, session, type Event as ElectronEvent } from 'electron';
 import { join } from 'node:path';
 import { parseExternalUrl } from '../shared/ipc';
 import { buildContentSecurityPolicy, isAppUrl } from './security';
@@ -97,6 +97,18 @@ export function createMainWindow(options: WindowOptions = {}): BrowserWindow {
     openExternalIfAllowed(details.url);
   });
   win.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  // The renderer blocks unload while comment text is unsent. Ask before discarding it; Keep editing stays open.
+  win.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'warning',
+      buttons: ['Keep editing', 'Discard and close'],
+      defaultId: 0,
+      cancelId: 0,
+      message: 'You have unsent comment text.',
+      detail: 'Closing Orbit discards it. Unsent text is kept only in memory and is never saved to disk.'
+    });
+    if (choice === 1) event.preventDefault();
+  });
 
   void win.loadURL(devServerOrigin ?? APP_ENTRY_URL);
   return win;

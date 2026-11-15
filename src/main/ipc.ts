@@ -10,7 +10,13 @@ import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
 import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
-import type { IssueDetail, IssueListPage, IssueListQuery } from '../shared/issues';
+import type {
+  CommentUpdateResult,
+  IssueComment,
+  IssueDetail,
+  IssueListPage,
+  IssueListQuery
+} from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
 export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
@@ -32,6 +38,7 @@ export interface IpcOptions {
   refresh?: RefreshPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
   issues?: Pick<IssueService, 'listIssues' | 'getIssueDetail' | 'getPullDetail'>;
+  comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -43,7 +50,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues } = options;
+  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues, comments } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -91,6 +98,42 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       (event, repoFullName: string, number: number): Promise<IssueDetail> => {
         assertTrustedSender(event, devServerOrigin);
         return issues.getPullDetail(repoFullName, number);
+      }
+    );
+  }
+  if (comments) {
+    ipcMain.handle(
+      IpcChannels.markdownPreview,
+      (event, repoFullName: string, text: string): Promise<string> => {
+        assertTrustedSender(event, devServerOrigin);
+        return comments.previewMarkdown(repoFullName, text);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.commentsCreate,
+      (event, repoFullName: string, number: number, body: string): Promise<IssueComment> => {
+        assertTrustedSender(event, devServerOrigin);
+        return comments.createComment(repoFullName, number, body);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.commentsUpdate,
+      (
+        event,
+        repoFullName: string,
+        commentId: number,
+        body: string,
+        baseUpdatedAt: string
+      ): Promise<CommentUpdateResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        return comments.updateComment(repoFullName, commentId, body, baseUpdatedAt);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.commentsDelete,
+      (event, repoFullName: string, commentId: number): Promise<void> => {
+        assertTrustedSender(event, devServerOrigin);
+        return comments.deleteComment(repoFullName, commentId);
       }
     );
   }

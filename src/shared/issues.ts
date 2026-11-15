@@ -52,9 +52,18 @@ export interface IssueComment {
   createdAt: string;
   updatedAt: string;
   htmlUrl: string;
+  /** Raw Markdown source. Only the author's own comments are ever edited from it. */
+  body: string;
   /** GitHub-rendered HTML. Sanitize before display. */
   bodyHtml: string;
 }
+
+/** Result of editing a comment: saved, or GitHub holds a newer version than the one the user started from. */
+export type CommentUpdateResult =
+  { kind: 'saved'; comment: IssueComment } | { kind: 'conflict'; current: IssueComment };
+
+/** GitHub's limit for one comment, counted in characters. */
+export const COMMENT_MAX_CHARS = 65_536;
 
 export interface IssueDetail {
   summary: IssueSummary;

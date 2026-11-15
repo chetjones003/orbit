@@ -50,6 +50,18 @@ const api: OrbitApi = {
     detail: (repoFullName: string, number: number) =>
       ipcRenderer.invoke(IpcChannels.pullsDetail, repoFullName, number)
   },
+  markdown: {
+    preview: (repoFullName: string, text: string) =>
+      ipcRenderer.invoke(IpcChannels.markdownPreview, repoFullName, text)
+  },
+  comments: {
+    create: (repoFullName: string, number: number, body: string) =>
+      ipcRenderer.invoke(IpcChannels.commentsCreate, repoFullName, number, body),
+    update: (repoFullName: string, commentId: number, body: string, baseUpdatedAt: string) =>
+      ipcRenderer.invoke(IpcChannels.commentsUpdate, repoFullName, commentId, body, baseUpdatedAt),
+    delete: (repoFullName: string, commentId: number) =>
+      ipcRenderer.invoke(IpcChannels.commentsDelete, repoFullName, commentId)
+  },
   diagnostics: {
     getReport: () => ipcRenderer.invoke(IpcChannels.diagnosticsGetReport),
     record: (entry) => ipcRenderer.invoke(IpcChannels.diagnosticsRecord, entry)

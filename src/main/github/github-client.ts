@@ -79,18 +79,55 @@ export class GitHubClient {
     };
     if (cached) headers['if-none-match'] = cached.etag;
 
-    let response: Response;
-    try {
-      response = await this.apiFetch(url, { headers });
-    } catch {
-      throw new GitHubRequestError('transient', 'GitHub could not be reached.');
-    }
-
+    const response = await this.dispatch(url, { headers }, cached !== undefined);
     const pollIntervalMs = readSeconds(response.headers.get('x-poll-interval'), 1000);
 
     if (response.status === 304 && cached) {
       return { data: cached.body as T, pollIntervalMs, notModified: true };
     }
+
+    const body = (await response.json()) as T;
+    const etag = response.headers.get('etag');
+    if (etag) this.cache.set(key, { etag, body });
+    return { data: body, pollIntervalMs, notModified: false };
+  }
+
+  /**
+   * Sends a write (POST, PATCH, or DELETE). Writes are never cached. A transient
+   * failure means the request may have reached GitHub, so callers must reconcile
+   * before retrying. `text` returns the raw body, for media types such as rendered HTML.
+   */
+  async send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, options: GitHubWriteOptions): Promise<T> {
+    const url = `${this.apiBaseUrl}${path}`;
+    const accept = options.accept ?? 'application/vnd.github+json';
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${options.token}`,
+      accept
+    };
+    const init: RequestInit = { method, headers };
+    if (options.body !== undefined) {
+      headers['content-type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+    const response = await this.dispatch(url, init, false);
+    if (response.status === 204) return undefined as T;
+    if (options.text) return (await response.text()) as T;
+    return (await response.json()) as T;
+  }
+
+  /**
+   * Performs one request and maps every failure to a GitHubRequestError. A 304 is
+   * returned as-is only when the caller holds a cached body to reuse.
+   */
+  private async dispatch(url: string, init: RequestInit, allowNotModified: boolean): Promise<Response> {
+    let response: Response;
+    try {
+      response = await this.apiFetch(url, init);
+    } catch {
+      throw new GitHubRequestError('transient', 'GitHub could not be reached.');
+    }
+
+    if (allowNotModified && response.status === 304) return response;
     if (response.status === 403 || response.status === 429) {
       const remaining = response.headers.get('x-ratelimit-remaining');
       const retryAfterMs = readSeconds(response.headers.get('retry-after'), 1000);
@@ -115,12 +152,15 @@ export class GitHubClient {
         status: response.status
       });
     }
-
-    const body = (await response.json()) as T;
-    const etag = response.headers.get('etag');
-    if (etag) this.cache.set(key, { etag, body });
-    return { data: body, pollIntervalMs, notModified: false };
+    return response;
   }
+}
+
+export interface GitHubWriteOptions extends GitHubRequestOptions {
+  /** JSON request body. */
+  body?: unknown;
+  /** Return the raw response text instead of parsing JSON. */
+  text?: boolean;
 }
 
 function readSeconds(value: string | null, unitMs: number): number | undefined {

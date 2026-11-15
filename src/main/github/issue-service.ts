@@ -1,4 +1,6 @@
+import { COMMENT_MAX_CHARS } from '../../shared/issues';
 import type {
+  CommentUpdateResult,
   IssueComment,
   IssueDetail,
   IssueLabel,
@@ -8,7 +10,8 @@ import type {
   IssueSummary
 } from '../../shared/issues';
 import type { AuthService } from './auth-service';
-import { GitHubClient } from './github-client';
+import { GitHubClient, GitHubRequestError } from './github-client';
+import { runWrite, WriteBlockedError } from './write-reconcile';
 
 /** Page size requested from GitHub. A full page means another page may exist. */
 export const ISSUES_PER_PAGE = 30;
@@ -40,6 +43,7 @@ interface GitHubIssueResponse {
 interface GitHubCommentResponse {
   id: number;
   user: { login: string } | null;
+  body?: string | null;
   created_at: string;
   updated_at: string;
   html_url: string;
@@ -52,6 +56,8 @@ export interface IssueServiceOptions {
   /** Shared client, so ETags are reused. Created internally when omitted. */
   client?: GitHubClient;
   fetch?: typeof fetch;
+  /** False while GitHub is unreachable or rate limiting. Writes are then refused before sending. */
+  canWrite?: () => boolean;
 }
 
 /**
@@ -61,11 +67,128 @@ export interface IssueServiceOptions {
 export class IssueService {
   private readonly auth: IssueServiceOptions['auth'];
   private readonly client: GitHubClient;
+  private readonly canWrite: () => boolean;
 
   constructor(options: IssueServiceOptions) {
     this.auth = options.auth;
     this.client =
       options.client ?? new GitHubClient({ apiBaseUrl: options.apiBaseUrl, fetch: options.fetch });
+    this.canWrite = options.canWrite ?? (() => true);
+  }
+
+  /** Renders Markdown the way GitHub will show it, in the repo's context (issue links, mentions). */
+  async previewMarkdown(repoFullName: string, text: string): Promise<string> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateCommentBody(text);
+    const { token, scope } = await this.session();
+    return this.client.send<string>('POST', '/markdown', {
+      token,
+      scope,
+      body: { text, mode: 'gfm', context: `${owner}/${repo}` },
+      text: true
+    });
+  }
+
+  /**
+   * Edits one of the signed-in user's own comments. `baseUpdatedAt` is the version the user started from:
+   * if GitHub holds a newer one, nothing is written and the newer comment is returned as a conflict.
+   */
+  async updateComment(
+    repoFullName: string,
+    commentId: number,
+    body: string,
+    baseUpdatedAt: string
+  ): Promise<CommentUpdateResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateCommentId(commentId);
+    validateCommentBody(body);
+    this.assertCanWrite();
+    const path = commentPath(owner, repo, commentId);
+    const { token, scope } = await this.session();
+    const login = this.signedInLogin();
+    const current = await this.readOwnComment(path, token, scope, login);
+    if (current.updatedAt !== baseUpdatedAt) return { kind: 'conflict', current };
+
+    const saved = await runWrite<IssueComment>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toComment(
+          await this.client.send<unknown>('PATCH', path, {
+            token,
+            scope,
+            body: { body },
+            accept: HTML_ACCEPT
+          })
+        ) ?? throwInvalid('GitHub returned an invalid comment.'),
+      reconcile: async () => {
+        const now = await this.readComment(path, token, scope);
+        return now && now.body === body ? { applied: true, value: now } : { applied: false };
+      }
+    });
+    return { kind: 'saved', comment: saved };
+  }
+
+  /** Deletes one of the signed-in user's own comments. A delete that already landed is not repeated. */
+  async deleteComment(repoFullName: string, commentId: number): Promise<void> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateCommentId(commentId);
+    this.assertCanWrite();
+    const path = commentPath(owner, repo, commentId);
+    const { token, scope } = await this.session();
+    await this.readOwnComment(path, token, scope, this.signedInLogin());
+
+    await runWrite<void>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        await this.client.send<unknown>('DELETE', path, { token, scope });
+      },
+      reconcile: async () => {
+        // A comment GitHub no longer has was deleted by the earlier request.
+        const now = await this.readComment(path, token, scope);
+        return now === null ? { applied: true, value: undefined } : { applied: false };
+      }
+    });
+  }
+
+  /** Posts a comment. An uncertain failure is reconciled by looking for the comment before retrying. */
+  async createComment(repoFullName: string, number: number, body: string): Promise<IssueComment> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    validateCommentBody(body);
+    const path = `${itemPath(owner, repo, 'issues', number)}/comments`;
+    const startedAt = Date.now();
+    const { token, scope } = await this.session();
+    const me = this.auth.getStatus();
+    const login = me.kind === 'signed-in' ? me.login : '';
+
+    return runWrite<IssueComment>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toComment(
+          await this.client.send<unknown>('POST', path, {
+            token,
+            scope,
+            body: { body },
+            accept: HTML_ACCEPT
+          })
+        ) ?? throwInvalid('GitHub returned an invalid comment.'),
+      reconcile: async () => {
+        // Look for the comment this request would have created, from the moment it was sent.
+        const since = new Date(startedAt - RECONCILE_SKEW_MS).toISOString();
+        const thread = await this.client.get<unknown>(
+          `${path}?since=${since}&per_page=${COMMENTS_PER_PAGE}`,
+          {
+            token,
+            scope,
+            accept: HTML_ACCEPT
+          }
+        );
+        const match = (Array.isArray(thread) ? (thread as unknown[]) : [])
+          .map(toComment)
+          .find((c): c is IssueComment => c !== null && c.authorLogin === login && c.body === body);
+        return match ? { applied: true, value: match } : { applied: false };
+      }
+    });
   }
 
   async listIssues(query: IssueListQuery): Promise<IssueListPage> {
@@ -158,6 +281,40 @@ export class IssueService {
       if (body.length < COMMENTS_PER_PAGE) return { comments, commentsPartial: dropped };
     }
     return { comments, commentsPartial: true };
+  }
+
+  private assertCanWrite(): void {
+    if (!this.canWrite()) throw new WriteBlockedError();
+  }
+
+  private signedInLogin(): string {
+    const status = this.auth.getStatus();
+    if (status.kind !== 'signed-in') throw new Error('Sign in to GitHub to load issues.');
+    return status.login;
+  }
+
+  /** Reads a comment, or null when GitHub no longer has it. */
+  private async readComment(path: string, token: string, scope: string): Promise<IssueComment | null> {
+    try {
+      const raw = await this.client.get<unknown>(path, { token, scope, accept: HTML_ACCEPT });
+      return toComment(raw) ?? throwInvalid('GitHub returned an invalid comment.');
+    } catch (error) {
+      if (error instanceof GitHubRequestError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  /** Reads a comment that the signed-in user may change. Other people's comments are refused. */
+  private async readOwnComment(
+    path: string,
+    token: string,
+    scope: string,
+    login: string
+  ): Promise<IssueComment> {
+    const comment = await this.readComment(path, token, scope);
+    if (comment === null) throw new Error('That comment no longer exists on GitHub.');
+    if (comment.authorLogin !== login) throw new Error('You can only change your own comments.');
+    return comment;
   }
 
   private validateRepo(repoFullName: unknown): { owner: string; repo: string } {
@@ -268,8 +425,40 @@ function toComment(raw: unknown): IssueComment | null {
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     htmlUrl: item.html_url,
+    body: item.body ?? '',
     bodyHtml: item.body_html ?? ''
   };
+}
+
+/** Allows for clock skew between Orbit and GitHub when searching for a comment that may have landed. */
+const RECONCILE_SKEW_MS = 60_000;
+
+function validateItemNumber(number: unknown): void {
+  if (typeof number !== 'number' || !Number.isInteger(number) || number < 1) {
+    throw new Error('Issue numbers must be positive whole numbers.');
+  }
+}
+
+/** Comment bodies must have visible text and fit GitHub's limit. Checked before any request is sent. */
+export function validateCommentBody(body: unknown): asserts body is string {
+  if (typeof body !== 'string' || body.trim() === '') throw new Error('A comment cannot be empty.');
+  if ([...body].length > COMMENT_MAX_CHARS) {
+    throw new Error(`Comments can be at most ${COMMENT_MAX_CHARS.toLocaleString('en-US')} characters.`);
+  }
+}
+
+function validateCommentId(commentId: unknown): void {
+  if (typeof commentId !== 'number' || !Number.isInteger(commentId) || commentId < 1) {
+    throw new Error('Comment ids must be positive whole numbers.');
+  }
+}
+
+function commentPath(owner: string, repo: string, commentId: number): string {
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/comments/${commentId}`;
+}
+
+function throwInvalid(message: string): never {
+  throw new Error(message);
 }
 
 function toLabel(raw: unknown): IssueLabel[] {
