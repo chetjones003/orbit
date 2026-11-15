@@ -1,5 +1,6 @@
 import type { AuthStatus } from './auth';
 import type { ConnectionStatus, RefreshStart } from './connection';
+import type { IssueDetail, IssueListPage, IssueListQuery } from './issues';
 
 /**
  * Contract shared by main, preload, and renderer. Keep this file free of
@@ -16,6 +17,9 @@ export const IpcChannels = {
   authStatusChanged: 'auth:status-changed',
   reposList: 'repos:list',
   reposRefresh: 'repos:refresh',
+  issuesList: 'issues:list',
+  issuesDetail: 'issues:detail',
+  pullsDetail: 'pulls:detail',
   refreshWake: 'refresh:wake',
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
@@ -100,6 +104,13 @@ export interface OrbitApi {
     /** Asks main to refresh now, subject to cooldowns and rate limits. */
     refresh(): Promise<RefreshStart>;
   };
+  issues: {
+    list(query: IssueListQuery): Promise<IssueListPage>;
+    detail(repoFullName: string, number: number): Promise<IssueDetail>;
+  };
+  pulls: {
+    detail(repoFullName: string, number: number): Promise<IssueDetail>;
+  };
   diagnostics: {
     /** Records a renderer failure by scope and short code only. Never message text. */
     record(entry: { scope: string; code: string }): Promise<void>;
@@ -112,9 +123,12 @@ export interface OrbitApi {
   };
 }
 
+/** Schemes that may leave the app through the system browser or mail client. */
+export const EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
+
 /**
- * Validates an external URL before it leaves the app. Only absolute https
- * URLs without embedded credentials are allowed.
+ * Validates an external URL before it leaves the app. Only absolute http(s) and
+ * mailto URLs without embedded credentials are allowed.
  */
 export function parseExternalUrl(input: unknown): URL | null {
   if (typeof input !== 'string' || input.length === 0 || input.length > 2048) {
@@ -126,7 +140,7 @@ export function parseExternalUrl(input: unknown): URL | null {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:') return null;
+  if (!EXTERNAL_PROTOCOLS.has(url.protocol)) return null;
   if (url.username !== '' || url.password !== '') return null;
   return url;
 }

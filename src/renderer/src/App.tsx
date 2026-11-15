@@ -12,6 +12,15 @@ import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
+import { IssueList } from './issues/IssueList';
+import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
+
+/** The issue shown in the details panel or the expanded view. */
+interface IssueRef {
+  repoFullName: string;
+  number: number;
+  kind: ItemKind;
+}
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
 /** Focus refetches only when the last successful refresh is at least this old. */
@@ -26,6 +35,10 @@ export function App() {
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
   const [showForksAndArchived, setShowForksAndArchived] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
+  /** Repo whose issue list replaces the repository list in the workspace. */
+  const [issuesRepo, setIssuesRepo] = useState<PersonalRepo | null>(null);
+  const [issueRef, setIssueRef] = useState<IssueRef | null>(null);
+  const [issueExpanded, setIssueExpanded] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -97,6 +110,9 @@ export function App() {
     else {
       setRepos([]);
       setSelectedRepoId(null);
+      setIssuesRepo(null);
+      setIssueRef(null);
+      setIssueExpanded(false);
     }
   }, [status, loadRepos]);
 
@@ -353,6 +369,47 @@ export function App() {
               </p>
             )}
           </div>
+        ) : issuesRepo && issueExpanded && issueRef ? (
+          <div className="issues-expanded">
+            <button className="secondary-action" onClick={() => setIssueExpanded(false)}>
+              ← Back to issues
+            </button>
+            <IssueDetailView
+              key={`${issueRef.repoFullName}#${issueRef.number}`}
+              repoFullName={issueRef.repoFullName}
+              number={issueRef.number}
+              signedInLogin={status.login}
+              kind={issueRef.kind}
+              onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+              variant="expanded"
+            />
+          </div>
+        ) : issuesRepo ? (
+          <div className="issues-view">
+            <div className="repo-toolbar">
+              <button
+                className="secondary-action"
+                onClick={() => {
+                  setIssuesRepo(null);
+                  setIssueRef(null);
+                }}
+              >
+                ← Repositories
+              </button>
+              <div>
+                <h2>{issuesRepo.fullName}</h2>
+                <p>Issues in this personal repo</p>
+              </div>
+            </div>
+            <IssueList
+              key={issuesRepo.fullName}
+              repoFullName={issuesRepo.fullName}
+              selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
+              onOpenIssue={(number) =>
+                setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
+              }
+            />
+          </div>
         ) : (
           <>
             <div className="repo-toolbar">
@@ -486,8 +543,29 @@ export function App() {
                 →
               </button>
             </div>
-            {selectedRepo ? (
-              <RepoDetails repo={selectedRepo} />
+            {issueRef ? (
+              <div className="issue-panel">
+                <button className="secondary-action" onClick={() => setIssueExpanded(true)}>
+                  Expand
+                </button>
+                <IssueDetailView
+                  key={`${issueRef.repoFullName}#${issueRef.number}`}
+                  repoFullName={issueRef.repoFullName}
+                  number={issueRef.number}
+                  signedInLogin={status.login}
+                  kind={issueRef.kind}
+                  onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+                />
+              </div>
+            ) : selectedRepo ? (
+              <RepoDetails
+                repo={selectedRepo}
+                onViewIssues={() => {
+                  setIssuesRepo(selectedRepo);
+                  setIssueRef(null);
+                  setIssueExpanded(false);
+                }}
+              />
             ) : (
               <div className="details-empty">
                 <span className="details-glyph">⌁</span>
@@ -512,7 +590,7 @@ export function App() {
   );
 }
 
-function RepoDetails({ repo }: { repo: PersonalRepo }) {
+function RepoDetails({ repo, onViewIssues }: { repo: PersonalRepo; onViewIssues: () => void }) {
   return (
     <div className="repo-details">
       <span className="detail-repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</span>
@@ -538,6 +616,9 @@ function RepoDetails({ repo }: { repo: PersonalRepo }) {
           <dd>{new Date(repo.updatedAt).toLocaleDateString()}</dd>
         </div>
       </dl>
+      <button className="secondary-action" onClick={onViewIssues}>
+        View issues
+      </button>
       <a
         className="github-link"
         href={repo.htmlUrl}

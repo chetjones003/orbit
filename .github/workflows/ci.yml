@@ -86,7 +86,7 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: Package
-        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }}
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
 
       - name: Smoke test packaged app (Windows, unpacked and installed)
         if: matrix.platform == 'win'

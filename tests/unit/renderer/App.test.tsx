@@ -58,6 +58,12 @@ function installBridge(
       list: vi.fn(async () => overrides.repos ?? []),
       refresh: vi.fn(async () => overrides.refreshStart ?? ({ started: true } as RefreshStart))
     },
+    issues: {
+      list: vi.fn(async () => ({ items: [], page: 1, hasNextPage: false, partial: false })),
+      detail: vi.fn(async () => {
+        throw new Error('not stubbed');
+      })
+    },
     diagnostics: {
       getReport: vi.fn(async () => 'report'),
       record: vi.fn(async () => undefined)
@@ -367,5 +373,61 @@ describe('App refresh triggers', () => {
 
     fireEvent(window, new Event('online'));
     expect(api.refresh.wake).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('issues in the workspace', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('opens a repo issue list from the details panel, then shows one issue in the panel and the expanded view', async () => {
+    const repo: PersonalRepo = {
+      id: 1,
+      name: 'app',
+      fullName: 'chetjones003/app',
+      description: null,
+      isPrivate: false,
+      isFork: false,
+      isArchived: false,
+      defaultBranch: 'main',
+      updatedAt: '2026-01-01T00:00:00Z',
+      htmlUrl: 'https://github.com/chetjones003/app'
+    };
+    const summary = {
+      id: 104,
+      number: 4,
+      title: 'Crash on save',
+      state: 'open' as const,
+      stateReason: null,
+      authorLogin: 'someone',
+      labels: [],
+      commentCount: 0,
+      createdAt: '2026-01-02T00:00:00Z',
+      updatedAt: '2026-01-03T00:00:00Z',
+      htmlUrl: 'https://github.com/chetjones003/app/issues/4'
+    };
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true },
+      repos: [repo]
+    });
+    api.issues.list = vi.fn(async () => ({ items: [summary], page: 1, hasNextPage: false, partial: false }));
+    api.issues.detail = vi.fn(async () => ({
+      summary,
+      bodyHtml: '<p>Body text</p>',
+      comments: [],
+      commentsPartial: false
+    }));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Crash on save/ }));
+
+    expect(await screen.findByText('Body text')).toBeInTheDocument();
+    expect(api.issues.detail).toHaveBeenCalledWith('chetjones003/app', 4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    expect(await screen.findByRole('button', { name: '← Back to issues' })).toBeInTheDocument();
   });
 });
