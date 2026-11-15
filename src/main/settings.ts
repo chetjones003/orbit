@@ -2,11 +2,20 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { OrbitSettings, SettingsUpdate, WindowState } from '../shared/ipc';
 import { normalizeCustomViews } from '../shared/custom-views';
+import {
+  isColorScheme,
+  normalizeCustomThemes,
+  paletteExists,
+  type ColorScheme as Scheme,
+  type CustomTheme
+} from '../shared/themes';
 
 const DEFAULTS: OrbitSettings = {
   pinnedRepoIds: [],
   customViews: [],
-  theme: 'dark',
+  colorScheme: 'dark',
+  customThemes: [] as CustomTheme[],
+  palette: 'orbit',
   openItemsIn: 'side',
   motion: 'always',
   windowState: null,
@@ -40,7 +49,9 @@ export class SettingsStore {
       const candidate: OrbitSettings = {
         pinnedRepoIds: preferenceUpdate.pinnedRepoIds ?? current.pinnedRepoIds,
         customViews: preferenceUpdate.customViews ?? current.customViews,
-        theme: preferenceUpdate.theme ?? current.theme,
+        colorScheme: preferenceUpdate.colorScheme ?? current.colorScheme,
+        customThemes: preferenceUpdate.customThemes ?? current.customThemes,
+        palette: preferenceUpdate.palette ?? current.palette,
         openItemsIn: preferenceUpdate.openItemsIn ?? current.openItemsIn,
         motion: preferenceUpdate.motion ?? current.motion,
         windowState: current.windowState,
@@ -99,17 +110,25 @@ export class SettingsStore {
 function normalizeSettings(value: unknown): OrbitSettings {
   if (!isRecord(value)) return { ...DEFAULTS };
   const windowState = isWindowState(value['windowState']) ? normalizeWindowState(value['windowState']) : null;
+  const customThemes = normalizeCustomThemes(value['customThemes']);
   return {
     pinnedRepoIds: Array.isArray(value['pinnedRepoIds'])
       ? [...new Set(value['pinnedRepoIds'].filter((id): id is number => Number.isSafeInteger(id) && id > 0))]
       : [],
     customViews: normalizeCustomViews(value['customViews']),
-    theme: value['theme'] === 'light' ? 'light' : 'dark',
+    colorScheme: normalizeColorScheme(value['colorScheme'] ?? value['theme']),
+    customThemes,
+    palette: paletteExists(value['palette'], customThemes) ? value['palette'] : 'orbit',
     openItemsIn: value['openItemsIn'] === 'full' ? 'full' : 'side',
     motion: value['motion'] === 'system' ? 'system' : 'always',
     windowState,
     publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
   };
+}
+
+/** Older settings stored only light or dark in 'theme'; those still read as they were. */
+function normalizeColorScheme(value: unknown): Scheme {
+  return isColorScheme(value) ? value : 'dark';
 }
 
 function normalizeWindowState(state: WindowState): WindowState {

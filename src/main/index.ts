@@ -23,6 +23,7 @@ import type { NotificationOpenResult } from '../shared/notifications';
 import { createTray } from './tray';
 import { Diagnostics } from './diagnostics';
 import { UpdateService } from './updates/update-service';
+import { OpenVsxClient } from './themes/open-vsx';
 import { createUpdateDriver } from './updates/updater';
 import { SettingsStore } from './settings';
 import { writesAllowed } from '../shared/connection';
@@ -174,6 +175,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpcHandlers({
       devServerOrigin,
       updates: updateService ?? undefined,
+      themes: new OpenVsxClient(),
       auth,
       repos,
       issues,

@@ -33,7 +33,9 @@ function installBridge(
   const settings: OrbitSettings = {
     pinnedRepoIds: [],
     customViews: [],
-    theme: 'dark',
+    colorScheme: 'dark',
+    palette: 'orbit',
+    customThemes: [],
     windowState: { width: 1100, height: 720, maximized: false, detailsWidth: 320 }
   };
   const api: OrbitApi = {
@@ -185,6 +187,7 @@ describe('App', () => {
       });
       render(<App />);
       fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
       expect(await screen.findByText('Signed in as @chetjones003')).toBeInTheDocument();
     });
 
@@ -195,6 +198,7 @@ describe('App', () => {
       vi.mocked(window.confirm).mockReturnValueOnce(false);
       render(<App />);
       fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
       expect(window.confirm).toHaveBeenCalled();
       expect(api.auth.signOut).not.toHaveBeenCalled();
@@ -243,6 +247,7 @@ describe('App', () => {
       }
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     expect(await screen.findByText('Signed in as @chetjones003')).toBeInTheDocument();
   });
 
@@ -545,6 +550,8 @@ describe('unsent comment text', () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
     expect(window.confirm).toHaveBeenCalledWith(
@@ -559,6 +566,7 @@ describe('unsent comment text', () => {
     drafts.set(DRAFT, 'Survives re-authentication');
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     await screen.findByRole('button', { name: 'Sign out' });
 
     act(() => {
@@ -583,6 +591,8 @@ describe('unsent comment text', () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
     expect(api.auth.signOut).not.toHaveBeenCalled();

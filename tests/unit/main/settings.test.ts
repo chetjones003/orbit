@@ -38,10 +38,16 @@ async function makeStore(): Promise<{ store: SettingsStore; dir: string }> {
 describe('SettingsStore', () => {
   it('loads defaults and persists only supported preferences', async () => {
     const { store, dir } = await makeStore();
-    expect(await store.load()).toMatchObject({ theme: 'dark', windowState: null, pinnedRepoIds: [] });
+    expect(await store.load()).toMatchObject({
+      colorScheme: 'dark',
+      palette: 'orbit',
+      windowState: null,
+      pinnedRepoIds: []
+    });
     const update = {
       pinnedRepoIds: [12, 12, -4],
-      theme: 'light' as const,
+      colorScheme: 'light' as const,
+      palette: 'ocean' as const,
       detailsWidth: 900,
       customViews: [CUSTOM_VIEW],
       githubRepos: [{ id: 99, fullName: 'owner/secret-repo' }]
@@ -50,20 +56,31 @@ describe('SettingsStore', () => {
     await store.saveWindowState({ x: 20, y: 30, width: 1200, height: 800, maximized: false });
     expect(await store.load()).toMatchObject({
       pinnedRepoIds: [12],
-      theme: 'light',
+      colorScheme: 'light',
+      palette: 'ocean',
       customViews: [CUSTOM_VIEW],
       windowState: { x: 20, y: 30, width: 1200, height: 800, maximized: false, detailsWidth: 900 }
     });
     const file = JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>;
     expect(Object.keys(file).sort()).toEqual([
+      'colorScheme',
+      'customThemes',
       'customViews',
       'motion',
       'openItemsIn',
+      'palette',
       'pinnedRepoIds',
       'publicUploadNoticeAcknowledged',
-      'theme',
       'windowState'
     ]);
+  });
+
+  it('reads a saved light or dark theme from before the colour scheme setting', async () => {
+    const { store, dir } = await makeStore();
+    await writeFile(join(dir, 'settings.json'), JSON.stringify({ theme: 'light' }));
+    expect(await store.load()).toMatchObject({ colorScheme: 'light', palette: 'orbit' });
+    await store.update({ palette: 'unknown' as never, colorScheme: 'system' });
+    expect(await store.load()).toMatchObject({ colorScheme: 'system', palette: 'orbit' });
   });
 
   it('opens items in the side panel unless full screen is chosen', async () => {
