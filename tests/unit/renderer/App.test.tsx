@@ -9,6 +9,7 @@ import type { AuthStatus } from '../../../src/shared/auth';
 import type { OrbitApi } from '../../../src/shared/ipc';
 import type { OrbitSettings, PersonalRepo } from '../../../src/shared/ipc';
 import type { ConnectionStatus, RefreshStart } from '../../../src/shared/connection';
+import { drafts } from '../../../src/renderer/src/comments/draft-store';
 
 type StatusListener = (status: AuthStatus) => void;
 const refreshListeners = new Set<(status: ConnectionStatus) => void>();
@@ -429,5 +430,69 @@ describe('issues in the workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
     expect(await screen.findByRole('button', { name: '← Back to issues' })).toBeInTheDocument();
+  });
+});
+
+describe('unsent comment text', () => {
+  const SIGNED_IN: AuthStatus = { kind: 'signed-in', sessionId: 3, login: 'orbit-owner', persistent: true };
+  const DRAFT = {
+    login: 'orbit-owner',
+    repoFullName: 'orbit-owner/app',
+    kind: 'issue' as const,
+    number: 4,
+    target: 'new' as const
+  };
+
+  afterEach(() => {
+    cleanup();
+    drafts.clearAccount('orbit-owner');
+  });
+
+  it('warns before signing out that unsent text will be discarded, and discards it when confirmed', async () => {
+    const { api } = installBridge({ status: SIGNED_IN, repos: [] });
+    drafts.set(DRAFT, 'Still writing this reply');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Unsent comment text will be discarded')
+    );
+    await waitFor(() => expect(api.auth.signOut).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(drafts.hasDrafts()).toBe(false));
+  });
+
+  it('keeps unsent text while the same account signs in again, since the session is unchanged', async () => {
+    const { listeners } = installBridge({ status: SIGNED_IN, repos: [] });
+    drafts.set(DRAFT, 'Survives re-authentication');
+    render(<App />);
+    await screen.findByRole('button', { name: 'Sign out' });
+
+    act(() => {
+      for (const listener of listeners) {
+        listener({
+          kind: 'device-pending',
+          userCode: 'ABCD-1234',
+          verificationUri: 'https://github.com/login/device',
+          expiresAt: Date.now() + 60_000
+        });
+      }
+    });
+
+    await screen.findByText('ABCD-1234');
+    expect(drafts.get(DRAFT)).toBe('Survives re-authentication');
+  });
+
+  it('keeps the text and the session when the user declines the sign-out warning', async () => {
+    const { api } = installBridge({ status: SIGNED_IN, repos: [] });
+    drafts.set(DRAFT, 'Still writing this reply');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    expect(api.auth.signOut).not.toHaveBeenCalled();
+    expect(drafts.get(DRAFT)).toBe('Still writing this reply');
   });
 });

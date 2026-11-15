@@ -14,6 +14,7 @@ import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
 import { Diagnostics } from './diagnostics';
 import { SettingsStore } from './settings';
+import { writesAllowed } from '../shared/connection';
 
 const devServerOrigin = process.env['ELECTRON_RENDERER_URL'];
 const smokeReportPath = process.env['ORBIT_SMOKE_REPORT'];
@@ -59,7 +60,13 @@ if (!app.requestSingleInstanceLock()) {
     const endpoints = resolveGitHubEndpoints(process.env['ORBIT_GITHUB_URL']);
     const client = new GitHubClient({ apiBaseUrl: endpoints.apiBaseUrl });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
-    const issues = new IssueService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
+    // Writes are refused while the engine reports offline or rate limiting, so outcomes stay certain.
+    const issues = new IssueService({
+      auth,
+      apiBaseUrl: endpoints.apiBaseUrl,
+      client,
+      canWrite: () => writesAllowed(engine.getStatus())
+    });
     // Visible data refreshes only while signed in. The ETag cache stays in memory.
     const engine = new RefreshEngine({
       refresh: () => repos.listPersonalRepos().then(() => undefined),
@@ -91,6 +98,7 @@ if (!app.requestSingleInstanceLock()) {
       auth,
       repos,
       issues,
+      comments: issues,
       settings,
       refresh: engine,
       diagnostics

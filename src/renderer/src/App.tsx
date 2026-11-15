@@ -14,6 +14,7 @@ import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 import { IssueList } from './issues/IssueList';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
+import { drafts } from './comments/draft-store';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
@@ -103,6 +104,32 @@ export function App() {
       unsubscribe();
       unsubscribeRefresh();
     };
+  }, []);
+
+  // Unsent comment text belongs to one session. It is dropped when the account changes or the user signs out;
+  // re-signing in as the same account keeps it, as a session keeps its in-memory work.
+  const sessionOwner = useRef<{ sessionId: number; login: string } | null>(null);
+  useEffect(() => {
+    // Starting a sign-in is not a session change: the previous session still owns its drafts until it ends.
+    if (status?.kind === 'device-pending') return;
+    const current = status?.kind === 'signed-in' || status?.kind === 'reauth-required' ? status : null;
+    const previous = sessionOwner.current;
+    if (previous && (!current || current.sessionId !== previous.sessionId)) {
+      drafts.clearAccount(previous.login);
+    }
+    sessionOwner.current = current ? { sessionId: current.sessionId, login: current.login } : null;
+  }, [status]);
+
+  // Closing or quitting the window would discard unsent text, so the renderer blocks unload while any exists.
+  // The main process then asks the user before the window is allowed to close.
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!drafts.hasDrafts()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
   useEffect(() => {
@@ -264,7 +291,10 @@ export function App() {
   const rateLimitBlocked = refreshStatus !== null && isRateLimitedAt(refreshStatus, now);
 
   const signOut = (): void => {
-    if (!window.confirm('Sign out of Orbit? The saved sign-in will be removed from this computer.')) return;
+    const message = drafts.hasDrafts()
+      ? 'Sign out of Orbit? Unsent comment text will be discarded, and the saved sign-in will be removed from this computer.'
+      : 'Sign out of Orbit? The saved sign-in will be removed from this computer.';
+    if (!window.confirm(message)) return;
     run(() => window.orbit.auth.signOut());
   };
 

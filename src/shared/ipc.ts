@@ -1,6 +1,6 @@
 import type { AuthStatus } from './auth';
 import type { ConnectionStatus, RefreshStart } from './connection';
-import type { IssueDetail, IssueListPage, IssueListQuery } from './issues';
+import type { CommentUpdateResult, IssueComment, IssueDetail, IssueListPage, IssueListQuery } from './issues';
 
 /**
  * Contract shared by main, preload, and renderer. Keep this file free of
@@ -20,6 +20,10 @@ export const IpcChannels = {
   issuesList: 'issues:list',
   issuesDetail: 'issues:detail',
   pullsDetail: 'pulls:detail',
+  markdownPreview: 'markdown:preview',
+  commentsCreate: 'comments:create',
+  commentsUpdate: 'comments:update',
+  commentsDelete: 'comments:delete',
   refreshWake: 'refresh:wake',
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
@@ -110,6 +114,21 @@ export interface OrbitApi {
   };
   pulls: {
     detail(repoFullName: string, number: number): Promise<IssueDetail>;
+  };
+  markdown: {
+    /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */
+    preview(repoFullName: string, text: string): Promise<string>;
+  };
+  comments: {
+    create(repoFullName: string, number: number, body: string): Promise<IssueComment>;
+    /** `baseUpdatedAt` is the comment version the edit started from; a newer one comes back as a conflict. */
+    update(
+      repoFullName: string,
+      commentId: number,
+      body: string,
+      baseUpdatedAt: string
+    ): Promise<CommentUpdateResult>;
+    delete(repoFullName: string, commentId: number): Promise<void>;
   };
   diagnostics: {
     /** Records a renderer failure by scope and short code only. Never message text. */

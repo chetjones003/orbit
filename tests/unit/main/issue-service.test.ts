@@ -154,6 +154,7 @@ describe('IssueService.getIssueDetail', () => {
     created_at: '2026-02-01T00:00:00Z',
     updated_at: '2026-02-01T00:00:00Z',
     html_url: `https://github.com/orbit-owner/app/issues/4#issuecomment-${id}`,
+    body: `comment ${id} **source**`,
     body_html: `<p>comment ${id}</p>`,
     ...overrides
   });
@@ -182,6 +183,7 @@ describe('IssueService.getIssueDetail', () => {
         createdAt: '2026-02-01T00:00:00Z',
         updatedAt: '2026-02-01T00:00:00Z',
         htmlUrl: 'https://github.com/orbit-owner/app/issues/4#issuecomment-1',
+        body: 'comment 1 **source**',
         bodyHtml: '<p>comment 1</p>'
       }
     ]);
