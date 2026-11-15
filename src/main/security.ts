@@ -9,6 +9,8 @@ export const PACKAGED_APP_ORIGIN = 'orbit://app';
 export interface CspOptions {
   /** Vite dev server origin, e.g. http://localhost:5173. Omit for packaged builds. */
   devServerOrigin?: string;
+  /** The fake GitHub's loopback origin, allowed for media only while debugging against it. */
+  mediaOrigin?: string | null;
 }
 
 /** Origins GitHub serves issue images and video from. Nothing else may load media. */
@@ -19,13 +21,14 @@ export function buildContentSecurityPolicy(options: CspOptions = {}): string {
   const dev = options.devServerOrigin;
   const scriptSrc = dev ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self'";
   const connectSrc = dev ? `'self' ${dev} ${dev.replace(/^http/, 'ws')}` : "'self'";
+  const media = options.mediaOrigin ? ` ${options.mediaOrigin}` : '';
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
     // Issue bodies may embed images and video, but only from GitHub-hosted origins.
-    `img-src 'self' data: ${GITHUB_MEDIA_ORIGINS}`,
-    `media-src 'self' ${GITHUB_MEDIA_ORIGINS}`,
+    `img-src 'self' data: ${GITHUB_MEDIA_ORIGINS}${media}`,
+    `media-src 'self' ${GITHUB_MEDIA_ORIGINS}${media}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
     "object-src 'none'",

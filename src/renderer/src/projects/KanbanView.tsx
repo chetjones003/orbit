@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import type { ProjectField, ProjectFieldInput, ProjectItem } from '../../../shared/projects';
 import { openableKind } from './project-model';
 import type { ItemGroup } from './custom-view-model';
+import { cardRows, useCardDrag } from './card-drag';
 
 export interface KanbanViewProps {
   /** The field whose values are the columns. */
@@ -34,9 +34,16 @@ export interface KanbanViewProps {
 /** The one row used when there are no swimlanes. */
 const NO_LANE: ItemGroup = { key: 'ALL', label: '', target: null, items: [] };
 
+interface Cell {
+  lane: ItemGroup;
+  column: ItemGroup;
+  items: ProjectItem[];
+}
+
 /**
  * Columns from one field and optional swimlanes from another. Dropping a card writes the field values
- * back to GitHub, so a card that moves between columns or lanes changes what GitHub stores.
+ * back to GitHub, so a card that moves between columns or lanes changes what GitHub stores. A card dropped
+ * in its own cell of an unsorted view moves to its new slot, which GitHub stores as its manual order.
  */
 export function KanbanView({
   columnField,
@@ -45,110 +52,76 @@ export function KanbanView({
   laneGroups,
   pendingIds,
   onEdit,
-  order,
   manualOrder,
   onReorder,
   onOpen
 }: KanbanViewProps) {
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const lanes: ItemGroup[] = laneGroups ?? [NO_LANE];
   const itemsById = new Map<string, ProjectItem>();
   for (const group of [...groups, ...lanes]) for (const item of group.items) itemsById.set(item.id, item);
   const columnOf = groupOfItem(groups);
   const laneOf = laneGroups ? groupOfItem(laneGroups) : null;
 
-  const drop = async (column: ItemGroup, lane: ItemGroup) => {
-    setDropTarget(null);
-    const id = dragging;
-    setDragging(null);
-    const item = id ? itemsById.get(id) : undefined;
-    if (!item || pendingIds.has(item.id)) return;
+  const cells = new Map<string, Cell>();
+  for (const lane of lanes) {
+    for (const column of groups) {
+      const items = column.items.filter((item) => !laneGroups || lane.items.includes(item));
+      cells.set(cellKey(lane, column), { lane, column, items });
+    }
+  }
+
+  const drop = async (cell: Cell, item: ProjectItem) => {
     let current: ProjectItem = item;
-    if (columnOf.get(item.id) !== column.key) {
-      const saved = await onEdit(current, columnField, column.target);
+    if (columnOf.get(item.id) !== cell.column.key) {
+      const saved = await onEdit(current, columnField, cell.column.target);
       if (!saved) return;
       current = saved;
     }
-    if (swimlaneField && laneOf && laneOf.get(item.id) !== lane.key) {
-      await onEdit(current, swimlaneField, lane.target);
+    if (swimlaneField && laneOf && laneOf.get(item.id) !== cell.lane.key) {
+      await onEdit(current, swimlaneField, cell.lane.target);
     }
   };
 
-  /**
-   * A card dropped on a card in the same cell of an unsorted view moves to just before it, which GitHub
-   * stores as the item after the one above it. Anywhere else the drop is a normal cell drop.
-   */
-  const dropOnCard = async (target: ProjectItem, column: ItemGroup, lane: ItemGroup) => {
-    const id = dragging;
-    const dragged = id ? itemsById.get(id) : undefined;
-    const sameCell =
-      dragged !== undefined &&
-      columnOf.get(dragged.id) === column.key &&
-      (!laneOf || laneOf.get(dragged.id) === lane.key);
-    if (!manualOrder || !sameCell || !dragged || dragged.id === target.id) {
-      await drop(column, lane);
+  const drag = useCardDrag((target, itemId, origin) => {
+    const cell = cells.get(target.cellKey);
+    const item = itemsById.get(itemId);
+    if (!cell || !item || pendingIds.has(item.id)) return;
+    if (target.cellKey === origin.cellKey) {
+      // Same cell: a sorted view has no manual order to change, and a drop where the card already is changes nothing.
+      if (!manualOrder || target.index === origin.index) return;
+      const others = cell.items.filter((candidate) => candidate.id !== item.id);
+      const above = target.index > 0 ? others[target.index - 1] : undefined;
+      void onReorder(item, above?.id ?? null);
       return;
     }
-    setDropTarget(null);
-    setDragging(null);
-    if (pendingIds.has(dragged.id)) return;
-    const index = order.findIndex((item) => item.id === target.id);
-    const above = index > 0 ? order[index - 1] : undefined;
-    // Already directly above the target: nothing to change.
-    if (above?.id === dragged.id) return;
-    await onReorder(dragged, above?.id ?? null);
-  };
+    void drop(cell, item);
+  });
 
   const cell = (lane: ItemGroup, column: ItemGroup) => {
-    const key = `${lane.key}|${column.key}`;
-    const cellItems = column.items.filter((item) => !laneGroups || lane.items.includes(item));
+    const key = cellKey(lane, column);
+    const entry = cells.get(key);
+    const cellItems = entry?.items ?? [];
     return (
       <section
         key={key}
         role="listitem"
-        className={`project-column ${dropTarget === key ? 'drop-target' : ''}`}
+        data-drop-key={key}
+        className={`project-column ${drag.slotFor(key) !== null ? 'drop-target' : ''}`}
         aria-label={`${column.label}, ${cellItems.length} items`}
-        onDragOver={(event) => {
-          if (!dragging) return;
-          event.preventDefault();
-          setDropTarget(key);
-        }}
-        onDragLeave={() => setDropTarget((current) => (current === key ? null : current))}
-        onDrop={(event) => {
-          event.preventDefault();
-          void drop(column, lane);
-        }}
       >
         <h3>
           {column.label} <span className="project-column-count">{cellItems.length}</span>
         </h3>
-        {cellItems.map((item) => {
+        {cardRows(cellItems, drag.draggingId, drag.slotFor(key), drag.slotHeight, (item) => {
           const pending = pendingIds.has(item.id);
           const kind = openableKind(item);
           return (
             <article
               key={item.id}
+              data-card-id={item.id}
               className={`project-card ${pending ? 'pending' : ''}`}
-              draggable={!pending}
               aria-busy={pending || undefined}
-              onDragStart={(event) => {
-                event.dataTransfer.setData('text/plain', item.id);
-                setDragging(item.id);
-              }}
-              onDragEnd={() => setDragging(null)}
-              onDragOver={(event) => {
-                if (!dragging) return;
-                // The card takes the drop, so the cell does not also see it.
-                event.preventDefault();
-                event.stopPropagation();
-                setDropTarget(key);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void dropOnCard(item, column, lane);
-              }}
+              {...drag.cardHandlers(item.id, !pending)}
             >
               <p className="project-card-title">
                 {kind && item.repoFullName && item.number !== null ? (
@@ -176,7 +149,11 @@ export function KanbanView({
   };
 
   return (
-    <div className="project-board kanban" aria-label={`Kanban grouped by ${columnField.name}`}>
+    <div
+      ref={drag.rootRef}
+      className="project-board kanban"
+      aria-label={`Kanban grouped by ${columnField.name}`}
+    >
       {laneGroups ? (
         lanes.map((lane) => (
           <div key={lane.key} role="region" aria-label={`${lane.label} swimlane`} className="kanban-lane">
@@ -193,6 +170,10 @@ export function KanbanView({
       )}
     </div>
   );
+}
+
+function cellKey(lane: ItemGroup, column: ItemGroup): string {
+  return `${lane.key}|${column.key}`;
 }
 
 function groupOfItem(groups: ItemGroup[]): Map<string, string> {

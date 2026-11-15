@@ -114,7 +114,7 @@ function normalizeWindowState(state: WindowState): WindowState {
     height: state.height,
     maximized: state.maximized,
     ...(typeof state.detailsWidth === 'number'
-      ? { detailsWidth: Math.min(600, Math.max(260, Math.round(state.detailsWidth))) }
+      ? { detailsWidth: Math.min(4000, Math.max(260, Math.round(state.detailsWidth))) }
       : {})
   };
 }

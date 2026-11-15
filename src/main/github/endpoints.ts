@@ -18,6 +18,15 @@ export const GITHUB_ENDPOINTS: GitHubEndpoints = {
  * server. It is accepted only as a bare loopback origin, so tokens can never be sent
  * to a remote host through this setting.
  */
+/**
+ * The fake GitHub's origin, whose images and video the renderer may load. Set only when the same loopback
+ * override is in use, so it is never a remote host. Null in every normal run.
+ */
+export function debugMediaOrigin(override: string | undefined): string | null {
+  const endpoints = resolveGitHubEndpoints(override);
+  return endpoints === GITHUB_ENDPOINTS ? null : new URL(endpoints.apiBaseUrl).origin;
+}
+
 export function resolveGitHubEndpoints(override: string | undefined): GitHubEndpoints {
   if (!override) return GITHUB_ENDPOINTS;
   let url: URL;

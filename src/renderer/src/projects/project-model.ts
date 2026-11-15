@@ -137,3 +137,37 @@ export function parseItemRef(input: string): ItemRef | null {
 export function openableKind(item: ProjectItem): 'issue' | 'pull' | null {
   return item.kind === 'draft' ? null : item.kind;
 }
+
+/**
+ * Whether an item matches a keyword typed into a view's filter: its title, its owner/repo#number, or any field
+ * value shown on its card. An empty keyword matches everything. Case does not matter.
+ */
+export function matchesKeyword(item: ProjectItem, keyword: string): boolean {
+  const query = keyword.trim().toLowerCase();
+  if (query === '') return true;
+  const reference = item.repoFullName && item.number !== null ? `${item.repoFullName}#${item.number}` : '';
+  const values = Object.values(item.fieldValues).map((value) => describeValue(value));
+  return [item.title, reference, ...values].join(' ').toLowerCase().includes(query);
+}
+
+/** GitHub's project option colours, as the hex the label chips use (without the #). */
+const OPTION_COLOR_HEX: Record<string, string> = {
+  GRAY: '8c959f',
+  BLUE: '0969da',
+  GREEN: '1a7f37',
+  YELLOW: 'bf8700',
+  ORANGE: 'bc4c00',
+  RED: 'cf222e',
+  PINK: 'bf3989',
+  PURPLE: '8250df'
+};
+
+/**
+ * The colour a single-select value shows, from the option it was set to, as the hex a label chip uses. Null for
+ * any other value, and for an option GitHub gave no colour.
+ */
+export function valueColorHex(field: ProjectField, value: ProjectFieldValue | undefined): string | null {
+  if (field.kind !== 'single-select' || value?.kind !== 'single-select') return null;
+  const option = field.options.find((candidate) => candidate.id === value.optionId);
+  return option?.color ? (OPTION_COLOR_HEX[option.color] ?? null) : null;
+}

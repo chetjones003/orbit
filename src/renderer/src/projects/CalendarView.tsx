@@ -117,7 +117,7 @@ export function CalendarView({ field, scale, items, today, pendingIds, onEdit, o
           Unscheduled <span className="project-column-count">{unscheduled.length}</span>
         </h4>
         {unscheduled.length === 0 && <p className="project-note">Every item has a date.</p>}
-        {unscheduled.map(chip)}
+        <div className="calendar-chips">{unscheduled.map(chip)}</div>
       </section>
 
       <div className="calendar-grid">
@@ -138,7 +138,7 @@ export function CalendarView({ field, scale, items, today, pendingIds, onEdit, o
                   key={day}
                   role="gridcell"
                   aria-label={day}
-                  className={`calendar-day ${outside ? 'outside' : ''} ${dropTarget === day ? 'drop-target' : ''}`}
+                  className={`calendar-day ${outside ? 'outside' : ''} ${day === today ? 'today' : ''} ${dropTarget === day ? 'drop-target' : ''}`}
                   onDragOver={(event) => {
                     if (!dragging) return;
                     event.preventDefault();

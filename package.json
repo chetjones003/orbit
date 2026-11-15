@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Orbit: a desktop GitHub issue and PR client for personal repos",
   "private": true,
   "main": "./out/main/index.js",
@@ -23,7 +23,10 @@
     "test:e2e": "playwright test",
     "package": "npm run build && electron-builder",
     "smoke": "node scripts/smoke.mjs",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "fake-github": "node scripts/fake-github/server.mjs",
+    "fake-app": "electron-vite build && node scripts/fake-github/launch.mjs",
+    "fake-assets": "node scripts/fake-github/make-assets.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",
@@ -37,6 +40,7 @@
     "dompurify": "3.4.18",
     "electron-updater": "6.8.11",
     "electron-vite": "6.0.0",
+    "mermaid": "11.17.2",
     "react": "19.1.10",
     "react-diff-view": "3.3.3",
     "react-dom": "19.1.10",

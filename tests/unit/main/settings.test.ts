@@ -52,7 +52,7 @@ describe('SettingsStore', () => {
       pinnedRepoIds: [12],
       theme: 'light',
       customViews: [CUSTOM_VIEW],
-      windowState: { x: 20, y: 30, width: 1200, height: 800, maximized: false, detailsWidth: 600 }
+      windowState: { x: 20, y: 30, width: 1200, height: 800, maximized: false, detailsWidth: 900 }
     });
     const file = JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>;
     expect(Object.keys(file).sort()).toEqual([
@@ -68,6 +68,8 @@ describe('SettingsStore', () => {
     const { store } = await makeStore();
     await store.update({ detailsWidth: 100 });
     expect((await store.load()).windowState?.detailsWidth).toBe(260);
+    await store.update({ detailsWidth: 9000 });
+    expect((await store.load()).windowState?.detailsWidth).toBe(4000);
   });
 });
 

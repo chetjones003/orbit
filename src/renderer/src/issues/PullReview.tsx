@@ -212,18 +212,20 @@ export function ReviewPanel({
           </button>
         </div>
       )}
-      {review && !newCommits && (
-        <button className="secondary-action" onClick={onRefresh}>
-          Refresh
+      <div className="pull-review-bar">
+        {review && !newCommits && (
+          <button className="secondary-action" onClick={onRefresh}>
+            Refresh
+          </button>
+        )}
+        <button
+          className="secondary-action"
+          onClick={() => setFinishing((open) => !open)}
+          disabled={review === null}
+        >
+          Finish review
         </button>
-      )}
-      <button
-        className="secondary-action"
-        onClick={() => setFinishing((open) => !open)}
-        disabled={review === null}
-      >
-        Finish review
-      </button>
+      </div>
       {finishing && review && (
         <div className="pull-review-finish">
           <fieldset>

@@ -83,6 +83,11 @@ function installBridge(
         throw new Error('not stubbed');
       })
     },
+    shell: {
+      control: vi.fn(async () => undefined),
+      getState: vi.fn(async () => ({ maximized: false, fullscreen: false })),
+      onStateChanged: vi.fn(() => () => undefined)
+    },
     diagnostics: {
       getReport: vi.fn(async () => 'report'),
       record: vi.fn(async () => undefined)
@@ -280,7 +285,7 @@ describe('App', () => {
     expect(await screen.findByText('Refresh is cooling down. Try again in a moment.')).toBeInTheDocument();
   });
 
-  it('renders accessible workspace landmarks and loads personal repos after sign-in', async () => {
+  it('renders accessible workspace landmarks, starts with the details panel closed, and loads personal repos after sign-in', async () => {
     const repo: PersonalRepo = {
       id: 10,
       name: 'orbit',
@@ -298,9 +303,11 @@ describe('App', () => {
       repos: [repo]
     });
     render(<App />);
-    expect(await screen.findByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: 'Sections' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
     expect(api.repos.list).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand details panel' }));
     expect(screen.getByRole('complementary', { name: 'Repository details' })).toBeInTheDocument();
   });
 
@@ -348,6 +355,7 @@ describe('App', () => {
       repos
     });
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
     const normal = await screen.findByRole('button', { name: 'Open chet/normal' });
     expect(screen.queryByRole('button', { name: 'Open chet/fork' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pin normal' }));
@@ -440,6 +448,7 @@ describe('issues in the workspace', () => {
       commentsPartial: false
     }));
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
     fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));
@@ -498,6 +507,7 @@ describe('issues in the workspace', () => {
       commentsPartial: false
     }));
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
     fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));

@@ -1,3 +1,4 @@
+import { Icon } from '../icons';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Diff,
@@ -250,8 +251,13 @@ export function PullDiffView({
                   aria-current={index === selected ? 'true' : undefined}
                   onClick={() => setSelected(index)}
                 >
-                  {candidate.filename} <span aria-label="additions">+{candidate.additions}</span>{' '}
-                  <span aria-label="deletions">−{candidate.deletions}</span>
+                  <span className="pull-file-name">{candidate.filename}</span>
+                  <span className="pull-file-add" aria-label="additions">
+                    +{candidate.additions}
+                  </span>
+                  <span className="pull-file-del" aria-label="deletions">
+                    −{candidate.deletions}
+                  </span>
                 </button>
               </li>
             ))}
@@ -337,7 +343,7 @@ function FileBody({
               void window.orbit.app.openExternal(filesUrl);
             }}
           >
-            View the diff on GitHub ↗
+            View the diff on GitHub <Icon name="external" size={12} />
           </a>
         )}
         <ThreadList threads={threads} onLink={onLink} actions={actions} />
@@ -351,25 +357,27 @@ function FileBody({
 
   return (
     <>
-      <Diff
-        viewType={viewType}
-        diffType={parsed.type}
-        hunks={parsed.hunks}
-        widgets={widgets.map}
-        gutterEvents={
-          actions.enabled
-            ? {
-                onClick: ({ change, side }) => {
-                  if (!change) return;
-                  const anchor = anchorForChange(file.filename, change, side);
-                  if (anchor) actions.onStartComment(anchor);
+      <div className="pull-diff-scroll">
+        <Diff
+          viewType={viewType}
+          diffType={parsed.type}
+          hunks={parsed.hunks}
+          widgets={widgets.map}
+          gutterEvents={
+            actions.enabled
+              ? {
+                  onClick: ({ change, side }) => {
+                    if (!change) return;
+                    const anchor = anchorForChange(file.filename, change, side);
+                    if (anchor) actions.onStartComment(anchor);
+                  }
                 }
-              }
-            : undefined
-        }
-      >
-        {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
-      </Diff>
+              : undefined
+          }
+        >
+          {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
+        </Diff>
+      </div>
       {widgets.composerUnplaced}
       {unplaced.length > 0 && <h4>Other threads on this file</h4>}
       <ThreadList threads={unplaced} onLink={onLink} actions={actions} />
@@ -475,7 +483,11 @@ function ThreadCard({
   const status = thread.isOutdated ? 'Outdated' : thread.isResolved ? 'Resolved' : 'Open';
   const replying = actions.replyingTo === thread.id;
   return (
-    <section aria-label={`Review thread on ${thread.path}`} className="pull-thread">
+    <section
+      aria-label={`Review thread on ${thread.path}`}
+      className="pull-thread"
+      data-state={status.toLowerCase()}
+    >
       <p>
         <strong>{status}</strong>
         {thread.line !== null ? ` · line ${thread.line}` : ` · was line ${thread.originalLine ?? 'unknown'}`}

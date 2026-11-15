@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { dragCard, dropOn } from './pointer-drag';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectsView } from '../../../src/renderer/src/projects/ProjectsView';
 import type { ProjectDetail, ProjectItem, ProjectItemEditResult } from '../../../src/shared/projects';
@@ -184,14 +185,12 @@ describe('ProjectsView', () => {
       item: items[0]
     } satisfies ProjectItemEditResult);
 
-    fireEvent.dragStart(card, { dataTransfer: { setData: vi.fn() } });
-    fireEvent.dragOver(todo, { dataTransfer: { dropEffect: 'move' } });
-    fireEvent.drop(todo, { dataTransfer: { getData: vi.fn() } });
+    dragCard(card);
+    dropOn(todo);
     expect(api.projects.setField).not.toHaveBeenCalled();
 
-    fireEvent.dragStart(card, { dataTransfer: { setData: vi.fn() } });
-    fireEvent.dragOver(done, { dataTransfer: { dropEffect: 'move' } });
-    fireEvent.drop(done, { dataTransfer: { getData: vi.fn() } });
+    dragCard((await screen.findByText('Fix crash')).closest('article') as HTMLElement);
+    dropOn(done);
     await waitFor(() =>
       expect(api.projects.setField).toHaveBeenCalledWith('PVT_1', 'issue-1', {
         fieldId: 'FLD_status',

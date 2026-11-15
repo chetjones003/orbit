@@ -78,10 +78,19 @@ const ALLOWED_ATTR = [
   'preload',
   'rowspan',
   'src',
+  // Holds a diagram's source on its fallback notice, so the renderer can draw it. Text only, never executed.
+  'data-mermaid-source',
   'title',
   'type',
   'width'
 ];
+
+/** The fake GitHub's origin while debugging. The main process reports it; it is null in every normal run. */
+let debugMediaOrigin: string | null = null;
+
+export function setDebugMediaOrigin(origin: string | null | undefined): void {
+  debugMediaOrigin = origin ?? null;
+}
 
 /** Media may come only from GitHub-hosted origins, matching the CSP. */
 export function isGitHubMediaUrl(value: string | null): boolean {
@@ -92,6 +101,7 @@ export function isGitHubMediaUrl(value: string | null): boolean {
   } catch {
     return false;
   }
+  if (debugMediaOrigin !== null && url.origin === debugMediaOrigin) return true;
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false;
   return url.hostname === 'github.com' || url.hostname.endsWith('.githubusercontent.com');
 }
@@ -120,9 +130,12 @@ export function sanitizeIssueHtml(html: string, options: SanitizeOptions): strin
 
   for (const code of [...body.querySelectorAll('code.language-mermaid')]) {
     const block = code.closest('pre') ?? code;
-    block.replaceWith(
-      sourceNotice(doc, 'Mermaid diagram', block.textContent ?? '', options.viewOnGitHubUrl, true)
-    );
+    const source = block.textContent ?? '';
+    const notice = sourceNotice(doc, 'Mermaid diagram', source, options.viewOnGitHubUrl, true);
+    // The renderer draws the diagram in place of this notice. The source stays on it as the fallback. It is
+    // URI-encoded because sanitizers drop attributes that contain markup-like text, such as the arrows in a diagram.
+    notice.setAttribute('data-mermaid-source', encodeURIComponent(source));
+    block.replaceWith(notice);
   }
   for (const math of [...body.querySelectorAll('.js-render-math, math-renderer')]) {
     math.replaceWith(sourceNotice(doc, 'Math', math.textContent ?? '', options.viewOnGitHubUrl, false));

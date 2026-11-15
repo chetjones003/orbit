@@ -8,7 +8,7 @@ import { runSmokeTest } from './smoke';
 import { registerAppProtocol, registerAppScheme } from './protocol';
 import { AuthService } from './github/auth-service';
 import { CredentialStore } from './github/credential-store';
-import { resolveGitHubEndpoints } from './github/endpoints';
+import { debugMediaOrigin, resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
 import { IssueService } from './github/issue-service';
 import { InboxService } from './github/inbox-service';
@@ -185,6 +185,7 @@ if (!app.requestSingleInstanceLock()) {
     let tray: Tray | null = null;
     const win = createMainWindow({
       devServerOrigin,
+      mediaOrigin: debugMediaOrigin(process.env['ORBIT_GITHUB_URL']),
       show: !smokeReportPath,
       windowState: (await settings.load()).windowState,
       saveWindowState: (state) => void settings.saveWindowState(state),

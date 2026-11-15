@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CommentUpdateResult, IssueComment } from '../../../shared/issues';
 import { RichBody } from '../issues/RichBody';
+import { Icon } from '../icons';
 import { Composer } from './Composer';
 import { drafts, type DraftKey } from './draft-store';
 
@@ -164,9 +165,21 @@ export function CommentThread({
         const editing = editingId === comment.id;
         return (
           <div className="issue-comment" key={comment.id}>
-            <p className="issue-meta">
-              @{comment.authorLogin} · {new Date(comment.createdAt).toLocaleString()}
-            </p>
+            <div className="comment-head">
+              <p className="issue-meta">
+                @{comment.authorLogin} · {new Date(comment.createdAt).toLocaleString()}
+              </p>
+              {mine && (
+                <CommentMenu
+                  onEdit={() => {
+                    setActionError(null);
+                    setConflict(null);
+                    setEditingId(comment.id);
+                  }}
+                  onDelete={() => void remove(comment)}
+                />
+              )}
+            </div>
             {editing ? (
               <div className="comment-edit">
                 <Composer
@@ -201,24 +214,6 @@ export function CommentThread({
                   onLink={onLink}
                   emptyText=""
                 />
-                {mine && (
-                  <div className="comment-actions">
-                    <button
-                      type="button"
-                      className="text-action"
-                      onClick={() => {
-                        setActionError(null);
-                        setConflict(null);
-                        setEditingId(comment.id);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button type="button" className="text-action danger" onClick={() => void remove(comment)}>
-                      Delete
-                    </button>
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -289,6 +284,66 @@ function ConflictPanel({
             onLink={onLink}
             emptyText=""
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The comment's options, behind a menu at its top right. Closes on an outside click or Escape. */
+function CommentMenu({ onEdit, onDelete }: { onEdit(): void; onDelete(): void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div className="comment-menu" ref={rootRef}>
+      <button
+        type="button"
+        className="comment-menu-trigger"
+        aria-label="Comment options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Icon name="menu" size={16} />
+      </button>
+      {open && (
+        <div className="comment-menu-popup" role="menu" aria-label="Comment options">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            Delete
+          </button>
         </div>
       )}
     </div>

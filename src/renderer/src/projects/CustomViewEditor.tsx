@@ -61,6 +61,13 @@ const CONDITION_LABELS: Record<ConditionKind, string> = {
   contains: 'Contains'
 };
 
+const FIELDS_HEADING: Record<CustomViewDefinition['layout'], string> = {
+  kanban: 'Columns and swimlanes',
+  table: 'Grouping',
+  gantt: 'Bars',
+  calendar: 'Dates'
+};
+
 /**
  * Editing for one custom view's definition: its name, layout, filters, sort, and the field mapping.
  * Suggested mappings are shown but only applied when the user accepts them, and a mapping that no longer
@@ -101,50 +108,57 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
       aria-label="Custom view settings"
       onSubmit={(e) => e.preventDefault()}
     >
-      <label>
-        View name
-        <input
-          type="text"
-          value={nameDraft}
-          maxLength={CUSTOM_VIEW_NAME_MAX}
-          onChange={(event) => {
-            setNameDraft(event.target.value);
-            if (event.target.value.trim() !== '') update({ name: event.target.value });
-          }}
-        />
-      </label>
+      <div className="cve-section">
+        <h4 className="cve-heading">View</h4>
+        <div className="cve-grid">
+          <label>
+            View name
+            <input
+              type="text"
+              value={nameDraft}
+              maxLength={CUSTOM_VIEW_NAME_MAX}
+              onChange={(event) => {
+                setNameDraft(event.target.value);
+                if (event.target.value.trim() !== '') update({ name: event.target.value });
+              }}
+            />
+          </label>
+          <label>
+            Layout
+            <select
+              value={view.layout}
+              onChange={(event) => {
+                const layout = CUSTOM_VIEW_LAYOUTS.find((option) => option === event.target.value);
+                if (layout) update({ layout });
+              }}
+            >
+              <option value="kanban">Kanban</option>
+              <option value="table">Table</option>
+              <option value="gantt">Gantt</option>
+              <option value="calendar">Calendar</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Advanced filter
+          <input
+            type="text"
+            className="cve-mono"
+            value={view.advancedFilter}
+            placeholder="is:issue status:Todo"
+            onChange={(event) => update({ advancedFilter: event.target.value })}
+          />
+        </label>
+        <p className="cve-hint">
+          GitHub&apos;s project filter syntax. GitHub applies it, as it does for a saved view.
+        </p>
+      </div>
 
-      <label>
-        Layout
-        <select
-          value={view.layout}
-          onChange={(event) => {
-            const layout = CUSTOM_VIEW_LAYOUTS.find((option) => option === event.target.value);
-            if (layout) update({ layout });
-          }}
-        >
-          <option value="kanban">Kanban</option>
-          <option value="table">Table</option>
-          <option value="gantt">Gantt</option>
-          <option value="calendar">Calendar</option>
-        </select>
-      </label>
-
-      <label>
-        Advanced filter
-        <input
-          type="text"
-          value={view.advancedFilter}
-          placeholder="is:issue status:Todo"
-          onChange={(event) => update({ advancedFilter: event.target.value })}
-        />
-      </label>
-      <p className="project-note">
-        GitHub&apos;s project filter syntax. GitHub applies it, as it does for a saved view.
-      </p>
-
-      <fieldset className="custom-view-filters">
-        <legend>Filters</legend>
+      <fieldset className="cve-section cve-filters">
+        <legend className="cve-heading">Filters</legend>
+        {view.conditions.length === 0 && (
+          <p className="cve-empty">No filters. Every item in the project is shown.</p>
+        )}
         {view.conditions.map((condition, index) => (
           <FilterRow
             key={index}
@@ -154,156 +168,168 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
             onRemove={() => removeCondition(index)}
           />
         ))}
-        <button
-          type="button"
-          className="secondary-action"
-          onClick={addCondition}
-          disabled={fields.length === 0}
-        >
-          Add filter
-        </button>
+        <div>
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={addCondition}
+            disabled={fields.length === 0}
+          >
+            Add filter
+          </button>
+        </div>
       </fieldset>
 
-      <label>
-        Sort by
-        <select
-          value={view.sort?.fieldId ?? ''}
-          onChange={(event) =>
-            update({
-              sort:
-                event.target.value === ''
-                  ? null
-                  : { fieldId: event.target.value, direction: view.sort?.direction ?? 'asc' }
-            })
-          }
-        >
-          <option value="">Manual order</option>
-          {fields.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {view.sort && (
-        <label>
-          Sort direction
-          <select
-            value={view.sort.direction}
-            onChange={(event) =>
-              update({
-                sort: {
-                  fieldId: view.sort?.fieldId as string,
-                  direction: event.target.value === 'desc' ? 'desc' : 'asc'
-                }
-              })
-            }
-          >
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
-        </label>
-      )}
-
-      {view.layout === 'kanban' && (
-        <>
-          <MappingSelect
-            label="Columns"
-            value={view.columnFieldId}
-            options={groupable}
-            emptyLabel="Choose a field"
-            onChange={(columnFieldId) => update({ columnFieldId })}
-          />
-          {view.columnFieldId === null && suggestion && (
-            <SuggestionNote
-              name={fields.find((f) => f.id === suggestion)?.name ?? ''}
-              what="column field"
-              onUse={() => update({ columnFieldId: suggestion })}
-            />
-          )}
-          <MappingSelect
-            label="Swimlanes"
-            value={view.swimlaneFieldId}
-            options={groupable}
-            emptyLabel="None"
-            onChange={(swimlaneFieldId) => update({ swimlaneFieldId })}
-          />
-        </>
-      )}
-      {view.layout === 'table' && (
-        <MappingSelect
-          label="Group by"
-          value={view.groupFieldId}
-          options={groupable}
-          emptyLabel="No grouping"
-          onChange={(groupFieldId) => update({ groupFieldId })}
-        />
-      )}
-      {view.layout === 'gantt' && (
-        <>
+      <div className="cve-section">
+        <h4 className="cve-heading">Sort</h4>
+        <div className="cve-grid">
           <label>
-            Bars from
+            Sort by
             <select
-              value={view.ganttSource}
+              value={view.sort?.fieldId ?? ''}
               onChange={(event) =>
-                update({ ganttSource: event.target.value === 'iteration' ? 'iteration' : 'dates' })
+                update({
+                  sort:
+                    event.target.value === ''
+                      ? null
+                      : { fieldId: event.target.value, direction: view.sort?.direction ?? 'asc' }
+                })
               }
             >
-              <option value="dates">Start and target dates</option>
-              <option value="iteration">An iteration field</option>
+              <option value="">Manual order</option>
+              {fields.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
             </select>
           </label>
-          {view.ganttSource === 'dates' ? (
+          {view.sort && (
+            <label>
+              Sort direction
+              <select
+                value={view.sort.direction}
+                onChange={(event) =>
+                  update({
+                    sort: {
+                      fieldId: view.sort?.fieldId as string,
+                      direction: event.target.value === 'desc' ? 'desc' : 'asc'
+                    }
+                  })
+                }
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </label>
+          )}
+        </div>
+      </div>
+
+      <div className="cve-section">
+        <h4 className="cve-heading">{FIELDS_HEADING[view.layout]}</h4>
+        <div className="cve-grid">
+          {view.layout === 'kanban' && (
             <>
               <MappingSelect
-                label="Start field"
-                value={view.startFieldId}
-                options={candidatesFor('startFieldId', fields)}
+                label="Columns"
+                value={view.columnFieldId}
+                options={groupable}
                 emptyLabel="Choose a field"
-                onChange={(startFieldId) => update({ startFieldId })}
+                onChange={(columnFieldId) => update({ columnFieldId })}
               />
               <MappingSelect
-                label="Target field"
-                value={view.targetFieldId}
-                options={candidatesFor('targetFieldId', fields)}
-                emptyLabel="Choose a field"
-                onChange={(targetFieldId) => update({ targetFieldId })}
+                label="Swimlanes"
+                value={view.swimlaneFieldId}
+                options={groupable}
+                emptyLabel="None"
+                onChange={(swimlaneFieldId) => update({ swimlaneFieldId })}
               />
             </>
-          ) : (
+          )}
+          {view.layout === 'table' && (
             <MappingSelect
-              label="Iteration field"
-              value={view.iterationFieldId}
-              options={candidatesFor('iterationFieldId', fields)}
-              emptyLabel="Choose a field"
-              onChange={(iterationFieldId) => update({ iterationFieldId })}
+              label="Group by"
+              value={view.groupFieldId}
+              options={groupable}
+              emptyLabel="No grouping"
+              onChange={(groupFieldId) => update({ groupFieldId })}
             />
           )}
-        </>
-      )}
-      {view.layout === 'calendar' && (
-        <>
-          <MappingSelect
-            label="Date field"
-            value={view.calendarFieldId}
-            options={candidatesFor('calendarFieldId', fields)}
-            emptyLabel="Choose a field"
-            onChange={(calendarFieldId) => update({ calendarFieldId })}
+          {view.layout === 'gantt' && (
+            <>
+              <label>
+                Bars from
+                <select
+                  value={view.ganttSource}
+                  onChange={(event) =>
+                    update({ ganttSource: event.target.value === 'iteration' ? 'iteration' : 'dates' })
+                  }
+                >
+                  <option value="dates">Start and target dates</option>
+                  <option value="iteration">An iteration field</option>
+                </select>
+              </label>
+              {view.ganttSource === 'dates' ? (
+                <>
+                  <MappingSelect
+                    label="Start field"
+                    value={view.startFieldId}
+                    options={candidatesFor('startFieldId', fields)}
+                    emptyLabel="Choose a field"
+                    onChange={(startFieldId) => update({ startFieldId })}
+                  />
+                  <MappingSelect
+                    label="Target field"
+                    value={view.targetFieldId}
+                    options={candidatesFor('targetFieldId', fields)}
+                    emptyLabel="Choose a field"
+                    onChange={(targetFieldId) => update({ targetFieldId })}
+                  />
+                </>
+              ) : (
+                <MappingSelect
+                  label="Iteration field"
+                  value={view.iterationFieldId}
+                  options={candidatesFor('iterationFieldId', fields)}
+                  emptyLabel="Choose a field"
+                  onChange={(iterationFieldId) => update({ iterationFieldId })}
+                />
+              )}
+            </>
+          )}
+          {view.layout === 'calendar' && (
+            <>
+              <MappingSelect
+                label="Date field"
+                value={view.calendarFieldId}
+                options={candidatesFor('calendarFieldId', fields)}
+                emptyLabel="Choose a field"
+                onChange={(calendarFieldId) => update({ calendarFieldId })}
+              />
+              <label>
+                Calendar scale
+                <select
+                  value={view.calendarScale}
+                  onChange={(event) =>
+                    update({ calendarScale: event.target.value === 'week' ? 'week' : 'month' })
+                  }
+                >
+                  <option value="month">Month</option>
+                  <option value="week">Week</option>
+                </select>
+              </label>
+            </>
+          )}
+        </div>
+        {view.layout === 'kanban' && view.columnFieldId === null && suggestion && (
+          <SuggestionNote
+            name={fields.find((f) => f.id === suggestion)?.name ?? ''}
+            what="column field"
+            onUse={() => update({ columnFieldId: suggestion })}
           />
-          <label>
-            Calendar scale
-            <select
-              value={view.calendarScale}
-              onChange={(event) =>
-                update({ calendarScale: event.target.value === 'week' ? 'week' : 'month' })
-              }
-            >
-              <option value="month">Month</option>
-              <option value="week">Week</option>
-            </select>
-          </label>
-        </>
-      )}
+        )}
+      </div>
 
       {repairs.map((repair, index) => (
         <RepairNote
@@ -318,22 +344,30 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         />
       ))}
 
-      <div className="custom-view-danger">
+      <footer className="cve-footer">
         {confirming ? (
           <>
-            <button type="button" className="secondary-action" onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-            <button type="button" className="secondary-action" onClick={onDelete}>
-              Confirm delete
-            </button>
+            <p className="cve-footer-text">
+              Delete “{view.name}”? It is removed from Orbit. The project on GitHub is not changed.
+            </p>
+            <div className="cve-footer-actions">
+              <button type="button" className="secondary-action" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+              <button type="button" className="cve-danger" onClick={onDelete}>
+                Confirm delete
+              </button>
+            </div>
           </>
         ) : (
-          <button type="button" className="secondary-action" onClick={() => setConfirming(true)}>
-            Delete view
-          </button>
+          <>
+            <p className="cve-footer-text">Orbit keeps this view on this computer only.</p>
+            <button type="button" className="cve-delete" onClick={() => setConfirming(true)}>
+              Delete view
+            </button>
+          </>
         )}
-      </div>
+      </footer>
     </form>
   );
 }
@@ -371,7 +405,7 @@ function MappingSelect({
 
 function SuggestionNote({ name, what, onUse }: { name: string; what: string; onUse: () => void }) {
   return (
-    <p className="project-note">
+    <p className="cve-note">
       Suggested {what}: {name}{' '}
       <button type="button" className="secondary-action" onClick={onUse}>
         Use suggestion
@@ -397,7 +431,7 @@ function RepairNote({
     repair.reason === 'missing' ? 'was removed from this project' : 'can no longer be used for this view';
   if (repair.slot === 'sort') {
     return (
-      <p role="alert" className="project-message">
+      <p role="alert" className="cve-note cve-alert">
         The sort field was removed from this project.{' '}
         <button type="button" className="secondary-action" onClick={() => onFix({ sort: null })}>
           Clear sort
@@ -407,7 +441,7 @@ function RepairNote({
   }
   if (repair.slot === 'condition') {
     return (
-      <p role="alert" className="project-message">
+      <p role="alert" className="cve-note cve-alert">
         A filter uses a field that {reason}.{' '}
         <button type="button" className="secondary-action" onClick={onClearBrokenFilters}>
           Remove broken filters
@@ -418,7 +452,7 @@ function RepairNote({
   const slot = repair.slot as FieldSlot;
   const label = FIELD_SLOT_LABELS[slot];
   return (
-    <p role="alert" className="project-message">
+    <p role="alert" className="cve-note cve-alert">
       {label} {reason}.{' '}
       <label>
         Repair {label.toLowerCase()}
@@ -471,66 +505,74 @@ function FilterRow({
 
   return (
     <div className="custom-filter">
-      <select
-        aria-label="Filter type"
-        value={condition.kind}
-        onChange={(event) => {
-          const kind = event.target.value as ConditionKind;
-          const nextField = fieldsFor(kind).find((f) => f.id === condition.fieldId) ?? fieldsFor(kind)[0];
-          if (nextField) onChange(choose(kind, nextField.id));
-        }}
-      >
-        {(Object.keys(CONDITION_LABELS) as ConditionKind[]).map((kind) => (
-          <option key={kind} value={kind}>
-            {CONDITION_LABELS[kind]}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="Filter field"
-        value={condition.fieldId}
-        onChange={(event) => onChange(choose(condition.kind, event.target.value))}
-      >
-        {fieldsFor(condition.kind).map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.name}
-          </option>
-        ))}
-      </select>
-      {condition.kind === 'one-of' &&
-        values.map((value) => {
-          const checked = condition.valueIds.includes(value.id);
-          const last = checked && condition.valueIds.length === 1;
-          return (
-            <label key={value.id} className="custom-filter-value">
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={last}
-                onChange={(event) =>
-                  onChange({
-                    ...condition,
-                    valueIds: event.target.checked
-                      ? [...condition.valueIds, value.id]
-                      : condition.valueIds.filter((id) => id !== value.id)
-                  })
-                }
-              />
-              {value.label}
-            </label>
-          );
-        })}
-      {condition.kind === 'contains' && (
-        <input
-          type="text"
-          aria-label="Text to find"
-          value={condition.text}
-          onChange={(event) => onChange({ ...condition, text: event.target.value })}
-        />
+      <div className="custom-filter-controls">
+        <select
+          aria-label="Filter type"
+          value={condition.kind}
+          onChange={(event) => {
+            const kind = event.target.value as ConditionKind;
+            const nextField = fieldsFor(kind).find((f) => f.id === condition.fieldId) ?? fieldsFor(kind)[0];
+            if (nextField) onChange(choose(kind, nextField.id));
+          }}
+        >
+          {(Object.keys(CONDITION_LABELS) as ConditionKind[]).map((kind) => (
+            <option key={kind} value={kind}>
+              {CONDITION_LABELS[kind]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter field"
+          value={condition.fieldId}
+          onChange={(event) => onChange(choose(condition.kind, event.target.value))}
+        >
+          {fieldsFor(condition.kind).map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <button type="button" className="cve-remove" onClick={onRemove}>
+          Remove filter
+        </button>
+      </div>
+      {condition.kind === 'one-of' && (
+        <div className="custom-filter-values">
+          {values.length === 0 && <span className="cve-hint">This field has no values yet.</span>}
+          {values.map((value) => {
+            const checked = condition.valueIds.includes(value.id);
+            const last = checked && condition.valueIds.length === 1;
+            return (
+              <label key={value.id} className="custom-filter-value">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={last}
+                  onChange={(event) =>
+                    onChange({
+                      ...condition,
+                      valueIds: event.target.checked
+                        ? [...condition.valueIds, value.id]
+                        : condition.valueIds.filter((id) => id !== value.id)
+                    })
+                  }
+                />
+                {value.label}
+              </label>
+            );
+          })}
+        </div>
       )}
-      <button type="button" className="secondary-action" onClick={onRemove}>
-        Remove filter
-      </button>
+      {condition.kind === 'contains' && (
+        <div className="custom-filter-values">
+          <input
+            type="text"
+            aria-label="Text to find"
+            value={condition.text}
+            onChange={(event) => onChange({ ...condition, text: event.target.value })}
+          />
+        </div>
+      )}
     </div>
   );
 }

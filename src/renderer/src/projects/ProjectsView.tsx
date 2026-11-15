@@ -1,17 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import type { CustomViewDefinition } from '../../../shared/custom-views';
 import type {
   ProjectDetail,
   ProjectField,
   ProjectFieldInput,
   ProjectItem,
-  ProjectListPage,
-  ProjectSavedView
+  ProjectListPage
 } from '../../../shared/projects';
+import { Icon } from '../icons';
 import { CustomViewPanel } from './CustomViewPanel';
+import { ProjectFilterBar } from './ProjectFilterBar';
+import { ProjectViewTabs, type ProjectViewTabItem } from './ProjectViewTabs';
 import { ProjectBoard } from './ProjectBoard';
 import { ProjectTable } from './ProjectTable';
-import { groupingField, parseItemRef, withFieldValue } from './project-model';
+import { groupingField, matchesKeyword, parseItemRef, withFieldValue } from './project-model';
+
+/** Reader-facing names for the layouts GitHub saved views and Orbit custom views use. */
+const LAYOUT_LABELS: Record<string, string> = {
+  board: 'Board',
+  table: 'Table',
+  kanban: 'Kanban',
+  gantt: 'Gantt',
+  calendar: 'Calendar'
+};
 
 export interface ProjectsViewProps {
   /** Opens an issue or pull request in Orbit's details panel. */
@@ -38,6 +49,10 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   const [reloadKey, setReloadKey] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [addText, setAddText] = useState('');
+  // The keyword typed into the view's filter bar. It narrows the items every view shows.
+  const [keyword, setKeyword] = useState('');
+  // The custom view that was just created. Its settings open at once, so a new view is set up straight away.
+  const [freshViewId, setFreshViewId] = useState<string | null>(null);
   const pendingRef = useRef(new Set<string>());
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   // The project on screen now, so a late add result can tell whether it still belongs here.
@@ -79,6 +94,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     setCustomId(null);
     setItems([]);
     setMessage(null);
+    setKeyword('');
     window.orbit.projects.detail(projectId).then(
       (next) => {
         if (cancelled) return;
@@ -242,6 +258,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     saveCustomViews([...customViews, created]);
     setCustomId(created.id);
     setViewId(null);
+    setFreshViewId(created.id);
   };
 
   /** Moves an item after another in GitHub's manual order, then reloads so the view shows GitHub's order. */
@@ -268,10 +285,37 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   const selectedProject = list?.projects.find((p) => p.id === projectId) ?? null;
   const boardField = view?.layout === 'board' && detail ? groupingField(view, detail.fields) : null;
 
+  const shownItems = items.filter((item) => matchesKeyword(item, keyword));
+  const viewTabs: ProjectViewTabItem[] = [
+    ...(detail?.views ?? []).map((savedView) => ({
+      key: `saved:${savedView.id}`,
+      name: savedView.name,
+      kind: LAYOUT_LABELS[savedView.layout] ?? savedView.layout,
+      icon: layoutIcon(savedView.layout),
+      selected: savedView.id === viewId,
+      onSelect: () => {
+        setViewId(savedView.id);
+        setCustomId(null);
+      }
+    })),
+    ...projectViews.map((custom) => ({
+      key: `custom:${custom.id}`,
+      name: custom.name,
+      kind: LAYOUT_LABELS[custom.layout] ?? custom.layout,
+      icon: layoutIcon(custom.layout),
+      selected: custom.id === customId,
+      onSelect: () => {
+        setCustomId(custom.id);
+        setViewId(null);
+      }
+    }))
+  ];
+
   return (
     <div className="projects-layout">
       <aside className="projects-list" aria-label="Your projects">
         <h3>Your projects</h3>
+        {list && list.projects.length > 0 && <p>{list.projects.length} total</p>}
         {listError && <p role="alert">{listError}</p>}
         {!list && !listError && <p>Loading projects…</p>}
         {list && list.projects.length === 0 && <p>You have no projects yet.</p>}
@@ -304,51 +348,12 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                   void window.orbit.app.openExternal(selectedProject.url);
                 }}
               >
-                Open on GitHub ↗
+                Open on GitHub
+                <Icon name="external" size={12} />
               </a>
             </div>
+            {detail && <ProjectViewTabs tabs={viewTabs} onNew={addCustomView} />}
             {detail && detail.views.length === 0 && <p>This project has no table or board saved views.</p>}
-            {detail && detail.views.length > 0 && (
-              <div className="project-view-tabs" role="tablist" aria-label="Saved views">
-                {detail.views.map((savedView: ProjectSavedView) => (
-                  <button
-                    key={savedView.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={savedView.id === viewId}
-                    className={`project-view-tab ${savedView.id === viewId ? 'active' : ''}`}
-                    onClick={() => {
-                      setViewId(savedView.id);
-                      setCustomId(null);
-                    }}
-                  >
-                    {savedView.name} <span className="project-view-kind">{savedView.layout}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {detail && (
-              <div className="project-view-tabs" role="tablist" aria-label="Custom views">
-                {projectViews.map((custom) => (
-                  <button
-                    key={custom.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={custom.id === customId}
-                    className={`project-view-tab ${custom.id === customId ? 'active' : ''}`}
-                    onClick={() => {
-                      setCustomId(custom.id);
-                      setViewId(null);
-                    }}
-                  >
-                    {custom.name} <span className="project-view-kind">{custom.layout}</span>
-                  </button>
-                ))}
-                <button type="button" className="secondary-action" onClick={addCustomView}>
-                  New custom view
-                </button>
-              </div>
-            )}
             {detail && customView && (
               <>
                 {message && (
@@ -359,9 +364,12 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                 {loadingItems && <p>Loading items…</p>}
                 {itemsPartial && <p className="project-note">Some items could not be shown.</p>}
                 <CustomViewPanel
+                  key={customView.id}
                   view={customView}
                   fields={detail.fields}
-                  items={items}
+                  items={shownItems}
+                  keyword={keyword}
+                  onKeywordChange={setKeyword}
                   pendingIds={pendingIds}
                   onChange={(next) => saveCustomViews(customViews.map((v) => (v.id === next.id ? next : v)))}
                   onDelete={() => deleteCustomView(customView.id)}
@@ -369,11 +377,14 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                   onReorder={reorderItem}
                   onRemove={(item) => void removeItem(item)}
                   onOpen={onOpenItem}
+                  openSettingsFirst={customView.id === freshViewId}
+                  onSettingsClosed={() => setFreshViewId(null)}
                 />
               </>
             )}
             {detail && view && (
               <>
+                <ProjectFilterBar keyword={keyword} onKeywordChange={setKeyword} count={shownItems.length} />
                 <form
                   className="project-add-form"
                   onSubmit={(event) => {
@@ -404,7 +415,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                 {view.layout === 'board' && boardField ? (
                   <ProjectBoard
                     field={boardField}
-                    items={items}
+                    items={shownItems}
                     cardFields={detail.fields}
                     pendingIds={pendingIds}
                     onMove={(item, optionId) =>
@@ -421,7 +432,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                     )}
                     <ProjectTable
                       fields={detail.fields}
-                      items={items}
+                      items={shownItems}
                       pendingIds={pendingIds}
                       onEdit={(item, field, value) => void editField(item, field, value)}
                       onRemove={(item) => void removeItem(item)}
@@ -440,4 +451,14 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
 
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+type IconName = ComponentProps<typeof Icon>['name'];
+
+/** The icon each layout is drawn with in the view tabs. */
+function layoutIcon(layout: string): IconName {
+  if (layout === 'board' || layout === 'kanban') return 'projects';
+  if (layout === 'gantt') return 'timeline';
+  if (layout === 'calendar') return 'calendar';
+  return 'table';
 }

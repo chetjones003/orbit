@@ -2,6 +2,7 @@ import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
+import type { WorkflowGraphJob, WorkflowJob } from './issues';
 import type {
   ItemMemberships,
   ProjectDetail,
@@ -55,6 +56,10 @@ import type {
 export const IpcChannels = {
   appGetInfo: 'app:get-info',
   appOpenExternal: 'app:open-external',
+  shellControl: 'shell:control',
+  shellGetState: 'shell:get-state',
+  /** Main-to-renderer push. Payload is a ShellState. */
+  shellStateChanged: 'shell:state-changed',
   authGetStatus: 'auth:get-status',
   authStartSignIn: 'auth:start-sign-in',
   authCancelSignIn: 'auth:cancel-sign-in',
@@ -86,6 +91,10 @@ export const IpcChannels = {
   pullsDraft: 'pulls:draft',
   pullsRuns: 'pulls:runs',
   pullsRerun: 'pulls:rerun',
+  actionsJobs: 'actions:jobs',
+  actionsJobLogs: 'actions:job-logs',
+  actionsCancelRun: 'actions:cancel-run',
+  actionsWorkflowGraph: 'actions:workflow-graph',
   pullsCreate: 'pulls:create',
   inboxList: 'inbox:list',
   projectsList: 'projects:list',
@@ -162,10 +171,40 @@ export interface AppInfo {
   name: string;
   version: string;
   platform: string;
+  /** The fake GitHub's origin while debugging against it; media from it is shown. Absent otherwise. */
+  debugMediaOrigin?: string | null;
 }
 
 export interface OpenExternalResult {
   opened: boolean;
+}
+
+/** Window and editing commands the custom title bar may run. Anything else is refused by main. */
+export const SHELL_ACTIONS = [
+  'minimize',
+  'toggle-maximize',
+  'close',
+  'toggle-fullscreen',
+  'zoom-in',
+  'zoom-out',
+  'zoom-reset',
+  'undo',
+  'redo',
+  'cut',
+  'copy',
+  'paste',
+  'select-all',
+  'quit'
+] as const;
+export type ShellAction = (typeof SHELL_ACTIONS)[number];
+
+export function isShellAction(value: unknown): value is ShellAction {
+  return typeof value === 'string' && (SHELL_ACTIONS as readonly string[]).includes(value);
+}
+
+export interface ShellState {
+  maximized: boolean;
+  fullscreen: boolean;
 }
 
 /** The typed surface the preload exposes as `window.orbit`. */
@@ -173,6 +212,13 @@ export interface OrbitApi {
   app: {
     getInfo(): Promise<AppInfo>;
     openExternal(url: string): Promise<OpenExternalResult>;
+  };
+  shell: {
+    /** Runs a window or editing command on the window that asked. Unknown commands are refused. */
+    control(action: ShellAction): Promise<void>;
+    getState(): Promise<ShellState>;
+    /** Subscribes to maximize and full-screen changes. Returns an unsubscribe function. */
+    onStateChanged(listener: (state: ShellState) => void): () => void;
   };
   auth: {
     getStatus(): Promise<AuthStatus>;
@@ -238,6 +284,16 @@ export interface OrbitApi {
       number: number,
       input: { index: number; checked: boolean; expectedBody: string }
     ): Promise<TaskToggleResult>;
+  };
+  actions: {
+    /** Jobs of one workflow run, with status and timing. */
+    jobs(repoFullName: string, runId: number): Promise<WorkflowJob[]>;
+    /** The plain-text log of one job. */
+    jobLogs(repoFullName: string, jobId: number): Promise<string>;
+    /** The workflow file's jobs and their needs, read at the run's commit. Empty when it cannot be read. */
+    workflowGraph(repoFullName: string, runId: number): Promise<WorkflowGraphJob[]>;
+    /** Cancels a workflow run that is queued or running. */
+    cancelRun(repoFullName: string, runId: number): Promise<PullWriteResult>;
   };
   pulls: {
     list(query: PullListQuery): Promise<PullListPage>;

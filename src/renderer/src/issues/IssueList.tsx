@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { IssueListPage, IssueListQuery, IssueStateFilter, IssueSummary } from '../../../shared/issues';
+import { Icon } from '../icons';
+import { IssueLabelChip } from './IssueLabelChip';
 
 export interface IssueListProps {
   repoFullName: string;
@@ -183,7 +185,7 @@ function IssueRow({
       aria-current={selected ? 'true' : undefined}
     >
       <span className={`issue-state ${issue.state}`} aria-label={issue.state === 'open' ? 'Open' : 'Closed'}>
-        {issue.state === 'open' ? '●' : '✓'}
+        <Icon name={issue.state === 'open' ? 'issue' : 'check'} size={15} />
       </span>
       <span className="issue-copy">
         <span className="issue-title">
@@ -195,9 +197,7 @@ function IssueRow({
         {issue.labels.length > 0 && (
           <span className="issue-labels">
             {issue.labels.map((label) => (
-              <span className="issue-label" key={label.name} style={{ borderColor: `#${label.color}` }}>
-                {label.name}
-              </span>
+              <IssueLabelChip key={label.name} label={label} />
             ))}
           </span>
         )}

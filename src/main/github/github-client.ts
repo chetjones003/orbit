@@ -102,7 +102,7 @@ export class GitHubClient {
    * before retrying. `text` returns the raw body, for media types such as rendered HTML.
    */
   async send<T>(
-    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     options: GitHubWriteOptions
   ): Promise<T> {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { ProjectField, ProjectFieldInput, ProjectFieldValue } from '../../../shared/projects';
-import { describeValue } from './project-model';
+import { describeValue, valueColorHex } from './project-model';
 
 export interface ProjectFieldEditorProps {
   field: ProjectField;
@@ -21,9 +21,13 @@ export function ProjectFieldEditor({ field, value, itemLabel, disabled, onChange
   const current = describeValue(value);
 
   if (field.kind === 'single-select') {
+    // The select takes the colour of its value, as the value's chip does on a card.
+    const color = valueColorHex(field, value);
     return (
       <select
         aria-label={label}
+        className={color ? 'project-select-value project-select-tint' : 'project-select-value'}
+        style={color ? ({ '--label': `#${color}` } as CSSProperties) : undefined}
         disabled={disabled}
         value={value?.kind === 'single-select' ? value.optionId : ''}
         onChange={(event) =>

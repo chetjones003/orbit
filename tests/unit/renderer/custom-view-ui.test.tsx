@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { dragCard, dropOn, installDragLayout } from './pointer-drag';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KanbanView } from '../../../src/renderer/src/projects/KanbanView';
 import { ProjectTable } from '../../../src/renderer/src/projects/ProjectTable';
@@ -50,16 +51,9 @@ function column(label: string): HTMLElement {
   return screen.getByRole('listitem', { name: new RegExp(`^${label},`) });
 }
 
-function dragCard(card: HTMLElement) {
-  fireEvent.dragStart(card, { dataTransfer: { setData: () => undefined, getData: () => '' } });
-}
-
-function dropOn(target: HTMLElement) {
-  fireEvent.dragOver(target);
-  fireEvent.drop(target);
-}
-
 describe('KanbanView', () => {
+  installDragLayout();
+
   it('places each item in its column and shows a No value column', () => {
     const items = [
       item('a', 'Write docs', { FLD_status: at('todo', 'Todo') }),
@@ -182,8 +176,7 @@ describe('KanbanView', () => {
       />
     );
     dragCard(screen.getByText('Third'));
-    fireEvent.dragOver(screen.getByText('Second'));
-    fireEvent.drop(screen.getByText('Second'));
+    dropOn(screen.getByText('Second'), 120);
     await vi.waitFor(() => expect(onReorder).toHaveBeenCalledTimes(1));
     expect(onReorder).toHaveBeenCalledWith(items[2], 'a');
   });
@@ -209,9 +202,44 @@ describe('KanbanView', () => {
       />
     );
     dragCard(screen.getByText('Second'));
-    fireEvent.drop(screen.getByText('First'));
+    dropOn(screen.getByText('First'));
     await vi.waitFor(() => expect(onReorder).toHaveBeenCalledTimes(1));
     expect(onReorder).toHaveBeenCalledWith(items[1], null);
+  });
+
+  it('copies the dragged card under the pointer and leaves a slot where it would land', () => {
+    const items = [
+      item('a', 'First', { FLD_status: at('todo', 'Todo') }),
+      item('b', 'Second', { FLD_status: at('todo', 'Todo') }),
+      item('c', 'Third', { FLD_status: at('todo', 'Todo') })
+    ];
+    const { container } = render(
+      <KanbanView
+        columnField={STATUS}
+        swimlaneField={null}
+        groups={groupItems(items, STATUS) ?? []}
+        laneGroups={null}
+        order={items}
+        manualOrder
+        pendingIds={new Set()}
+        onEdit={vi.fn()}
+        onReorder={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    );
+    dragCard(screen.getByText('First'));
+    fireEvent.pointerMove(screen.getByText('Third'), { pointerId: 1, clientX: 0, clientY: 120 });
+
+    const ghost = document.querySelector('.card-drag-ghost');
+    expect(ghost).toHaveTextContent('First');
+    // Without the dragged card, Second is above the pointer and Third below it, so the slot goes between them.
+    const slot = container.querySelector('.card-drop-slot');
+    expect(slot?.previousElementSibling).toHaveTextContent('Second');
+    expect(slot?.nextElementSibling).toHaveTextContent('Third');
+
+    fireEvent.pointerUp(screen.getByText('Third'), { pointerId: 1, clientX: 0, clientY: 120 });
+    expect(document.querySelector('.card-drag-ghost')).toBeNull();
+    expect(container.querySelector('.card-drop-slot')).toBeNull();
   });
 
   it('does not reorder a sorted view when a card is dropped on another card', () => {
@@ -235,7 +263,7 @@ describe('KanbanView', () => {
       />
     );
     dragCard(screen.getByText('Second'));
-    fireEvent.drop(screen.getByText('First'));
+    dropOn(screen.getByText('First'));
     expect(onReorder).not.toHaveBeenCalled();
   });
 
@@ -289,7 +317,7 @@ describe('CustomViewPanel repairs', () => {
   it('opens the settings when a grouping field was removed, so the repair is visible', async () => {
     const { CustomViewPanel } = await import('../../../src/renderer/src/projects/CustomViewPanel');
     const items = [item('a', 'Write docs', { FLD_status: at('todo', 'Todo') })];
-    const { container } = render(
+    render(
       <CustomViewPanel
         view={{
           id: 'cv-table',
@@ -314,7 +342,8 @@ describe('CustomViewPanel repairs', () => {
         onOpen={vi.fn()}
       />
     );
-    expect(container.querySelector('details')?.open).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'View settings' }));
+    expect(screen.getByRole('dialog', { name: 'View settings' })).toBeInTheDocument();
     expect(screen.getByRole('alert').textContent).toContain('Group field was removed from this project');
   });
 });

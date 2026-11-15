@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CustomViewPanel,
@@ -109,6 +109,7 @@ describe('CustomViewPanel, Gantt', () => {
   it('asks for its fields when none is set, and the settings open to say so', () => {
     renderPanel({ view: view({ startFieldId: 'FLD_gone' }) });
     expect(screen.getByText('Choose a start field and a target field to draw this timeline.')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'View settings' }));
     expect(screen.getByText('Start field was removed from this project.', { exact: false })).toBeDefined();
   });
 });

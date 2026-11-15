@@ -7,6 +7,8 @@ import {
   type InboxTab
 } from '../../../shared/inbox';
 import type { ConnectionStatus } from '../../../shared/connection';
+import { Icon } from '../icons';
+import { IssueLabelChip } from '../issues/IssueLabelChip';
 
 /** A plain message for a failed tab. The main process's detail is for diagnostics, not for the owner. */
 function describeFailure(cause: unknown): string {
@@ -117,7 +119,9 @@ export function Inbox({
                 }`}
                 onClick={() => onOpenItem(item)}
               >
-                <span className={`issue-state ${item.state}`}>{item.state === 'open' ? '●' : '✓'}</span>
+                <span className={`issue-state ${item.state}`} aria-hidden="true">
+                  <Icon name={item.kind === 'pull' ? 'pull' : 'issue'} size={15} />
+                </span>
                 <span className="issue-copy">
                   <span className="issue-title">
                     {item.title} {item.isDraft && <small>Draft pull request</small>}
@@ -129,9 +133,7 @@ export function Inbox({
                   {item.labels.length > 0 && (
                     <span className="issue-labels">
                       {item.labels.map((label) => (
-                        <span className="issue-label" key={label.name}>
-                          {label.name}
-                        </span>
+                        <IssueLabelChip key={label.name} label={label} />
                       ))}
                     </span>
                   )}

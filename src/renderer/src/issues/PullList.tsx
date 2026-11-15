@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { PullListPage, PullListQuery, PullStateFilter, PullSummary } from '../../../shared/issues';
 import { NewPullForm } from './NewPullForm';
+import { Icon } from '../icons';
+import { IssueLabelChip } from './IssueLabelChip';
 
 export function PullList({
   repoFullName,
@@ -120,7 +122,9 @@ export function PullList({
               className={`issue-row ${selectedNumber === pull.number ? 'selected' : ''}`}
               onClick={() => onOpenPull(pull.number)}
             >
-              <span className={`issue-state ${pull.state}`}>{pull.state === 'open' ? '●' : '✓'}</span>
+              <span className={`issue-state ${pull.state}`} aria-hidden="true">
+                <Icon name={pull.state === 'open' ? 'pull' : 'check'} size={15} />
+              </span>
               <span className="issue-copy">
                 <span className="issue-title">
                   #{pull.number} {pull.title} {pull.draft && <small>Draft</small>}
@@ -131,9 +135,7 @@ export function PullList({
                 {pull.labels.length > 0 && (
                   <span className="issue-labels">
                     {pull.labels.map((l) => (
-                      <span className="issue-label" key={l.name}>
-                        {l.name}
-                      </span>
+                      <IssueLabelChip key={l.name} label={l} />
                     ))}
                   </span>
                 )}

@@ -75,6 +75,12 @@ let api: {
   app: { openExternal: ReturnType<typeof vi.fn> };
 };
 
+/** Opens the comment menu and picks an action from it. */
+function clickCommentAction(name: 'Edit' | 'Delete'): void {
+  fireEvent.click(screen.getAllByRole('button', { name: 'Comment options' })[0] as HTMLElement);
+  fireEvent.click(screen.getByRole('menuitem', { name }));
+}
+
 describe('IssueDetailView comments', () => {
   beforeEach(() => {
     api = {
@@ -145,8 +151,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Comment options' })).toHaveLength(1);
   });
 
   it('saves an edit against the version it started from and updates the comment in place', async () => {
@@ -162,7 +167,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    clickCommentAction('Edit');
     const editor = screen.getByRole('textbox', { name: 'Edit comment' });
     expect(editor).toHaveValue('Original text');
     fireEvent.change(editor, { target: { value: 'Fixed text' } });
@@ -194,7 +199,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    clickCommentAction('Edit');
     fireEvent.change(screen.getByRole('textbox', { name: 'Edit comment' }), {
       target: { value: 'Fixed text' }
     });
@@ -230,7 +235,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    clickCommentAction('Edit');
     fireEvent.change(screen.getByRole('textbox', { name: 'Edit comment' }), {
       target: { value: 'Mine only' }
     });
@@ -249,7 +254,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    clickCommentAction('Delete');
 
     await waitFor(() => expect(screen.queryByText('Original text')).not.toBeInTheDocument());
     expect(api.comments.delete).toHaveBeenCalledWith('orbit-owner/app', 9);
@@ -261,7 +266,7 @@ describe('IssueDetailView comments', () => {
     renderView();
     await screen.findByText('Original text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    clickCommentAction('Delete');
 
     expect(api.comments.delete).not.toHaveBeenCalled();
     expect(screen.getByText('Original text')).toBeInTheDocument();
@@ -272,9 +277,11 @@ describe('IssueDetailView comments', () => {
     await screen.findByText('Original text');
 
     expect(screen.queryByRole('textbox', { name: 'Write a comment' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Comment options' })).not.toBeInTheDocument();
     expect(
-      within(screen.getByRole('region', { name: 'Comments' })).queryByRole('button', { name: 'Delete' })
+      within(screen.getByRole('region', { name: 'Comments' })).queryByRole('button', {
+        name: 'Comment options'
+      })
     ).toBeNull();
   });
 });
