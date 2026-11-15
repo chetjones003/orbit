@@ -1,4 +1,5 @@
 import type { AuthStatus } from './auth';
+import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type {
   CommentUpdateResult,
@@ -44,6 +45,7 @@ export const IpcChannels = {
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
   commentsDelete: 'comments:delete',
+  attachmentsUpload: 'attachments:upload',
   refreshWake: 'refresh:wake',
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
@@ -86,6 +88,8 @@ export interface OrbitSettings {
   }>;
   theme: 'light' | 'dark';
   windowState: WindowState | null;
+  /** The user has accepted that uploads to public repos are public as soon as they upload. */
+  publicUploadNoticeAcknowledged: boolean;
 }
 
 export type SettingsUpdate = Partial<Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme'>> & {
@@ -173,6 +177,17 @@ export interface OrbitApi {
       baseUpdatedAt: string
     ): Promise<CommentUpdateResult>;
     delete(repoFullName: string, commentId: number): Promise<void>;
+  };
+  attachments: {
+    /**
+     * Uploads a file for a comment or issue body in a personal repo. Main holds the token and makes the request.
+     * Resolves 'public-notice' for a public repo until the user acknowledges the upload is public at once.
+     */
+    upload(
+      repoFullName: string,
+      file: AttachmentFile,
+      options: { acknowledgedPublic: boolean }
+    ): Promise<AttachmentUploadResult>;
   };
   diagnostics: {
     /** Records a renderer failure by scope and short code only. Never message text. */

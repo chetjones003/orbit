@@ -3,11 +3,14 @@ export interface GitHubEndpoints {
   oauthBaseUrl: string;
   /** GitHub REST API base. */
   apiBaseUrl: string;
+  /** Host that receives attachment uploads. */
+  uploadsBaseUrl: string;
 }
 
 export const GITHUB_ENDPOINTS: GitHubEndpoints = {
   oauthBaseUrl: 'https://github.com',
-  apiBaseUrl: 'https://api.github.com'
+  apiBaseUrl: 'https://api.github.com',
+  uploadsBaseUrl: 'https://uploads.github.com'
 };
 
 /**
@@ -27,5 +30,5 @@ export function resolveGitHubEndpoints(override: string | undefined): GitHubEndp
   const bareOrigin = url.pathname === '/' && url.search === '' && url.hash === '' && url.username === '';
   if (url.protocol !== 'http:' || !loopback || !bareOrigin) return GITHUB_ENDPOINTS;
   const base = `${url.protocol}//${url.host}`;
-  return { oauthBaseUrl: base, apiBaseUrl: base };
+  return { oauthBaseUrl: base, apiBaseUrl: base, uploadsBaseUrl: base };
 }

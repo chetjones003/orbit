@@ -58,14 +58,24 @@ if (!app.requestSingleInstanceLock()) {
       console.error('Stored sign-in restore failed:', error instanceof Error ? error.name : 'unknown');
     });
     const endpoints = resolveGitHubEndpoints(process.env['ORBIT_GITHUB_URL']);
-    const client = new GitHubClient({ apiBaseUrl: endpoints.apiBaseUrl });
+    const client = new GitHubClient({
+      apiBaseUrl: endpoints.apiBaseUrl,
+      uploadsBaseUrl: endpoints.uploadsBaseUrl
+    });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
     // Writes are refused while the engine reports offline or rate limiting, so outcomes stay certain.
     const issues = new IssueService({
       auth,
       apiBaseUrl: endpoints.apiBaseUrl,
+      uploadsBaseUrl: endpoints.uploadsBaseUrl,
       client,
-      canWrite: () => writesAllowed(engine.getStatus())
+      canWrite: () => writesAllowed(engine.getStatus()),
+      attachmentNotice: {
+        isAcknowledged: async () => (await settings.load()).publicUploadNoticeAcknowledged,
+        acknowledge: async () => {
+          await settings.acknowledgePublicUploadNotice();
+        }
+      }
     });
     // Visible data refreshes only while signed in. The ETag cache stays in memory.
     const engine = new RefreshEngine({

@@ -6,14 +6,16 @@ describe('resolveGitHubEndpoints', () => {
     expect(resolveGitHubEndpoints(undefined)).toEqual(GITHUB_ENDPOINTS);
     expect(GITHUB_ENDPOINTS).toEqual({
       oauthBaseUrl: 'https://github.com',
-      apiBaseUrl: 'https://api.github.com'
+      apiBaseUrl: 'https://api.github.com',
+      uploadsBaseUrl: 'https://uploads.github.com'
     });
   });
 
   it('accepts a loopback override for controlled tests', () => {
     expect(resolveGitHubEndpoints('http://127.0.0.1:4010')).toEqual({
       oauthBaseUrl: 'http://127.0.0.1:4010',
-      apiBaseUrl: 'http://127.0.0.1:4010'
+      apiBaseUrl: 'http://127.0.0.1:4010',
+      uploadsBaseUrl: 'http://127.0.0.1:4010'
     });
   });
 

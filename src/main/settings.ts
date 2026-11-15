@@ -6,7 +6,8 @@ const DEFAULTS: OrbitSettings = {
   pinnedRepoIds: [],
   customViews: [],
   theme: 'dark',
-  windowState: null
+  windowState: null,
+  publicUploadNoticeAcknowledged: false
 };
 
 /** Stores only user preferences. GitHub responses and credentials never belong here. */
@@ -37,7 +38,9 @@ export class SettingsStore {
         pinnedRepoIds: preferenceUpdate.pinnedRepoIds ?? current.pinnedRepoIds,
         customViews: preferenceUpdate.customViews ?? current.customViews,
         theme: preferenceUpdate.theme ?? current.theme,
-        windowState: current.windowState
+        windowState: current.windowState,
+        // Set only by acknowledgePublicUploadNotice, never by a general update from the renderer.
+        publicUploadNoticeAcknowledged: current.publicUploadNoticeAcknowledged
       };
       if (typeof detailsWidth === 'number') {
         candidate.windowState = {
@@ -48,6 +51,14 @@ export class SettingsStore {
       const next = normalizeSettings(candidate);
       await this.save(next);
       return next;
+    });
+  }
+
+  /** Records that the user accepted the public-upload notice. Only main calls this; the general update cannot. */
+  async acknowledgePublicUploadNotice(): Promise<void> {
+    return this.enqueue(async () => {
+      const current = await this.load();
+      await this.save({ ...current, publicUploadNoticeAcknowledged: true });
     });
   }
 
@@ -94,7 +105,8 @@ function normalizeSettings(value: unknown): OrbitSettings {
       : [],
     customViews,
     theme: value['theme'] === 'light' ? 'light' : 'dark',
-    windowState
+    windowState,
+    publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
   };
 }
 

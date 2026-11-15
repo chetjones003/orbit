@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { IpcChannels, type AppInfo, type OpenExternalResult, type SettingsUpdate } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
+import type { AttachmentFile, AttachmentUploadResult } from '../shared/attachments';
 import { openExternalIfAllowed } from './window';
 import { isAppUrl } from './security';
 import type { AuthService } from './github/auth-service';
@@ -56,6 +57,7 @@ export interface IpcOptions {
     | 'setIssueState'
     | 'getRepoOptions'
     | 'setTaskItem'
+    | 'uploadAttachment'
   >;
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
 }
@@ -178,6 +180,21 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
         return issues.setTaskItem(repoFullName, number, input);
       }
     );
+    ipcMain.handle(
+      IpcChannels.attachmentsUpload,
+      (
+        event,
+        repoFullName: string,
+        file: unknown,
+        options: { acknowledgedPublic: boolean }
+      ): Promise<AttachmentUploadResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        const parsed = parseAttachmentFile(file);
+        return issues.uploadAttachment(repoFullName, parsed, {
+          acknowledgedPublic: options?.acknowledgedPublic === true
+        });
+      }
+    );
   }
   if (comments) {
     ipcMain.handle(
@@ -274,6 +291,18 @@ function registerRefreshHandlers(refresh: RefreshPort, devServerOrigin?: string)
       win.webContents.send(IpcChannels.refreshStatusChanged, status);
     }
   });
+}
+
+/**
+ * A file from the renderer must be a name and raw bytes. The service checks the type and size; this only
+ * stops malformed payloads from reaching it.
+ */
+export function parseAttachmentFile(input: unknown): AttachmentFile {
+  const file = input as { name?: unknown; bytes?: unknown } | null;
+  if (typeof file?.name !== 'string' || file.name.length > 255 || !(file.bytes instanceof Uint8Array)) {
+    throw new Error('Choose a file to attach.');
+  }
+  return { name: file.name, bytes: file.bytes };
 }
 
 const CODE_PATTERN = /^[a-z][a-z-]{0,39}$/;

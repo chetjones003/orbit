@@ -10,6 +10,8 @@ import { continueList, formatAction, pasteEdit, type FormatKind, type TextEdit }
 export interface CodeEditorHandle {
   apply(edit: TextEdit): void;
   format(kind: FormatKind): void;
+  /** Offset of the insertion point, where attachments go. */
+  cursor(): number;
   focus(): void;
 }
 
@@ -21,6 +23,8 @@ export interface CodeEditorProps {
   onSubmit: () => void;
   ariaLabel: string;
   placeholder?: string;
+  /** Files pasted or dropped into the editor, with the offset they landed at. Without it, files are ignored. */
+  onFiles?: (files: File[], at: number) => void;
 }
 
 /**
@@ -28,14 +32,14 @@ export interface CodeEditorProps {
  * Ctrl/Cmd+Enter submits; Enter continues lists; Esc then Tab leaves the editor.
  */
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
-  { value, onChange, onSubmit, ariaLabel, placeholder: hint },
+  { value, onChange, onSubmit, ariaLabel, placeholder: hint, onFiles },
   ref
 ) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Latest callbacks, so the editor is created once and never rebuilt on each render.
-  const callbacks = useRef({ onChange, onSubmit });
-  callbacks.current = { onChange, onSubmit };
+  const callbacks = useRef({ onChange, onSubmit, onFiles });
+  callbacks.current = { onChange, onSubmit, onFiles };
   // Set by Esc. The next Tab then moves focus out instead of indenting.
   const released = useRef(false);
 
@@ -94,6 +98,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
             paste: (event, target) => {
               const data = event.clipboardData;
               if (!data) return false;
+              const files = Array.from(data.files);
+              if (files.length > 0 && callbacks.current.onFiles) {
+                event.preventDefault();
+                callbacks.current.onFiles(files, target.state.selection.main.from);
+                return true;
+              }
               // Plain text is inserted verbatim. Rich HTML is reduced to its text, so no markup comes in.
               const text = data.getData('text/plain') || htmlToText(data.getData('text/html'));
               if (text === '') return false;
@@ -101,6 +111,21 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
               const { from, to } = target.state.selection.main;
               const edit = pasteEdit(target.state.doc.toString(), from, to, text);
               target.dispatch({ changes: edit.changes, selection: edit.selection });
+              return true;
+            },
+            // Dragging files over the editor must be allowed, or the browser never delivers the drop.
+            dragover: (event) => {
+              if (!callbacks.current.onFiles || !event.dataTransfer?.types.includes('Files')) return false;
+              event.preventDefault();
+              return true;
+            },
+            drop: (event, target) => {
+              const files = Array.from(event.dataTransfer?.files ?? []);
+              if (files.length === 0 || !callbacks.current.onFiles) return false;
+              event.preventDefault();
+              const at =
+                target.posAtCoords({ x: event.clientX, y: event.clientY }) ?? target.state.doc.length;
+              callbacks.current.onFiles(files, at);
               return true;
             }
           }),
@@ -136,6 +161,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       format: (kind) => {
         if (view.current) runFormat(view.current, kind);
       },
+      cursor: () => view.current?.state.selection.main.head ?? 0,
       focus: () => view.current?.focus()
     }),
     []
