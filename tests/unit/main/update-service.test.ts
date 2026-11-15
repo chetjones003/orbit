@@ -39,17 +39,44 @@ describe('UpdateService', () => {
     }
   });
 
-  it('prepares an eligible release and exposes the prepared status', async () => {
+  it('offers an eligible release and downloads it only when asked', async () => {
     const { service, prepare } = setup({ check: async () => release('0.2.0') });
-    const status = await service.checkNow();
+    const offered = await service.checkNow();
+    expect(offered).toEqual({ kind: 'available', version: '0.2.0', releaseNotes: 'Notes for 0.2.0' });
+    expect(prepare).not.toHaveBeenCalled();
+    const ready = await service.download();
     expect(prepare).toHaveBeenCalledTimes(1);
-    expect(status).toEqual({ kind: 'ready', version: '0.2.0', releaseNotes: 'Notes for 0.2.0' });
-    expect(service.getStatus()).toEqual(status);
+    expect(ready).toEqual({ kind: 'ready', version: '0.2.0', releaseNotes: 'Notes for 0.2.0' });
+    expect(service.getStatus()).toEqual(ready);
+  });
+
+  it('does nothing when asked to download without an offered release', async () => {
+    const { service, prepare } = setup();
+    await service.checkNow();
+    expect(await service.download()).toEqual({ kind: 'up-to-date', checkedAt: expect.any(Number) });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('turns a failed download into an error status that names no details', async () => {
+    const { service } = setup({ check: async () => release('0.2.0') });
+    const failing = new UpdateService({
+      currentVersion: '0.1.0',
+      check: async () => release('0.2.0'),
+      prepare: async () => {
+        throw new Error('https://github.com/secret-token');
+      }
+    });
+    await failing.checkNow();
+    const status = await failing.download();
+    expect(status).toEqual({ kind: 'error', message: 'Orbit could not download the update.' });
+    expect(JSON.stringify(status)).not.toContain('secret-token');
+    expect(service).toBeDefined();
   });
 
   it('does not check again while an update is already prepared', async () => {
     const { service, check } = setup({ check: async () => release('0.2.0') });
     await service.checkNow();
+    await service.download();
     await service.checkNow();
     expect(check).toHaveBeenCalledTimes(1);
   });
@@ -79,6 +106,8 @@ describe('UpdateService', () => {
     const { service, apply } = setup({ check: async () => release('0.2.0') });
     await expect(service.install()).rejects.toThrow('No update is ready');
     await service.checkNow();
+    await expect(service.install()).rejects.toThrow('No update is ready');
+    await service.download();
     await service.install();
     expect(apply).toHaveBeenCalledTimes(1);
   });
@@ -105,6 +134,7 @@ describe('UpdateService', () => {
     const seen: string[] = [];
     service.onChange((status) => seen.push(status.kind));
     await service.checkNow();
-    expect(seen).toEqual(['checking', 'downloading', 'ready']);
+    await service.download();
+    expect(seen).toEqual(['checking', 'available', 'downloading', 'ready']);
   });
 });

@@ -123,6 +123,7 @@ export const IpcChannels = {
   updatesGetStatus: 'updates:get-status',
   updatesCheck: 'updates:check',
   updatesInstall: 'updates:install',
+  updatesDownload: 'updates:download',
   /** Main-to-renderer push. Payload is an UpdateStatus. */
   updatesStatusChanged: 'updates:status-changed',
   diagnosticsGetReport: 'diagnostics:get-report',
@@ -240,6 +241,8 @@ export interface OrbitApi {
     getStatus(): Promise<UpdateStatus>;
     /** Checks GitHub now. Never rejects; failures come back as an error status. */
     check(): Promise<UpdateStatus>;
+    /** Downloads the release a check offered. Only call after the user asked for it. */
+    download(): Promise<UpdateStatus>;
     /** Restarts into or opens the prepared update. Only call after the user confirmed. */
     install(): Promise<void>;
     /** Subscribes to status changes. Returns an unsubscribe function. */

@@ -52,6 +52,12 @@ const PATHS = {
   chevronLeft: <path d="M14.5 6 8.5 12l6 6" />,
   chevronDown: <path d="M6 9.5 12 15.5l6-6" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  updateArrow: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16V8.5M8.5 12 12 8.5l3.5 3.5" />
+    </>
+  ),
   minimize: <path d="M5 12.5h14" />,
   maximize: <rect x="5" y="5" width="14" height="14" rx="1.5" />,
   restore: (

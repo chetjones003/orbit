@@ -31,7 +31,7 @@ import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { ProjectsView } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
-import { UpdateBanner } from './updates/UpdateBanner';
+import { UpdateDialog } from './updates/UpdateDialog';
 import { WorkspaceNav, type WorkspaceView } from './chrome/WorkspaceNav';
 import { TrackedRepoGroups } from './issues/TrackedRepoGroups';
 import type { IssueStateFilter } from '../../shared/issues';
@@ -83,6 +83,16 @@ export function App() {
   const checkForUpdates = useCallback(() => {
     void window.orbit.updates.check().then(setUpdateStatus, () => undefined);
   }, []);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const openUpdates = useCallback(() => {
+    setUpdateDialogOpen(true);
+    checkForUpdates();
+  }, [checkForUpdates]);
+  // A newer release found in the background opens the dialog once, so the user is asked before anything downloads.
+  const offeredVersion = updateStatus.kind === 'available' ? updateStatus.version : null;
+  useEffect(() => {
+    if (offeredVersion !== null) setUpdateDialogOpen(true);
+  }, [offeredVersion]);
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<string | null>(null);
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
@@ -487,7 +497,7 @@ export function App() {
         signedIn={status?.kind === 'signed-in'}
         nextThemeLabel={`Switch to ${settings?.theme === 'dark' ? 'light' : 'dark'} theme`}
         onToggleTheme={toggleTheme}
-        onCheckUpdates={checkForUpdates}
+        onCheckUpdates={openUpdates}
         onSignOut={signOut}
       />
       <main className="orbit-shell" aria-label="Orbit">
@@ -496,7 +506,6 @@ export function App() {
             view={view}
             signedInLogin={status?.kind === 'signed-in' ? status.login : null}
             refreshing={loadingRepos}
-            checkingUpdates={updateStatus.kind === 'checking' || updateStatus.kind === 'downloading'}
             theme={settings?.theme ?? 'dark'}
             buildLabel={info?.version ?? 'Starting…'}
             onView={(next) => {
@@ -505,7 +514,7 @@ export function App() {
               setCreatingIssue(false);
             }}
             onRefresh={refreshNow}
-            onCheckUpdates={checkForUpdates}
+            onCheckUpdates={openUpdates}
             onToggleTheme={toggleTheme}
             onSignOut={signOut}
           />
@@ -728,12 +737,19 @@ export function App() {
                   {status.notice}
                 </p>
               )}
-              <UpdateBanner
-                status={updateStatus}
-                onCheck={checkForUpdates}
-                onInstall={() => window.orbit.updates.install()}
-                hasUnsavedDrafts={() => drafts.hasDrafts()}
-              />
+              {updateDialogOpen && (
+                <UpdateDialog
+                  status={updateStatus}
+                  currentVersion={info?.version}
+                  onClose={() => setUpdateDialogOpen(false)}
+                  onCheck={checkForUpdates}
+                  onDownload={() =>
+                    void window.orbit.updates.download().then(setUpdateStatus, () => undefined)
+                  }
+                  onInstall={() => window.orbit.updates.install()}
+                  hasUnsavedDrafts={() => drafts.hasDrafts()}
+                />
+              )}
               {refreshStatus && (
                 <ConnectionBanner
                   status={refreshStatus}

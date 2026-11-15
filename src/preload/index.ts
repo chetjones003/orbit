@@ -59,6 +59,7 @@ const api: OrbitApi = {
   updates: {
     getStatus: () => ipcRenderer.invoke(IpcChannels.updatesGetStatus),
     check: () => ipcRenderer.invoke(IpcChannels.updatesCheck),
+    download: () => ipcRenderer.invoke(IpcChannels.updatesDownload),
     install: () => ipcRenderer.invoke(IpcChannels.updatesInstall),
     onStatusChanged: (listener: (status: UpdateStatus) => void) => {
       const handler = (_event: IpcRendererEvent, status: UpdateStatus): void => listener(status);

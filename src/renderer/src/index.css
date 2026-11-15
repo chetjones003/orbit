@@ -4159,3 +4159,62 @@ body.card-dragging * {
   color: var(--muted);
   border-style: dashed;
 }
+
+/* Update dialog: the offer, the release notes as plain text, download progress, and restart confirmation. */
+.update-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.update-dialog p {
+  margin: 0;
+}
+.update-notes {
+  max-height: 300px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--text);
+  font:
+    12.5px/1.6 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  white-space: pre-wrap;
+}
+.update-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--raised);
+}
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.update-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+.update-check {
+  flex: none;
+}
