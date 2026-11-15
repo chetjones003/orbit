@@ -28,6 +28,7 @@ import { PullList } from './issues/PullList';
 import { Inbox } from './inbox/Inbox';
 import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
+import { ProjectsView } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
 
 /** The issue shown in the details panel or the expanded view. */
@@ -62,7 +63,7 @@ export function App() {
   const [creatingIssue, setCreatingIssue] = useState(false);
   const [pullMode, setPullMode] = useState(false);
   /** Which top-level view fills the workspace. The details panel follows the selected item in either view. */
-  const [view, setView] = useState<'repos' | 'inbox'>('repos');
+  const [view, setView] = useState<'repos' | 'inbox' | 'projects'>('repos');
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -460,6 +461,16 @@ export function App() {
         >
           ⌑
         </button>
+        <button
+          className={`rail-button ${view === 'projects' ? 'active' : ''}`}
+          aria-current={view === 'projects' ? 'page' : undefined}
+          aria-label="Projects"
+          title="Projects"
+          disabled={status?.kind !== 'signed-in'}
+          onClick={() => setView('projects')}
+        >
+          ▤
+        </button>
         <div className="rail-spacer" />
         <button
           className="rail-button"
@@ -560,6 +571,22 @@ export function App() {
                   number: item.number,
                   kind: item.kind
                 });
+                setIssueExpanded(false);
+                setDetailsOpen(true);
+              }}
+            />
+          </div>
+        ) : view === 'projects' ? (
+          <div className="issues-view">
+            <div className="repo-toolbar">
+              <div>
+                <h2>Projects</h2>
+                <p>Your projects, their saved views, and the items in them</p>
+              </div>
+            </div>
+            <ProjectsView
+              onOpenItem={(repoFullName, number, kind) => {
+                setIssueRef({ repoFullName, number, kind });
                 setIssueExpanded(false);
                 setDetailsOpen(true);
               }}

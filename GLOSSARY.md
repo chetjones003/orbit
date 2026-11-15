@@ -20,8 +20,14 @@ _Avoid_: Favourite, starred repo (starring is a separate GitHub feature)
 **Project**: A GitHub Projects (v2) project owned by the user's account. Its items are issues and pull requests with field values.
 _Avoid_: Board (a board is only one way of showing a project), classic project
 
-**Saved view**: A view of a Project that is defined and stored on GitHub.
+**Saved view**: A view of a Project that is defined and stored on GitHub. Orbit shows table and board saved views; roadmap saved views are not shown yet.
 _Avoid_: GitHub view
+
+**Project item**: An issue, pull request, or draft issue that belongs to a Project, with its values for the Project's fields.
+_Avoid_: Card (a card is how a board shows an item), row (a row is how a table shows one)
+
+**Project field**: A custom field of a Project whose value an item can set: single-select, iteration, text, number, or date. Built-in fields such as Title, Labels, and Milestone are read-only and are not offered for editing.
+_Avoid_: Column (a column is one option of a board's grouping field), property
 
 **Custom view**: An Orbit-defined way to show one Project's items: Kanban, Gantt, Calendar, or Table. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view

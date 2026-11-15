@@ -10,6 +10,7 @@ import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
 import { IssueEditor } from './IssueEditor';
 import { IssueFields } from './IssueFields';
+import { ItemProjects } from '../projects/ItemProjects';
 import { PullActionsPanel } from './PullActions';
 import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
@@ -228,6 +229,8 @@ export function IssueDetailView({
       )}
 
       {notice}
+
+      <ItemProjects repoFullName={repoFullName} number={number} />
 
       {editable && (
         <div className="issue-actions">

@@ -111,6 +111,20 @@ const api: OrbitApi = {
   inbox: {
     list: (query) => ipcRenderer.invoke(IpcChannels.inboxList, query)
   },
+  projects: {
+    list: () => ipcRenderer.invoke(IpcChannels.projectsList),
+    detail: (projectId: string) => ipcRenderer.invoke(IpcChannels.projectsDetail, projectId),
+    items: (projectId: string, filter: string) =>
+      ipcRenderer.invoke(IpcChannels.projectsItems, projectId, filter),
+    itemMemberships: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.projectsItemMemberships, repoFullName, number),
+    addItem: (projectId: string, repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.projectsAddItem, projectId, repoFullName, number),
+    removeItem: (projectId: string, itemId: string) =>
+      ipcRenderer.invoke(IpcChannels.projectsRemoveItem, projectId, itemId),
+    setField: (projectId: string, itemId: string, change) =>
+      ipcRenderer.invoke(IpcChannels.projectsSetField, projectId, itemId, change)
+  },
   markdown: {
     preview: (repoFullName: string, text: string) =>
       ipcRenderer.invoke(IpcChannels.markdownPreview, repoFullName, text)

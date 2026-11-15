@@ -5,6 +5,7 @@ import { IssueDetailView } from '../../../src/renderer/src/issues/IssueDetail';
 import { NewIssueForm } from '../../../src/renderer/src/issues/NewIssueForm';
 import { drafts } from '../../../src/renderer/src/comments/draft-store';
 import type { IssueDetail, IssueRepoOptions, IssueSnapshot, IssueSummary } from '../../../src/shared/issues';
+import { projectsStub } from './fakes/projects';
 
 vi.mock('../../../src/renderer/src/comments/CodeEditor', async () => {
   const { FakeCodeEditor } = await import('./fakes/fake-code-editor');
@@ -82,6 +83,7 @@ function taskBoxes(container: HTMLElement): HTMLInputElement[] {
 describe('IssueDetailView editing', () => {
   beforeEach(() => {
     api = {
+      projects: projectsStub(),
       issues: {
         detail: vi.fn(async () => detail()),
         repoOptions: vi.fn(async () => OPTIONS),
@@ -294,6 +296,7 @@ describe('IssueDetailView editing', () => {
 describe('NewIssueForm', () => {
   beforeEach(() => {
     api = {
+      projects: projectsStub(),
       issues: {
         detail: vi.fn(),
         repoOptions: vi.fn(),
