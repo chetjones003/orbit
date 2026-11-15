@@ -90,6 +90,7 @@ export function IssueEditor({
         onExternalLink={onLink}
         viewOnGitHubUrl={viewOnGitHubUrl}
         allowEmpty
+        attachTo={{ repoFullName }}
       />
       {conflict && (
         <div className="issue-error" role="alert">

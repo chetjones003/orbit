@@ -129,3 +129,54 @@ describe('GitHubClient secondary limits', () => {
     });
   });
 });
+
+describe('GitHubClient raw uploads', () => {
+  it('posts raw bytes with their content type to the uploads host, using the bearer token', async () => {
+    const fetch = vi.fn(async () =>
+      jsonResponse(201, { href: 'https://github.com/user-attachments/assets/x' })
+    );
+    const client = new GitHubClient({
+      apiBaseUrl: 'https://api.github.test',
+      uploadsBaseUrl: 'https://uploads.github.test',
+      fetch
+    });
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+
+    const result = await client.send<{ href: string }>('POST', '/user-attachments/assets?name=a.png', {
+      token: 'tok',
+      scope: 's1',
+      base: 'uploads',
+      rawBody: { bytes, contentType: 'image/png' },
+      accept: 'application/json'
+    });
+
+    expect(result).toEqual({ href: 'https://github.com/user-attachments/assets/x' });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://uploads.github.test/user-attachments/assets?name=a.png');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      authorization: 'Bearer tok',
+      accept: 'application/json',
+      'content-type': 'image/png'
+    });
+    expect(init.body).toBe(bytes);
+  });
+
+  it('maps an upload refusal to an http error that carries the status', async () => {
+    const fetch = vi.fn(async () => jsonResponse(422, { message: 'nope' }));
+    const client = new GitHubClient({
+      apiBaseUrl: 'https://api.github.test',
+      uploadsBaseUrl: 'https://u.test',
+      fetch
+    });
+
+    await expect(
+      client.send('POST', '/user-attachments/assets', {
+        token: 'tok',
+        scope: 's1',
+        base: 'uploads',
+        rawBody: { bytes: new Uint8Array([1]), contentType: 'image/png' }
+      })
+    ).rejects.toMatchObject({ kind: 'http', status: 422 });
+  });
+});

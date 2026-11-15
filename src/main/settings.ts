@@ -6,7 +6,8 @@ const DEFAULTS: OrbitSettings = {
   pinnedRepoIds: [],
   customViews: [],
   theme: 'dark',
-  windowState: null
+  windowState: null,
+  publicUploadNoticeAcknowledged: false
 };
 
 /** Stores only user preferences. GitHub responses and credentials never belong here. */
@@ -37,7 +38,9 @@ export class SettingsStore {
         pinnedRepoIds: preferenceUpdate.pinnedRepoIds ?? current.pinnedRepoIds,
         customViews: preferenceUpdate.customViews ?? current.customViews,
         theme: preferenceUpdate.theme ?? current.theme,
-        windowState: current.windowState
+        windowState: current.windowState,
+        publicUploadNoticeAcknowledged:
+          preferenceUpdate.publicUploadNoticeAcknowledged ?? current.publicUploadNoticeAcknowledged
       };
       if (typeof detailsWidth === 'number') {
         candidate.windowState = {
@@ -94,7 +97,8 @@ function normalizeSettings(value: unknown): OrbitSettings {
       : [],
     customViews,
     theme: value['theme'] === 'light' ? 'light' : 'dark',
-    windowState
+    windowState,
+    publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
   };
 }
 

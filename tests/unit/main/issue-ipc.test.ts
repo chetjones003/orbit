@@ -48,7 +48,8 @@ describe('issue IPC handlers', () => {
       updateIssueFields: vi.fn(),
       setIssueState: vi.fn(),
       getRepoOptions: vi.fn(),
-      setTaskItem: vi.fn()
+      setTaskItem: vi.fn(),
+      uploadAttachment: vi.fn()
     };
     registerIpcHandlers({ issues });
     const query = { repoFullName: 'orbit-owner/app', state: 'open', page: 1 };
@@ -67,7 +68,8 @@ describe('issue IPC handlers', () => {
       updateIssueFields: vi.fn(),
       setIssueState: vi.fn(),
       getRepoOptions: vi.fn(),
-      setTaskItem: vi.fn()
+      setTaskItem: vi.fn(),
+      uploadAttachment: vi.fn()
     };
     registerIpcHandlers({ issues });
 
@@ -89,7 +91,8 @@ describe('issue IPC handlers', () => {
       updateIssueFields: vi.fn(),
       setIssueState: vi.fn(),
       getRepoOptions: vi.fn(),
-      setTaskItem: vi.fn()
+      setTaskItem: vi.fn(),
+      uploadAttachment: vi.fn()
     };
     registerIpcHandlers({ issues });
 
@@ -108,7 +111,8 @@ describe('issue IPC handlers', () => {
       updateIssueFields: vi.fn(),
       setIssueState: vi.fn(),
       getRepoOptions: vi.fn(),
-      setTaskItem: vi.fn()
+      setTaskItem: vi.fn(),
+      uploadAttachment: vi.fn()
     };
     registerIpcHandlers({ issues });
 

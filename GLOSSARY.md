@@ -74,3 +74,10 @@ _Avoid_: Metadata (too broad, and it includes the title and body)
 
 **Task checkbox**: A checkbox that comes from a task-list item (`- [ ]` or `- [x]`) in an issue body. Ticking one changes only that line of the body's source, and only when the body on GitHub is still the version the user saw. If it changed, nothing is written and the issue is reloaded.
 _Avoid_: Checklist item (the rendered list item is not the checkbox)
+
+**Attachment**: An image (PNG, JPG, GIF, WebP, SVG) or video (MP4, MOV, WebM) the user adds to a comment or issue body in one of their personal repos. Orbit uploads it through main, and its link goes into the Markdown in place of an uploading placeholder. Images are limited to 10 MB; videos to 10 MB on a free plan and 100 MB on a paid one.
+_Avoid_: Upload (the act, not the thing), file, asset (GitHub's word for the hosted file)
+
+**Public-upload notice**: The one-time warning shown before the first attachment to a public repo, because an attachment becomes public on GitHub as soon as it uploads. Once the user accepts it, it is not shown again.
+
+**GitHub fallback**: When an attachment cannot be uploaded (refused, rejected, or failed), Orbit offers Retry, Open on GitHub, and Remove. Open on GitHub opens the item on GitHub and copies the draft, so the file can be attached there.

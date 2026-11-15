@@ -44,6 +44,7 @@ export function NewIssueForm({ repoFullName, signedInLogin, onCreated, onCancel 
         viewOnGitHubUrl={`https://github.com/${repoFullName}/issues/new`}
         allowEmpty
         submitDisabled={blank}
+        attachTo={{ repoFullName }}
       />
     </section>
   );

@@ -35,12 +35,29 @@ describe('SettingsStore', () => {
       windowState: { x: 20, y: 30, width: 1200, height: 800, maximized: false, detailsWidth: 600 }
     });
     const file = JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>;
-    expect(Object.keys(file).sort()).toEqual(['customViews', 'pinnedRepoIds', 'theme', 'windowState']);
+    expect(Object.keys(file).sort()).toEqual([
+      'customViews',
+      'pinnedRepoIds',
+      'publicUploadNoticeAcknowledged',
+      'theme',
+      'windowState'
+    ]);
   });
 
   it('ignores invalid settings and clamps the details width', async () => {
     const { store } = await makeStore();
     await store.update({ detailsWidth: 100 });
     expect((await store.load()).windowState?.detailsWidth).toBe(260);
+  });
+});
+
+describe('SettingsStore public-upload notice', () => {
+  it('starts unacknowledged and keeps the acknowledgement across restarts', async () => {
+    const { store, dir } = await makeStore();
+    expect((await store.load()).publicUploadNoticeAcknowledged).toBe(false);
+
+    await store.update({ publicUploadNoticeAcknowledged: true });
+
+    expect((await new SettingsStore(dir).load()).publicUploadNoticeAcknowledged).toBe(true);
   });
 });

@@ -180,6 +180,7 @@ export function CommentThread({
                   onCancel={() => cancelEdit(comment)}
                   onExternalLink={onLink}
                   viewOnGitHubUrl={viewOnGitHubUrl}
+                  attachTo={{ repoFullName }}
                 />
                 {conflict?.commentId === comment.id && (
                   <ConflictPanel
@@ -243,6 +244,7 @@ export function CommentThread({
             onSubmit={postNew}
             onExternalLink={onLink}
             viewOnGitHubUrl={viewOnGitHubUrl}
+            attachTo={{ repoFullName }}
           />
         </div>
       )}

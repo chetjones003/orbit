@@ -73,6 +73,10 @@ const api: OrbitApi = {
     delete: (repoFullName: string, commentId: number) =>
       ipcRenderer.invoke(IpcChannels.commentsDelete, repoFullName, commentId)
   },
+  attachments: {
+    upload: (repoFullName: string, file, options) =>
+      ipcRenderer.invoke(IpcChannels.attachmentsUpload, repoFullName, file, options)
+  },
   diagnostics: {
     getReport: () => ipcRenderer.invoke(IpcChannels.diagnosticsGetReport),
     record: (entry) => ipcRenderer.invoke(IpcChannels.diagnosticsRecord, entry)

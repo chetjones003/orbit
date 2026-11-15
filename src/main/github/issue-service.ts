@@ -1,4 +1,11 @@
 import { COMMENT_MAX_CHARS, ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS } from '../../shared/issues';
+import {
+  checkAttachment,
+  isSafeAttachmentUrl,
+  type AccountPlan,
+  type AttachmentFile,
+  type AttachmentUploadResult
+} from '../../shared/attachments';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -62,14 +69,24 @@ interface GitHubCommentResponse {
   body_html?: string | null;
 }
 
+/** Remembers whether the user has acknowledged that uploads to public repos are public at once. */
+export interface AttachmentNoticeStore {
+  isAcknowledged(): Promise<boolean>;
+  acknowledge(): Promise<void>;
+}
+
 export interface IssueServiceOptions {
   auth: Pick<AuthService, 'getStatus' | 'getAccessToken'>;
   apiBaseUrl: string;
+  /** Host that receives attachment uploads. */
+  uploadsBaseUrl?: string;
   /** Shared client, so ETags are reused. Created internally when omitted. */
   client?: GitHubClient;
   fetch?: typeof fetch;
   /** False while GitHub is unreachable or rate limiting. Writes are then refused before sending. */
   canWrite?: () => boolean;
+  /** Where the public-upload acknowledgement is kept. Held in memory when omitted. */
+  attachmentNotice?: AttachmentNoticeStore;
 }
 
 /**
@@ -80,12 +97,89 @@ export class IssueService {
   private readonly auth: IssueServiceOptions['auth'];
   private readonly client: GitHubClient;
   private readonly canWrite: () => boolean;
+  private readonly notice: AttachmentNoticeStore;
 
   constructor(options: IssueServiceOptions) {
     this.auth = options.auth;
     this.client =
-      options.client ?? new GitHubClient({ apiBaseUrl: options.apiBaseUrl, fetch: options.fetch });
+      options.client ??
+      new GitHubClient({
+        apiBaseUrl: options.apiBaseUrl,
+        uploadsBaseUrl: options.uploadsBaseUrl,
+        fetch: options.fetch
+      });
     this.canWrite = options.canWrite ?? (() => true);
+    this.notice = options.attachmentNotice ?? memoryNotice();
+  }
+
+  /**
+   * Uploads a file for the user to link from a comment or issue body in one of their repos. The file's type and
+   * size are checked before any request is sent. A public repo returns 'public-notice' until the user acknowledges
+   * that the upload is public at once; nothing is uploaded before that.
+   */
+  async uploadAttachment(
+    repoFullName: string,
+    file: AttachmentFile,
+    options: { acknowledgedPublic: boolean }
+  ): Promise<AttachmentUploadResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (typeof file?.name !== 'string' || !(file.bytes instanceof Uint8Array)) {
+      throw new Error('Choose a file to attach.');
+    }
+    // Type and image size first, with the most generous video limit, so nothing is requested for a file that can never be uploaded.
+    const preliminary = checkAttachment({ name: file.name, size: file.bytes.byteLength }, 'paid');
+    if (!preliminary.ok) throw new Error(preliminary.message);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+
+    const access = readRepoAccess(
+      await this.client.get<unknown>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+        token,
+        scope
+      })
+    );
+    if (!access.canPush) throw new Error('You need write access to this repo to attach files.');
+
+    const plan = preliminary.kind === 'video' ? await this.accountPlan(token, scope) : 'free';
+    const checked = checkAttachment({ name: file.name, size: file.bytes.byteLength }, plan);
+    if (!checked.ok) throw new Error(checked.message);
+
+    if (!access.isPrivate) {
+      if (options.acknowledgedPublic) {
+        if (!(await this.notice.isAcknowledged())) await this.notice.acknowledge();
+      } else if (!(await this.notice.isAcknowledged())) {
+        return { kind: 'public-notice' };
+      }
+    }
+
+    const params = new URLSearchParams({
+      name: file.name,
+      content_type: checked.contentType,
+      repository_id: String(access.id)
+    });
+    const response = await this.client.send<unknown>(
+      'POST',
+      `/user-attachments/assets?${params.toString()}`,
+      {
+        token,
+        scope,
+        base: 'uploads',
+        rawBody: { bytes: file.bytes, contentType: checked.contentType },
+        accept: 'application/json'
+      }
+    );
+    const href = (response as { href?: unknown } | null)?.href;
+    if (typeof href !== 'string' || !isSafeAttachmentUrl(href)) {
+      throw new Error('GitHub did not return an attachment link.');
+    }
+    return { kind: 'uploaded', url: href };
+  }
+
+  /** Account plan decides the video limit. An unknown plan gets the free limit, the lower one. */
+  private async accountPlan(token: string, scope: string): Promise<AccountPlan> {
+    const me = await this.client.get<unknown>('/user', { token, scope });
+    const name = (me as { plan?: { name?: unknown } } | null)?.plan?.name;
+    return typeof name === 'string' && name !== 'free' ? 'paid' : 'free';
   }
 
   /** Renders Markdown the way GitHub will show it, in the repo's context (issue links, mentions). */
@@ -576,6 +670,27 @@ export class IssueService {
     if (status.kind !== 'signed-in') throw new Error('Sign in to GitHub to load issues.');
     return { token: await this.auth.getAccessToken(), scope: String(status.sessionId) };
   }
+}
+
+/** A repo counts as public only when GitHub says so; anything unclear gets the public-upload notice. */
+function readRepoAccess(raw: unknown): { id: number; isPrivate: boolean; canPush: boolean } {
+  const repo = raw as { id?: unknown; private?: unknown; permissions?: { push?: unknown } } | null;
+  if (typeof repo?.id !== 'number') throw new Error('GitHub returned an invalid repo.');
+  return {
+    id: repo.id,
+    isPrivate: repo.private === true,
+    canPush: repo.permissions?.push === true
+  };
+}
+
+function memoryNotice(): AttachmentNoticeStore {
+  let acknowledged = false;
+  return {
+    isAcknowledged: async () => acknowledged,
+    acknowledge: async () => {
+      acknowledged = true;
+    }
+  };
 }
 
 function validateState(state: unknown): IssueStateFilter {

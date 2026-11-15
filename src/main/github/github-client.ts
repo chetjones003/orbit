@@ -26,6 +26,8 @@ export class GitHubRequestError extends Error {
 
 export interface GitHubClientOptions {
   apiBaseUrl: string;
+  /** Host for attachment uploads. Defaults to GitHub's uploads host. */
+  uploadsBaseUrl?: string;
   fetch?: typeof fetch;
 }
 
@@ -56,11 +58,13 @@ interface CacheEntry {
  */
 export class GitHubClient {
   private readonly apiBaseUrl: string;
+  private readonly uploadsBaseUrl: string;
   private readonly apiFetch: typeof fetch;
   private readonly cache = new Map<string, CacheEntry>();
 
   constructor(options: GitHubClientOptions) {
     this.apiBaseUrl = options.apiBaseUrl.replace(/\/$/, '');
+    this.uploadsBaseUrl = (options.uploadsBaseUrl ?? 'https://uploads.github.com').replace(/\/$/, '');
     this.apiFetch = options.fetch ?? fetch;
   }
 
@@ -98,14 +102,18 @@ export class GitHubClient {
    * before retrying. `text` returns the raw body, for media types such as rendered HTML.
    */
   async send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, options: GitHubWriteOptions): Promise<T> {
-    const url = `${this.apiBaseUrl}${path}`;
+    const root = options.base === 'uploads' ? this.uploadsBaseUrl : this.apiBaseUrl;
+    const url = `${root}${path}`;
     const accept = options.accept ?? 'application/vnd.github+json';
     const headers: Record<string, string> = {
       authorization: `Bearer ${options.token}`,
       accept
     };
     const init: RequestInit = { method, headers };
-    if (options.body !== undefined) {
+    if (options.rawBody) {
+      headers['content-type'] = options.rawBody.contentType;
+      init.body = options.rawBody.bytes;
+    } else if (options.body !== undefined) {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(options.body);
     }
@@ -159,6 +167,10 @@ export class GitHubClient {
 export interface GitHubWriteOptions extends GitHubRequestOptions {
   /** JSON request body. */
   body?: unknown;
+  /** Send to the uploads host instead of the REST API. */
+  base?: 'uploads';
+  /** Raw request bytes for an attachment upload. Takes precedence over `body`. */
+  rawBody?: { bytes: Uint8Array; contentType: string };
   /** Return the raw response text instead of parsing JSON. */
   text?: boolean;
 }

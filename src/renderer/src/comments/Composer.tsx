@@ -1,5 +1,11 @@
 import { useRef, useState } from 'react';
 import { COMMENT_MAX_CHARS } from '../../../shared/issues';
+import {
+  attachmentMarkdown,
+  checkAttachment,
+  replaceFirst,
+  uploadPlaceholder
+} from '../../../shared/attachments';
 import { RichBody } from '../issues/RichBody';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
 import { countCharacters, isOverLimit, type FormatKind } from './markdown-edit';
@@ -31,6 +37,8 @@ export interface ComposerProps {
   onExternalLink: (href: string) => void;
   /** The item's own GitHub URL, used for the preview's "View on GitHub" fallback. */
   viewOnGitHubUrl: string;
+  /** When set, files can be attached to this repo: from the Attach button, a paste, or a drop. */
+  attachTo?: { repoFullName: string };
 }
 
 type PreviewState =
@@ -38,6 +46,17 @@ type PreviewState =
   | { status: 'loading' }
   | { status: 'ready'; html: string }
   | { status: 'error'; message: string };
+
+/** One attachment on its way into the text. Failed and waiting uploads keep their file so they can be retried. */
+interface Upload {
+  id: number;
+  name: string;
+  /** The text standing in for the file in the editor. Empty when the file was refused before any placeholder. */
+  placeholder: string;
+  file: File;
+  status: 'uploading' | 'notice' | 'failed';
+  message?: string;
+}
 
 const TOOLBAR: Array<{ kind: FormatKind; label: string; glyph: string; shortcut?: string }> = [
   { kind: 'bold', label: 'Bold', glyph: 'B', shortcut: 'Ctrl/Cmd+B' },
@@ -49,6 +68,8 @@ const TOOLBAR: Array<{ kind: FormatKind; label: string; glyph: string; shortcut?
   { kind: 'numbered', label: 'Numbered list', glyph: '1.' },
   { kind: 'task', label: 'Task list', glyph: '☐' }
 ];
+
+const ATTACHMENT_EXTENSIONS = '.png,.jpg,.jpeg,.gif,.webp,.svg,.mp4,.mov,.webm';
 
 /**
  * Writes or edits one comment. Source editing with a Write and Preview tab. Text stays in memory
@@ -66,22 +87,129 @@ export function Composer({
   allowEmpty = false,
   submitDisabled: blockedByCaller = false,
   onExternalLink,
-  viewOnGitHubUrl
+  viewOnGitHubUrl,
+  attachTo
 }: ComposerProps) {
   const [text, setText] = useState(() => drafts.get(draftKey) ?? initialText ?? '');
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [preview, setPreview] = useState<PreviewState>({ status: 'idle' });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploads, setUploads] = useState<Upload[]>([]);
   const editor = useRef<CodeEditorHandle>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Uploads finish asynchronously, so they read the latest text here rather than from a render's closure.
+  const textRef = useRef(text);
+  const nextUploadId = useRef(0);
 
   const length = countCharacters(text);
   const overLimit = isOverLimit(text);
   const empty = text.trim() === '';
+  const attaching = uploads.length > 0;
 
   const change = (next: string): void => {
+    textRef.current = next;
     setText(next);
     drafts.set(draftKey, next);
+  };
+
+  /** Inserts at an offset through the editor, so the cursor and undo history stay with the user. */
+  const insertAt = (at: number, insert: string): void => {
+    const from = Math.min(at, textRef.current.length);
+    if (editor.current) {
+      editor.current.apply({
+        changes: { from, to: from, insert },
+        selection: { anchor: from + insert.length, head: from + insert.length }
+      });
+    } else {
+      change(textRef.current.slice(0, from) + insert + textRef.current.slice(from));
+    }
+  };
+
+  /** Swaps the placeholder for its Markdown, or removes it when `markdown` is empty. A placeholder the user deleted is left alone. */
+  const replacePlaceholder = (placeholderText: string, markdown: string): void => {
+    if (placeholderText === '') return;
+    const at = textRef.current.indexOf(placeholderText);
+    if (at === -1) return;
+    if (editor.current) {
+      editor.current.apply({
+        changes: { from: at, to: at + placeholderText.length, insert: markdown },
+        selection: { anchor: at + markdown.length, head: at + markdown.length }
+      });
+    } else {
+      change(replaceFirst(textRef.current, placeholderText, markdown));
+    }
+  };
+
+  const updateUpload = (id: number, patch: Partial<Upload>): void => {
+    setUploads((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+  };
+
+  const dismissUpload = (upload: Upload): void => {
+    replacePlaceholder(upload.placeholder, '');
+    setUploads((list) => list.filter((u) => u.id !== upload.id));
+  };
+
+  /** Uploads one file. A refusal made in the browser never reaches main. */
+  const runUpload = (upload: Upload, acknowledgedPublic: boolean): void => {
+    const check = checkAttachment({ name: upload.name, size: upload.file.size }, 'paid');
+    if (!check.ok) {
+      updateUpload(upload.id, { status: 'failed', message: check.message });
+      return;
+    }
+    updateUpload(upload.id, { status: 'uploading', message: undefined });
+    readBytes(upload.file)
+      .then((bytes) =>
+        window.orbit.attachments.upload(
+          attachTo?.repoFullName ?? '',
+          { name: upload.name, bytes },
+          { acknowledgedPublic }
+        )
+      )
+      .then(
+        (result) => {
+          if (result.kind === 'public-notice') {
+            updateUpload(upload.id, { status: 'notice' });
+            return;
+          }
+          replacePlaceholder(upload.placeholder, attachmentMarkdown(check.kind, upload.name, result.url));
+          setUploads((list) => list.filter((u) => u.id !== upload.id));
+        },
+        (cause: unknown) =>
+          updateUpload(upload.id, {
+            status: 'failed',
+            message: cause instanceof Error ? cause.message : 'The upload did not finish.'
+          })
+      );
+  };
+
+  /** Puts a placeholder at each offset, then uploads each file. Unsupported files show their error without a placeholder. */
+  const attachFiles = (files: File[], at: number): void => {
+    let offset = at;
+    for (const file of files) {
+      nextUploadId.current += 1;
+      const id = nextUploadId.current;
+      const check = checkAttachment({ name: file.name, size: file.size }, 'paid');
+      if (!check.ok) {
+        setUploads((list) => [
+          ...list,
+          { id, name: file.name, placeholder: '', file, status: 'failed', message: check.message }
+        ]);
+        continue;
+      }
+      const placeholderText = uploadPlaceholder(id, file.name);
+      insertAt(offset, placeholderText);
+      offset += placeholderText.length;
+      const upload: Upload = { id, name: file.name, placeholder: placeholderText, file, status: 'uploading' };
+      setUploads((list) => [...list, upload]);
+      runUpload(upload, false);
+    }
+  };
+
+  const openOnGitHub = (): void => {
+    // The item opens in the browser with the draft on the clipboard, so the file can be attached there.
+    void navigator.clipboard?.writeText(textRef.current).catch(() => undefined);
+    void window.orbit.app.openExternal(viewOnGitHubUrl);
   };
 
   const loadPreview = (): void => {
@@ -107,7 +235,7 @@ export function Composer({
   };
 
   const send = (): void => {
-    if (sending || (!allowEmpty && empty) || overLimit || blockedByCaller) return;
+    if (sending || (!allowEmpty && empty) || overLimit || blockedByCaller || attaching) return;
     setSending(true);
     setError(null);
     onSubmit(text).then(
@@ -116,6 +244,7 @@ export function Composer({
         if (outcome === 'keep') return;
         // Sent: the box is cleared and its draft is dropped.
         drafts.set(draftKey, '');
+        textRef.current = initialText ?? '';
         setText(initialText ?? '');
       },
       (cause: unknown) => {
@@ -125,7 +254,7 @@ export function Composer({
     );
   };
 
-  const submitDisabled = sending || (!allowEmpty && empty) || overLimit || blockedByCaller;
+  const submitDisabled = sending || (!allowEmpty && empty) || overLimit || blockedByCaller || attaching;
 
   return (
     <div className="composer">
@@ -168,6 +297,34 @@ export function Composer({
                   {item.glyph}
                 </button>
               ))}
+              {attachTo && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Attach file"
+                    title="Attach a PNG, JPG, GIF, WebP, SVG, MP4, MOV, or WebM"
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    📎
+                  </button>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept={ATTACHMENT_EXTENSIONS}
+                    multiple
+                    hidden
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      // Clear the input so picking the same file again still fires a change.
+                      event.target.value = '';
+                      if (files.length > 0)
+                        attachFiles(files, editor.current?.cursor() ?? textRef.current.length);
+                    }}
+                  />
+                </>
+              )}
             </div>
             <CodeEditor
               ref={editor}
@@ -176,7 +333,55 @@ export function Composer({
               onSubmit={send}
               ariaLabel={ariaLabel}
               placeholder={placeholder}
+              onFiles={attachTo ? attachFiles : undefined}
             />
+            {uploads.length > 0 && (
+              <ul className="composer-uploads">
+                {uploads.map((upload) => (
+                  <li key={upload.id}>
+                    {upload.status === 'uploading' && <p role="status">Uploading {upload.name}…</p>}
+                    {upload.status === 'notice' && (
+                      <div role="alert" className="composer-error">
+                        <p>
+                          This repo is public. {upload.name} becomes public on GitHub as soon as it uploads,
+                          and anyone with the link can open it. Orbit will not ask again.
+                        </p>
+                        <button
+                          type="button"
+                          className="primary-action"
+                          onClick={() => runUpload(upload, true)}
+                        >
+                          Upload anyway
+                        </button>
+                        <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    {upload.status === 'failed' && (
+                      <div role="alert" className="composer-error">
+                        <p>
+                          {upload.name} was not attached. {upload.message} Your text is still here.
+                        </p>
+                        <button
+                          type="button"
+                          className="secondary-action"
+                          onClick={() => runUpload(upload, false)}
+                        >
+                          Retry
+                        </button>
+                        <button type="button" className="secondary-action" onClick={openOnGitHub}>
+                          Open on GitHub
+                        </button>
+                        <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         ) : (
           <div className="composer-preview">
@@ -218,7 +423,7 @@ export function Composer({
             className="primary-action"
             onClick={send}
             disabled={submitDisabled}
-            title="Submit (Ctrl/Cmd+Enter)"
+            title={attaching ? 'Finish or remove the attachments first' : 'Submit (Ctrl/Cmd+Enter)'}
           >
             {sending ? 'Sending…' : submitLabel}
           </button>
@@ -231,6 +436,17 @@ export function Composer({
       )}
     </div>
   );
+}
+
+/** The file's bytes, read in the renderer and handed to main, which makes the upload request. */
+async function readBytes(file: File): Promise<Uint8Array> {
+  if (typeof file.arrayBuffer === 'function') return new Uint8Array(await file.arrayBuffer());
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error('The file could not be read.'));
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 /** A stable id prefix for ARIA relationships, derived from the draft target. */
