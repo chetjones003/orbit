@@ -429,7 +429,7 @@ export function App() {
                 setIssueRef({
                   repoFullName: item.repoFullName,
                   number: item.number,
-                  kind: item.kind === 'pull' ? 'pull' : 'issue'
+                  kind: item.kind
                 });
                 setIssueExpanded(false);
                 setDetailsOpen(true);

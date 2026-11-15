@@ -120,7 +120,7 @@ export function Inbox({
                 <span className={`issue-state ${item.state}`}>{item.state === 'open' ? '●' : '✓'}</span>
                 <span className="issue-copy">
                   <span className="issue-title">
-                    {item.title} {item.isDraft && <small>Draft</small>}
+                    {item.title} {item.isDraft && <small>Draft pull request</small>}
                   </span>
                   <span className="issue-meta">
                     {item.repoFullName}#{item.number} · {item.kind === 'pull' ? 'Pull request' : 'Issue'} · @

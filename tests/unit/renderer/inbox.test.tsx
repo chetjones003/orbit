@@ -109,7 +109,7 @@ describe('Inbox', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('orbit-owner/app#7');
     expect(rows[0]).toHaveTextContent('Pull request');
-    expect(rows[0]).toHaveTextContent('Draft');
+    expect(rows[0]).toHaveTextContent('Draft pull request');
     expect(rows[0]).toHaveTextContent('@orbit-owner');
     expect(rows[0]).toHaveTextContent('feature');
     expect(rows[1]).toHaveTextContent('Issue');
