@@ -131,13 +131,32 @@ export function scheduleWrites(
 ): DateWrite[] {
   const start = dateValue(item, startFieldId);
   const end = dateValue(item, targetFieldId);
-  const newStart = start ?? (end !== null ? (day < end ? day : end) : day);
-  let newEnd = end ?? (start !== null ? (day > start ? day : start) : day);
-  if (newEnd < newStart) newEnd = newStart;
+  let newStart: string;
+  let newEnd: string;
+  if (start !== null && end !== null) {
+    // Both dates but out of order: the item is unscheduled, so the drop makes it a one-day bar on the dropped day.
+    newStart = day;
+    newEnd = day;
+  } else if (start !== null) {
+    newStart = start;
+    newEnd = day > start ? day : start;
+  } else if (end !== null) {
+    newStart = day < end ? day : end;
+    newEnd = end;
+  } else {
+    newStart = day;
+    newEnd = day;
+  }
   const writes: DateWrite[] = [];
   if (newStart !== start) writes.push({ role: 'start', date: newStart });
   if (newEnd !== end) writes.push({ role: 'end', date: newEnd });
   return writes;
+}
+
+/** The iteration an item holds in an iteration field, or null. */
+export function iterationIdOf(item: ProjectItem, fieldId: string): string | null {
+  const value = item.fieldValues[fieldId];
+  return value?.kind === 'iteration' ? value.iterationId : null;
 }
 
 /** The iteration a day falls in, or null when no iteration covers it. */

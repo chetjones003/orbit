@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import {
+  CUSTOM_VIEW_LAYOUTS,
   CUSTOM_VIEW_NAME_MAX,
   type CustomViewCondition,
-  type CustomViewDefinition,
-  type CustomViewLayout
+  type CustomViewDefinition
 } from '../../../shared/custom-views';
 import type { ProjectField } from '../../../shared/projects';
 import {
   findMappingRepairs,
+  isDateField,
+  isGroupableField,
+  isIterationField,
   suggestMapping,
   type MappingRepair,
   type MappingSlot
@@ -32,13 +35,13 @@ function candidatesFor(slot: FieldSlot, fields: ProjectField[]): ProjectField[] 
     case 'startFieldId':
     case 'targetFieldId':
     case 'calendarFieldId':
-      return fields.filter((f) => f.kind === 'date');
+      return fields.filter(isDateField);
     case 'iterationFieldId':
-      return fields.filter((f) => f.kind === 'iteration');
+      return fields.filter(isIterationField);
     case 'columnFieldId':
     case 'swimlaneFieldId':
     case 'groupFieldId':
-      return fields.filter((f) => f.kind === 'single-select' || f.kind === 'iteration');
+      return fields.filter(isGroupableField);
   }
 }
 
@@ -115,7 +118,10 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         Layout
         <select
           value={view.layout}
-          onChange={(event) => update({ layout: event.target.value as CustomViewLayout })}
+          onChange={(event) => {
+            const layout = CUSTOM_VIEW_LAYOUTS.find((option) => option === event.target.value);
+            if (layout) update({ layout });
+          }}
         >
           <option value="kanban">Kanban</option>
           <option value="table">Table</option>

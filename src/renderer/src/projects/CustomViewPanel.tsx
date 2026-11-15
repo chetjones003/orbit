@@ -5,7 +5,14 @@ import { CustomViewEditor } from './CustomViewEditor';
 import { GanttView } from './GanttView';
 import { KanbanView } from './KanbanView';
 import { ProjectTable } from './ProjectTable';
-import { findMappingRepairs, groupItems, viewItems } from './custom-view-model';
+import {
+  findMappingRepairs,
+  groupItems,
+  isDateField,
+  isGroupableField,
+  isIterationField,
+  viewItems
+} from './custom-view-model';
 import { todayIso } from './schedule-model';
 
 export interface CustomViewPanelProps {
@@ -46,13 +53,13 @@ export function CustomViewPanel({
   today = todayIso()
 }: CustomViewPanelProps) {
   const shown = viewItems(items, view, fields);
-  const column = usable(fields, view.columnFieldId, isGroupable);
-  const swimlane = usable(fields, view.swimlaneFieldId, isGroupable);
-  const group = usable(fields, view.groupFieldId, isGroupable);
-  const startField = usable(fields, view.startFieldId, isDate);
-  const targetField = usable(fields, view.targetFieldId, isDate);
-  const iterationField = usable(fields, view.iterationFieldId, isIteration);
-  const calendarField = usable(fields, view.calendarFieldId, isDate);
+  const column = usable(fields, view.columnFieldId, isGroupableField);
+  const swimlane = usable(fields, view.swimlaneFieldId, isGroupableField);
+  const group = usable(fields, view.groupFieldId, isGroupableField);
+  const startField = usable(fields, view.startFieldId, isDateField);
+  const targetField = usable(fields, view.targetFieldId, isDateField);
+  const iterationField = usable(fields, view.iterationFieldId, isIterationField);
+  const calendarField = usable(fields, view.calendarFieldId, isDateField);
   const needsColumn = view.layout === 'kanban' && !column;
   // A broken reference opens the settings, so the repair it needs is visible.
   const repairs = findMappingRepairs(view, fields);
@@ -133,10 +140,6 @@ function usable(
   const field = fields.find((f) => f.id === fieldId);
   return field && accept(field) ? field : null;
 }
-
-const isGroupable = (field: ProjectField) => field.kind === 'single-select' || field.kind === 'iteration';
-const isDate = (field: ProjectField) => field.kind === 'date';
-const isIteration = (field: ProjectField) => field.kind === 'iteration';
 
 /** Pressing a header sorts ascending, then descending on the second press, and then clears the sort. */
 function nextSort(view: CustomViewDefinition, fieldId: string): CustomViewDefinition['sort'] {

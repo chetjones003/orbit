@@ -5,7 +5,8 @@ import { isProjectNodeId } from './projects';
  * items or their values. Shared by main, which stores it, and the renderer, which edits it. No Node or DOM APIs.
  */
 
-export type CustomViewLayout = 'kanban' | 'table' | 'gantt' | 'calendar';
+export const CUSTOM_VIEW_LAYOUTS = ['kanban', 'table', 'gantt', 'calendar'] as const;
+export type CustomViewLayout = (typeof CUSTOM_VIEW_LAYOUTS)[number];
 
 /** Gantt bars come from a start and target date pair, or from an iteration field. */
 export type GanttSource = 'dates' | 'iteration';
@@ -60,10 +61,9 @@ export const CUSTOM_VIEW_NAME_MAX = 80;
 export const CUSTOM_VIEW_FILTER_MAX = 1000;
 export const CUSTOM_VIEW_CONDITIONS_MAX = 20;
 const CUSTOM_VIEW_TEXT_MAX = 200;
-const CUSTOM_VIEW_LAYOUTS: readonly string[] = ['kanban', 'table', 'gantt', 'calendar'];
 
 function isLayout(value: unknown): value is CustomViewLayout {
-  return typeof value === 'string' && CUSTOM_VIEW_LAYOUTS.includes(value);
+  return typeof value === 'string' && (CUSTOM_VIEW_LAYOUTS as readonly string[]).includes(value);
 }
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 

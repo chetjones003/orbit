@@ -11,6 +11,7 @@ import {
   ganttRange,
   iterationBar,
   iterationForDay,
+  iterationIdOf,
   moveWrites,
   partitionBars,
   resizeWrites,
@@ -92,8 +93,14 @@ export function GanttView({
   }
 
   const { scheduled, unscheduled } = partitionBars(items, barOf);
+  // Every iteration in the field is in range, so an item can be dropped in one that no bar reaches.
   const range = ganttRange(
-    scheduled.map((entry) => entry.bar),
+    [
+      ...scheduled.map((entry) => entry.bar),
+      ...(source === 'iteration'
+        ? iterations.map((i) => ({ start: i.startDate, end: addDays(i.startDate, i.duration - 1) }))
+        : [])
+    ],
     today
   );
   const days = Array.from({ length: daysBetween(range.start, range.end) + 1 }, (_, i) =>
@@ -106,7 +113,7 @@ export function GanttView({
     for (const write of writes) {
       const field = write.role === 'start' ? startField : targetField;
       const saved = await onEdit(current, field, { kind: 'date', date: write.date });
-      // A failed save stops the rest, so the bar is never half written.
+      // A failed save stops the rest, so a failed first write leaves the bar as it was.
       if (!saved) return;
       current = saved;
     }
@@ -121,17 +128,13 @@ export function GanttView({
         setNote('Drop it inside an iteration to move it there.');
         return;
       }
-      if (id === itemIterationId(item, iterationField.id)) return;
+      if (id === iterationIdOf(item, iterationField.id)) return;
       setNote(null);
       await onEdit(item, iterationField, { kind: 'iteration', iterationId: id });
       return;
     }
     setNote(null);
-    const writes =
-      mode === 'move'
-        ? moveWrites(bar, days)
-        : resizeWrites(bar, mode, addDays(mode === 'start' ? bar.start : bar.end, days));
-    await saveWrites(item, writes);
+    await saveWrites(item, barWrites(bar, mode, days));
   };
 
   /** Follows the pointer until it is released, then saves the move or resize as whole days. */
@@ -182,24 +185,23 @@ export function GanttView({
     if (item) void scheduleOn(item, day);
   };
 
+  /** Where a bar is drawn while it is dragged. An iteration bar shows the iteration a drop would land in. */
   const previewFor = (item: ProjectItem): { left: number; width: number } | null => {
     const bar = barOf(item);
     if (!bar || !preview || preview.id !== item.id) return null;
-    const next =
-      preview.mode === 'move'
-        ? moveWrites(bar, preview.days)
-        : resizeWrites(
-            bar,
-            preview.mode,
-            addDays(preview.mode === 'start' ? bar.start : bar.end, preview.days)
-          );
+    if (source === 'iteration') {
+      const id = iterationForDay(addDays(bar.start, preview.days), iterations);
+      const target = iterations.find((i) => i.id === id);
+      return target ? { left: daysBetween(range.start, target.startDate), width: target.duration } : null;
+    }
+    const next = barWrites(bar, preview.mode, preview.days);
     const start = next.find((w) => w.role === 'start')?.date ?? bar.start;
     const end = next.find((w) => w.role === 'end')?.date ?? bar.end;
     return { left: daysBetween(range.start, start), width: daysBetween(start, end) + 1 };
   };
 
   return (
-    <div className="gantt-view" aria-label="Timeline">
+    <div className="gantt-view" aria-label="Gantt">
       {note && (
         <p role="alert" className="project-message">
           {note}
@@ -306,7 +308,8 @@ export function GanttView({
   );
 }
 
-function itemIterationId(item: ProjectItem, fieldId: string): string | null {
-  const value = item.fieldValues[fieldId];
-  return value?.kind === 'iteration' ? value.iterationId : null;
+/** The writes a drag of some days makes to a dates bar: a move shifts both ends, a resize moves one end. */
+function barWrites(bar: DayBar, mode: DragMode, days: number): DateWrite[] {
+  if (mode === 'move') return moveWrites(bar, days);
+  return resizeWrites(bar, mode, addDays(mode === 'start' ? bar.start : bar.end, days));
 }

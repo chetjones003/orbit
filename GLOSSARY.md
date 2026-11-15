@@ -56,11 +56,11 @@ _Avoid_: Row (a row is one item in a table)
 **Gantt**: A custom view that draws each scheduled item as a bar across days. Its bars come from a start and target date field pair, or from an iteration field. Dragging a bar moves it, and dragging an end resizes it, and each change is written back to GitHub.
 _Avoid_: Timeline (the axis the bars sit on), Roadmap (GitHub's roadmap layout, which Orbit does not show)
 
-**Bar**: One item's span on a Gantt: the days from its start to its target, or the days of its iteration.
+**Bar**: One item's span on a Gantt (the days from its start to its target, or the days of its iteration), or its single day on a Calendar.
 _Avoid_: Card (a Kanban card), event
 
 **Calendar**: A custom view that places each item on the day of its date field, shown by month or by week. Dragging an item to another day reschedules it.
-_Avoid_: Schedule (the act of placing an item), agenda
+_Avoid_: Agenda
 
 **Unscheduled**: The items a Gantt or Calendar cannot place because they lack the dates or iteration it needs. They stay visible, and dropping one on a day schedules it.
 _Avoid_: No value group (the group in Kanban and table grouping, which is not tied to dates)

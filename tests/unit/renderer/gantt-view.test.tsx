@@ -203,6 +203,39 @@ describe('GanttView, from an iteration', () => {
     expect(onEdit.mock.calls[0]?.[2]).toEqual({ kind: 'iteration', iterationId: 'it_3' });
   });
 
+  it('reaches every iteration in the field, so an item can be dropped in one the bars do not cover', async () => {
+    const { onEdit } = renderGantt({
+      source: 'iteration',
+      startField: null,
+      targetField: null,
+      iterationField: SPRINT,
+      items: [item('b', 'Plan release')]
+    });
+    dragChip(screen.getByText('Plan release'));
+    // Sprint 3 starts 2026-02-15; no bar reaches it, so only the iteration list can bring it on the timeline.
+    dropOn(screen.getByRole('columnheader', { name: '2026-02-15' }));
+    await vi.waitFor(() => expect(onEdit).toHaveBeenCalledTimes(1));
+    expect(onEdit.mock.calls[0]?.[2]).toEqual({ kind: 'iteration', iterationId: 'it_3' });
+  });
+
+  it('keeps an iteration bar drawn in its iteration while a short drag stays inside it', async () => {
+    renderGantt({
+      source: 'iteration',
+      startField: null,
+      targetField: null,
+      iterationField: SPRINT,
+      items: [sprintItem('a', 'Write docs', 'it_2')]
+    });
+    const bar = screen.getByLabelText('Write docs, 2026-02-01 to 2026-02-14');
+    const at = (type: string, x: number) => new MouseEvent(type, { clientX: x, bubbles: true });
+    bar.dispatchEvent(at('pointerdown', 100));
+    window.dispatchEvent(at('pointermove', 100 + 3 * GANTT_DAY_WIDTH));
+    // A 3-day drag still drops into Sprint 2, so the bar is drawn at Sprint 2's start (3 days after the timeline's first day),
+    // not slid three days along.
+    await vi.waitFor(() => expect(bar.style.left).toBe(`${3 * GANTT_DAY_WIDTH}px`));
+    window.dispatchEvent(at('pointerup', 100 + 3 * GANTT_DAY_WIDTH));
+  });
+
   it('writes nothing when the bar stays in its iteration, and offers no resize handles', () => {
     const { onEdit } = renderGantt({
       source: 'iteration',

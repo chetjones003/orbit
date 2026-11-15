@@ -186,9 +186,12 @@ describe('scheduleWrites', () => {
     expect(scheduleWrites(a, '2026-05-10', 's', 't')).toEqual([{ role: 'start', date: '2026-05-08' }]);
   });
 
-  it('fixes an item whose target is before its start by making it a one-day bar at the start', () => {
+  it('makes an item whose target is before its start a one-day bar on the dropped day', () => {
     const a = item('a', { s: date('2026-05-09'), t: date('2026-05-08') });
-    expect(scheduleWrites(a, '2026-05-20', 's', 't')).toEqual([{ role: 'end', date: '2026-05-09' }]);
+    expect(scheduleWrites(a, '2026-05-20', 's', 't')).toEqual([
+      { role: 'start', date: '2026-05-20' },
+      { role: 'end', date: '2026-05-20' }
+    ]);
   });
 });
 
