@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectsStub } from './fakes/projects';
 // Parallel test runs can slow the first render; allow more time than the 1s default before failing.
 configure({ asyncUtilTimeout: 3000 });
 
@@ -69,6 +70,7 @@ function installBridge(
       list: vi.fn(async () => overrides.repos ?? []),
       refresh: vi.fn(async () => overrides.refreshStart ?? ({ started: true } as RefreshStart))
     },
+    projects: projectsStub(),
     issues: {
       list: vi.fn(async () => ({ items: [], page: 1, hasNextPage: false, partial: false })),
       detail: vi.fn(async () => {

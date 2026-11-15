@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueDetailView } from '../../../src/renderer/src/issues/IssueDetail';
 import type { IssueDetail, IssueSummary } from '../../../src/shared/issues';
+import { projectsStub } from './fakes/projects';
 
 const SUMMARY: IssueSummary = {
   id: 104,
@@ -47,6 +48,7 @@ describe('IssueDetailView', () => {
 
   beforeEach(() => {
     api = {
+      projects: projectsStub(),
       issues: { detail: vi.fn(async () => detail()) },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     };
@@ -179,6 +181,7 @@ describe('IssueDetailView notice links', () => {
   it('opens a Mermaid "View on GitHub" link on GitHub instead of reopening the issue in Orbit', async () => {
     const openExternal = vi.fn(async () => ({ opened: true }));
     window.orbit = {
+      projects: projectsStub(),
       issues: {
         detail: vi.fn(async () => ({
           summary: SUMMARY,
@@ -209,6 +212,7 @@ describe('IssueDetailView notice links', () => {
 describe('IssueDetailView pull requests', () => {
   it('opens an owner pull request link inside Orbit as a pull request', async () => {
     window.orbit = {
+      projects: projectsStub(),
       issues: {
         detail: vi.fn(async () => ({
           summary: SUMMARY,
@@ -262,6 +266,7 @@ describe('IssueDetailView pull requests', () => {
     }));
     const issuesDetail = vi.fn();
     window.orbit = {
+      projects: projectsStub(),
       issues: { detail: issuesDetail },
       pulls: {
         detail: pullDetail,

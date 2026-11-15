@@ -15,6 +15,16 @@ import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
 import type { InboxService } from './github/inbox-service';
 import type { InboxPage, InboxQuery } from '../shared/inbox';
+import type { ProjectsService } from './github/projects-service';
+import {
+  parseProjectFieldChange,
+  type ItemMemberships,
+  type ProjectDetail,
+  type ProjectItem,
+  type ProjectItemEditResult,
+  type ProjectItemsPage,
+  type ProjectListPage
+} from '../shared/projects';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -113,6 +123,16 @@ export interface IpcOptions {
     };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
   inbox?: Pick<InboxService, 'list'>;
+  projects?: Pick<
+    ProjectsService,
+    | 'listProjects'
+    | 'getProject'
+    | 'listItems'
+    | 'getItemMemberships'
+    | 'addItem'
+    | 'removeItem'
+    | 'setFieldValue'
+  >;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -134,7 +154,8 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     diagnostics,
     issues,
     comments,
-    inbox
+    inbox,
+    projects
   } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
@@ -175,6 +196,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       return inbox.list(query);
     });
   }
+  if (projects) registerProjectHandlers(projects, devServerOrigin);
   if (repos) {
     ipcMain.handle(IpcChannels.reposList, async (event) => {
       assertTrustedSender(event, devServerOrigin);
@@ -576,4 +598,57 @@ export function parseRendererDiagnostic(input: unknown): { scope: string; code: 
   if (typeof scope !== 'string' || typeof code !== 'string') throw new Error('Invalid diagnostic');
   if (!CODE_PATTERN.test(scope) || !CODE_PATTERN.test(code)) throw new Error('Invalid diagnostic');
   return { scope, code };
+}
+
+/** Project handlers. Field changes are checked here, before the service sees them. */
+function registerProjectHandlers(
+  projects: NonNullable<IpcOptions['projects']>,
+  devServerOrigin?: string
+): void {
+  ipcMain.handle(IpcChannels.projectsList, (event): Promise<ProjectListPage> => {
+    assertTrustedSender(event, devServerOrigin);
+    return projects.listProjects();
+  });
+  ipcMain.handle(IpcChannels.projectsDetail, (event, projectId: unknown): Promise<ProjectDetail> => {
+    assertTrustedSender(event, devServerOrigin);
+    return projects.getProject(String(projectId));
+  });
+  ipcMain.handle(
+    IpcChannels.projectsItems,
+    (event, projectId: unknown, filter: unknown): Promise<ProjectItemsPage> => {
+      assertTrustedSender(event, devServerOrigin);
+      if (typeof filter !== 'string') return Promise.reject(new Error('That filter is not valid.'));
+      return projects.listItems(String(projectId), filter);
+    }
+  );
+  ipcMain.handle(
+    IpcChannels.projectsItemMemberships,
+    (event, repoFullName: unknown, number: unknown): Promise<ItemMemberships> => {
+      assertTrustedSender(event, devServerOrigin);
+      return projects.getItemMemberships(String(repoFullName), Number(number));
+    }
+  );
+  ipcMain.handle(
+    IpcChannels.projectsAddItem,
+    (event, projectId: unknown, repoFullName: unknown, number: unknown): Promise<ProjectItem> => {
+      assertTrustedSender(event, devServerOrigin);
+      return projects.addItem(String(projectId), String(repoFullName), Number(number));
+    }
+  );
+  ipcMain.handle(
+    IpcChannels.projectsRemoveItem,
+    (event, projectId: unknown, itemId: unknown): Promise<void> => {
+      assertTrustedSender(event, devServerOrigin);
+      return projects.removeItem(String(projectId), String(itemId));
+    }
+  );
+  ipcMain.handle(
+    IpcChannels.projectsSetField,
+    (event, projectId: unknown, itemId: unknown, change: unknown): Promise<ProjectItemEditResult> => {
+      assertTrustedSender(event, devServerOrigin);
+      const parsed = parseProjectFieldChange(change);
+      if (!parsed) return Promise.reject(new Error('That field change is not valid.'));
+      return projects.setFieldValue(String(projectId), String(itemId), parsed);
+    }
+  );
 }

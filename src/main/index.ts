@@ -12,6 +12,7 @@ import { resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
 import { IssueService } from './github/issue-service';
 import { InboxService } from './github/inbox-service';
+import { ProjectsService } from './github/projects-service';
 import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
 import { NotificationService } from './github/notification-service';
@@ -154,12 +155,19 @@ if (!app.requestSingleInstanceLock()) {
     };
     auth.onStatusChange((status) => runWhileSignedIn(status.kind === 'signed-in'));
     runWhileSignedIn(auth.getStatus().kind === 'signed-in');
+    const projects = new ProjectsService({
+      auth,
+      apiBaseUrl: endpoints.apiBaseUrl,
+      client,
+      canWrite: () => writesAllowed(engine.getStatus())
+    });
     registerIpcHandlers({
       devServerOrigin,
       auth,
       repos,
       issues,
       inbox,
+      projects,
       comments: issues,
       settings,
       refresh: engine,

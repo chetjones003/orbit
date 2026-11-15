@@ -2,6 +2,15 @@ import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
+import type {
+  ItemMemberships,
+  ProjectDetail,
+  ProjectFieldChange,
+  ProjectItem,
+  ProjectItemEditResult,
+  ProjectItemsPage,
+  ProjectListPage
+} from './projects';
 import type { NotificationDelivery, NotificationOpenResult } from './notifications';
 import type {
   CommentUpdateResult,
@@ -77,6 +86,13 @@ export const IpcChannels = {
   pullsRerun: 'pulls:rerun',
   pullsCreate: 'pulls:create',
   inboxList: 'inbox:list',
+  projectsList: 'projects:list',
+  projectsDetail: 'projects:detail',
+  projectsItems: 'projects:items',
+  projectsItemMemberships: 'projects:item-memberships',
+  projectsAddItem: 'projects:add-item',
+  projectsRemoveItem: 'projects:remove-item',
+  projectsSetField: 'projects:set-field',
   pullsBranches: 'pulls:branches',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
@@ -278,6 +294,21 @@ export interface OrbitApi {
   inbox: {
     /** One fixed inbox tab across the signed-in account's personal repos. */
     list(query: InboxQuery): Promise<InboxPage>;
+  };
+  projects: {
+    /** Projects the signed-in account owns. */
+    list(): Promise<ProjectListPage>;
+    /** Custom fields and table and board saved views of one project. */
+    detail(projectId: string): Promise<ProjectDetail>;
+    /** Items matching a saved view's filter. An empty filter returns every item. */
+    items(projectId: string, filter: string): Promise<ProjectItemsPage>;
+    /** The projects one issue or pull request is in, and its node id. */
+    itemMemberships(repoFullName: string, number: number): Promise<ItemMemberships>;
+    /** Adds an issue or pull request from one of the user's personal repos to a project. */
+    addItem(projectId: string, repoFullName: string, number: number): Promise<ProjectItem>;
+    removeItem(projectId: string, itemId: string): Promise<void>;
+    /** Sets or clears one field. Resolves with GitHub's version of the item. */
+    setField(projectId: string, itemId: string, change: ProjectFieldChange): Promise<ProjectItemEditResult>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */

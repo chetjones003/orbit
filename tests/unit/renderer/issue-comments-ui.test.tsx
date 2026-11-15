@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueDetailView } from '../../../src/renderer/src/issues/IssueDetail';
 import { drafts } from '../../../src/renderer/src/comments/draft-store';
 import type { IssueComment, IssueDetail, IssueSummary } from '../../../src/shared/issues';
+import { projectsStub } from './fakes/projects';
 
 vi.mock('../../../src/renderer/src/comments/CodeEditor', async () => {
   const { FakeCodeEditor } = await import('./fakes/fake-code-editor');
@@ -77,6 +78,7 @@ let api: {
 describe('IssueDetailView comments', () => {
   beforeEach(() => {
     api = {
+      projects: projectsStub(),
       issues: {
         detail: vi.fn(async () => detail()),
         repoOptions: vi.fn(async () => ({ labels: [], assignees: [], milestones: [] }))
