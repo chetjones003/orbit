@@ -1,9 +1,10 @@
+import { EXTERNAL_PROTOCOLS } from '../../../shared/ipc';
+
 export type LinkRoute =
   | { kind: 'in-app'; target: 'issue' | 'pull'; repoFullName: string; number: number }
   | { kind: 'external'; url: string }
   | { kind: 'blocked' };
 
-const EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
 const ISSUE_OR_PULL_PATH = /^\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)\/?$/;
 
 /**
@@ -21,7 +22,7 @@ export function classifyLink(href: string, signedInLogin: string): LinkRoute {
   if (url.username !== '' || url.password !== '') return { kind: 'blocked' };
   if (!EXTERNAL_PROTOCOLS.has(url.protocol)) return { kind: 'blocked' };
 
-  if (url.protocol === 'https:' && url.hostname === 'github.com') {
+  if ((url.protocol === 'https:' || url.protocol === 'http:') && url.hostname === 'github.com') {
     const match = ISSUE_OR_PULL_PATH.exec(url.pathname);
     if (match) {
       const [, owner = '', repo = '', kind = '', number = ''] = match;

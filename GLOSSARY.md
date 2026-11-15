@@ -58,4 +58,4 @@ _Avoid_: Issue page, issue modal
 **Partial list**: An issue or comment list that Orbit could not fully load or read. It is shown with a notice that it may be incomplete, never as the full result.
 _Avoid_: Partial page (a list can be partial without being paged)
 
-**Owner repo link**: A link in an issue body that points to an issue or pull request in one of the signed-in owner's personal repos. It opens inside Orbit. Other http(s) and mailto links open through the controlled external open.
+**Owner repo link**: A link in an issue body that points to an issue in one of the signed-in owner's personal repos. It opens inside Orbit. Links to pull requests there show a notice for now, because pull request views are not built yet. Other http(s) and mailto links open through the controlled external open.

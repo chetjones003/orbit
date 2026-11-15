@@ -120,7 +120,7 @@ export interface OrbitApi {
 }
 
 /** Schemes that may leave the app through the system browser or mail client. */
-const EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
+export const EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
 
 /**
  * Validates an external URL before it leaves the app. Only absolute http(s) and

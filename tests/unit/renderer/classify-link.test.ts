@@ -63,3 +63,12 @@ describe('classifyLink', () => {
     expect(classifyLink(href, OWNER)).toEqual({ kind: 'blocked' });
   });
 });
+
+describe('classifyLink over http', () => {
+  it('opens an owner repo issue given as an http GitHub link inside Orbit too', () => {
+    expect(classifyLink('http://github.com/orbit-owner/app/issues/3', 'orbit-owner')).toMatchObject({
+      kind: 'in-app',
+      number: 3
+    });
+  });
+});

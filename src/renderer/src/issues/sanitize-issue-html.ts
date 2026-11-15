@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify';
+import { EXTERNAL_PROTOCOLS } from '../../../shared/ipc';
 
 export interface SanitizeOptions {
   /** Link shown beside diagrams and math that Orbit cannot render. */
@@ -63,6 +64,7 @@ const ALLOWED_ATTR = [
   'class',
   'colspan',
   'controls',
+  'data-external',
   'dir',
   'disabled',
   'height',
@@ -80,9 +82,6 @@ const ALLOWED_ATTR = [
   'type',
   'width'
 ];
-
-/** Link schemes that may appear in a rendered body. Everything else loses its href. */
-const LINK_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
 
 /** Media may come only from GitHub-hosted origins, matching the CSP. */
 export function isGitHubMediaUrl(value: string | null): boolean {
@@ -157,7 +156,7 @@ export function sanitizeIssueHtml(html: string, options: SanitizeOptions): strin
 
 function isAllowedLink(href: string): boolean {
   try {
-    return LINK_PROTOCOLS.has(new URL(href).protocol);
+    return EXTERNAL_PROTOCOLS.has(new URL(href).protocol);
   } catch {
     return false;
   }
@@ -180,6 +179,8 @@ function sourceNotice(
   note.textContent = `${label} shown as source. `;
   const link = doc.createElement('a');
   link.setAttribute('href', viewOnGitHubUrl);
+  // Marks the link for the renderer to open on GitHub directly, not route it as an in-app link.
+  link.setAttribute('data-external', 'true');
   link.textContent = 'View on GitHub';
   if (block) {
     const pre = doc.createElement('pre');

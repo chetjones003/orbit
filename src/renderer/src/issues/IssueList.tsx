@@ -138,7 +138,7 @@ export function IssueList({ repoFullName, selectedNumber, onOpenIssue }: IssueLi
           </li>
         ))}
       </ul>
-      {result && !loading && result.items.length === 0 && !error && (
+      {result && !loading && result.items.length === 0 && !result.partial && !error && (
         <p className="empty-state">No issues match these filters.</p>
       )}
 

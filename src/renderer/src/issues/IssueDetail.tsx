@@ -46,7 +46,7 @@ export function IssueDetailView({
     };
   }, [repoFullName, number]);
 
-  const route = (href: string): void => {
+  const routeLink = (href: string): void => {
     const target = classifyLink(href, signedInLogin);
     if (target.kind === 'in-app') {
       if (target.target === 'pull') {
@@ -106,7 +106,7 @@ export function IssueDetailView({
       <RichBody
         html={detail.bodyHtml}
         viewOnGitHubUrl={summary.htmlUrl}
-        onLink={route}
+        onLink={routeLink}
         emptyText="No description provided."
       />
 
@@ -114,11 +114,16 @@ export function IssueDetailView({
         <h3>{summary.commentCount === 1 ? '1 comment' : `${summary.commentCount} comments`}</h3>
         {detail.commentsPartial && (
           <p className="session-notice" role="status">
-            Some comments could not be shown, so this list may be incomplete.
+            Only the first 100 comments are shown. Open the issue on GitHub to read the rest.
           </p>
         )}
         {detail.comments.map((comment) => (
-          <CommentItem key={comment.id} comment={comment} viewOnGitHubUrl={summary.htmlUrl} onLink={route} />
+          <CommentItem
+            key={comment.id}
+            comment={comment}
+            viewOnGitHubUrl={summary.htmlUrl}
+            onLink={routeLink}
+          />
         ))}
       </section>
 
@@ -189,7 +194,10 @@ export function RichBody({
     if (!anchor) return;
     event.preventDefault();
     const href = anchor.getAttribute('href');
-    if (href) onLink(href);
+    if (!href) return;
+    // Notice links (View on GitHub for diagrams and math) always leave for GitHub.
+    if (anchor.getAttribute('data-external') === 'true') void window.orbit.app.openExternal(href);
+    else onLink(href);
   };
 
   return (

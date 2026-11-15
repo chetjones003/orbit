@@ -84,3 +84,11 @@ describe('sanitizeIssueHtml', () => {
     expect(host.querySelector(`a[href="${VIEW_ON_GITHUB}"]`)).not.toBeNull();
   });
 });
+
+describe('View on GitHub notice links', () => {
+  it('marks the notice link as external so it opens GitHub, not an in-app issue route', () => {
+    const host = render('<pre><code class="language-mermaid">graph TD</code></pre>');
+
+    expect(host.querySelector(`a[href="${VIEW_ON_GITHUB}"]`)?.getAttribute('data-external')).toBe('true');
+  });
+});

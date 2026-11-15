@@ -72,7 +72,7 @@ describe('IssueDetailView', () => {
     expect(api.issues.detail).toHaveBeenCalledWith('orbit-owner/app', 4);
   });
 
-  it('flags the comment list as incomplete when more comments exist', async () => {
+  it('says only the first 100 comments are shown when more exist', async () => {
     api.issues.detail.mockResolvedValueOnce(detail({ commentsPartial: true }));
     render(
       <IssueDetailView
@@ -83,7 +83,7 @@ describe('IssueDetailView', () => {
       />
     );
 
-    expect(await screen.findByText(/some comments could not be shown/i)).toBeInTheDocument();
+    expect(await screen.findByText(/only the first 100 comments/i)).toBeInTheDocument();
   });
 
   it('routes an in-app issue link to the onOpenIssue handler instead of the browser', async () => {
@@ -170,5 +170,36 @@ describe('IssueDetailView', () => {
     fireEvent.click(await screen.findByRole('link', { name: /View on GitHub/ }));
 
     expect(api.app.openExternal).toHaveBeenCalledWith('https://github.com/orbit-owner/app/issues/4');
+  });
+});
+
+describe('IssueDetailView notice links', () => {
+  it('opens a Mermaid "View on GitHub" link on GitHub instead of reopening the issue in Orbit', async () => {
+    const openExternal = vi.fn(async () => ({ opened: true }));
+    window.orbit = {
+      issues: {
+        detail: vi.fn(async () => ({
+          summary: SUMMARY,
+          bodyHtml: '<pre><code class="language-mermaid">graph TD</code></pre>',
+          comments: [],
+          commentsPartial: false
+        }))
+      },
+      app: { openExternal }
+    } as unknown as typeof window.orbit;
+    const onOpenIssue = vi.fn();
+    render(
+      <IssueDetailView
+        repoFullName="orbit-owner/app"
+        number={4}
+        signedInLogin="orbit-owner"
+        onOpenIssue={onOpenIssue}
+      />
+    );
+
+    fireEvent.click((await screen.findByRole('link', { name: 'View on GitHub' })) as HTMLElement);
+
+    expect(openExternal).toHaveBeenCalledWith(SUMMARY.htmlUrl);
+    expect(onOpenIssue).not.toHaveBeenCalled();
   });
 });

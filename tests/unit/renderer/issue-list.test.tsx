@@ -104,3 +104,17 @@ describe('IssueList', () => {
     expect(onOpenIssue).toHaveBeenCalledWith(4);
   });
 });
+
+describe('IssueList partial empty pages', () => {
+  it('says the list may be incomplete rather than "no issues match" when a partial page is empty', async () => {
+    window.orbit = {
+      issues: {
+        list: vi.fn(async () => ({ items: [], page: 1, hasNextPage: false, partial: true }))
+      }
+    } as unknown as typeof window.orbit;
+    render(<IssueList repoFullName="orbit-owner/app" selectedNumber={null} onOpenIssue={vi.fn()} />);
+
+    expect(await screen.findByText(/some issues could not be shown/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no issues match/i)).toBeNull();
+  });
+});
