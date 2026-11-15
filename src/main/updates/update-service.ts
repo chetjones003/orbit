@@ -41,6 +41,8 @@ export class UpdateService {
   private readonly listeners = new Set<(status: UpdateStatus) => void>();
   private status: UpdateStatus = { kind: 'idle' };
   private prepared: PreparedUpdate | null = null;
+  /** The release offered by the last check, waiting for the user to ask for the download. */
+  private offered: RemoteRelease | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private inFlight: Promise<UpdateStatus> | null = null;
 
@@ -87,18 +89,35 @@ export class UpdateService {
     try {
       const release = await this.options.check();
       if (!release || !isEligibleUpdate(release.version, this.options.currentVersion)) {
+        this.offered = null;
         this.set({ kind: 'up-to-date', checkedAt: this.now() });
         return this.status;
       }
-      this.set({ kind: 'downloading', version: release.version, percent: 0 });
+      // Offered, not downloaded: the user decides whether to take the update.
+      this.offered = release;
+      this.set({ kind: 'available', version: release.version, releaseNotes: release.releaseNotes });
+    } catch {
+      // The message stays generic: error text from a network stack can carry URLs or account details.
+      this.set({ kind: 'error', message: 'Orbit could not check for or download an update.' });
+    }
+    return this.status;
+  }
+
+  /** Downloads the offered release. Called only after the user asks for it; a no-op otherwise. */
+  async download(): Promise<UpdateStatus> {
+    const release = this.offered;
+    if (this.status.kind !== 'available' || !release) return this.status;
+    this.offered = null;
+    this.set({ kind: 'downloading', version: release.version, percent: 0 });
+    try {
       const prepared = await this.options.prepare(release, (percent) => {
         if (this.status.kind === 'downloading') this.set({ ...this.status, percent });
       });
       this.prepared = prepared;
       this.set(prepared.status);
     } catch {
-      // The message stays generic: error text from a network stack can carry URLs or account details.
-      this.set({ kind: 'error', message: 'Orbit could not check for or download an update.' });
+      // Same generic message as a failed check: the detail can carry URLs or account details.
+      this.set({ kind: 'error', message: 'Orbit could not download the update.' });
     }
     return this.status;
   }

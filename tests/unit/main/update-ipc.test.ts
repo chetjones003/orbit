@@ -34,6 +34,7 @@ function fakeUpdates(status: UpdateStatus = { kind: 'idle' }): UpdatePort & { em
   return {
     getStatus: vi.fn(() => status),
     checkNow: vi.fn(async () => status),
+    download: vi.fn(async () => status),
     install: vi.fn(async () => undefined),
     onChange: (listener) => {
       listeners.add(listener);
@@ -79,6 +80,15 @@ describe('update IPC handlers', () => {
     expect(updates.install).toHaveBeenCalledTimes(1);
     expect(() => invoke(IpcChannels.updatesInstall, untrusted)).toThrow('Untrusted IPC sender');
     expect(updates.install).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads an offered update only when the renderer asks, and only for trusted renderers', async () => {
+    const updates = fakeUpdates();
+    registerIpcHandlers({ updates, diagnostics });
+    await expect(invoke(IpcChannels.updatesDownload)).resolves.toEqual({ kind: 'idle' });
+    expect(updates.download).toHaveBeenCalledTimes(1);
+    expect(() => invoke(IpcChannels.updatesDownload, untrusted)).toThrow('Untrusted IPC sender');
+    expect(updates.download).toHaveBeenCalledTimes(1);
   });
 
   it('pushes each status change to the renderer', () => {

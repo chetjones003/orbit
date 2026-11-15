@@ -80,6 +80,7 @@ export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
 export type UpdatePort = {
   getStatus(): UpdateStatus;
   checkNow(): Promise<UpdateStatus>;
+  download(): Promise<UpdateStatus>;
   install(): Promise<void>;
   onChange(listener: (status: UpdateStatus) => void): () => void;
 };
@@ -638,6 +639,10 @@ function registerUpdateHandlers(updates: UpdatePort, devServerOrigin?: string): 
     return updates.checkNow();
   });
   // Installing happens only on an explicit renderer request, after the user confirmed a restart.
+  ipcMain.handle(IpcChannels.updatesDownload, (event): Promise<UpdateStatus> => {
+    assertTrustedSender(event, devServerOrigin);
+    return updates.download();
+  });
   ipcMain.handle(IpcChannels.updatesInstall, (event): Promise<void> => {
     assertTrustedSender(event, devServerOrigin);
     return updates.install();

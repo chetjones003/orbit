@@ -16,7 +16,6 @@ export interface WorkspaceNavProps {
   /** The signed-in login, or null when signed out. Sections need a session, so they are disabled without one. */
   signedInLogin: string | null;
   refreshing: boolean;
-  checkingUpdates: boolean;
   theme: 'dark' | 'light';
   buildLabel: string;
   onView(view: WorkspaceView): void;
@@ -31,7 +30,6 @@ export function WorkspaceNav({
   view,
   signedInLogin,
   refreshing,
-  checkingUpdates,
   theme,
   buildLabel,
   onView,
@@ -73,11 +71,12 @@ export function WorkspaceNav({
         )}
         <button
           type="button"
-          className="secondary-action"
+          className="icon-button update-check"
           onClick={onCheckUpdates}
-          disabled={checkingUpdates}
+          aria-label="Check for updates"
+          title="Check for updates"
         >
-          Check for updates
+          <Icon name="updateArrow" size={16} />
         </button>
         <button
           type="button"
