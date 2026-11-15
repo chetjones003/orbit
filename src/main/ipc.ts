@@ -11,6 +11,8 @@ import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
 import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
+import type { InboxService } from './github/inbox-service';
+import type { InboxPage, InboxQuery } from '../shared/inbox';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -104,6 +106,7 @@ export interface IpcOptions {
       getPullDetail(repoFullName: string, number: number): Promise<IssueDetail | PullDetail>;
     };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
+  inbox?: Pick<InboxService, 'list'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -115,7 +118,7 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues, comments } = options;
+  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues, comments, inbox } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -138,6 +141,12 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     ipcMain.handle(IpcChannels.diagnosticsGetReport, (event): string => {
       assertTrustedSender(event, devServerOrigin);
       return diagnostics.report();
+    });
+  }
+  if (inbox) {
+    ipcMain.handle(IpcChannels.inboxList, (event, query: InboxQuery): Promise<InboxPage> => {
+      assertTrustedSender(event, devServerOrigin);
+      return inbox.list(query);
     });
   }
   if (repos) {

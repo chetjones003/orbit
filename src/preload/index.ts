@@ -90,6 +90,9 @@ const api: OrbitApi = {
     create: (repoFullName: string, input) => ipcRenderer.invoke(IpcChannels.pullsCreate, repoFullName, input),
     branches: (repoFullName: string) => ipcRenderer.invoke(IpcChannels.pullsBranches, repoFullName)
   },
+  inbox: {
+    list: (query) => ipcRenderer.invoke(IpcChannels.inboxList, query)
+  },
   markdown: {
     preview: (repoFullName: string, text: string) =>
       ipcRenderer.invoke(IpcChannels.markdownPreview, repoFullName, text)

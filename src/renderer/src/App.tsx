@@ -14,6 +14,7 @@ import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 import { IssueList } from './issues/IssueList';
 import { PullList } from './issues/PullList';
+import { Inbox } from './inbox/Inbox';
 import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { drafts } from './comments/draft-store';
@@ -45,6 +46,8 @@ export function App() {
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
   const [pullMode, setPullMode] = useState(false);
+  /** Which top-level view fills the workspace. The details panel follows the selected item in either view. */
+  const [view, setView] = useState<'repos' | 'inbox'>('repos');
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -310,14 +313,22 @@ export function App() {
           O
         </div>
         <button
-          className="rail-button active"
-          aria-current="page"
+          className={`rail-button ${view === 'repos' ? 'active' : ''}`}
+          aria-current={view === 'repos' ? 'page' : undefined}
           aria-label="Repositories"
           title="Repositories"
+          onClick={() => setView('repos')}
         >
           ◫
         </button>
-        <button className="rail-button" aria-label="Inbox" title="Inbox" disabled>
+        <button
+          className={`rail-button ${view === 'inbox' ? 'active' : ''}`}
+          aria-current={view === 'inbox' ? 'page' : undefined}
+          aria-label="Inbox"
+          title="Inbox"
+          disabled={status?.kind !== 'signed-in'}
+          onClick={() => setView('inbox')}
+        >
           ⌑
         </button>
         <div className="rail-spacer" />
@@ -403,6 +414,27 @@ export function App() {
                 {info.name} {info.version} on {info.platform}
               </p>
             )}
+          </div>
+        ) : view === 'inbox' ? (
+          <div className="issues-view">
+            <div className="repo-toolbar">
+              <div>
+                <h2>Inbox</h2>
+                <p>Across your personal repositories</p>
+              </div>
+            </div>
+            <Inbox
+              selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
+              onOpenItem={(item) => {
+                setIssueRef({
+                  repoFullName: item.repoFullName,
+                  number: item.number,
+                  kind: item.kind === 'pull' ? 'pull' : 'issue'
+                });
+                setIssueExpanded(false);
+                setDetailsOpen(true);
+              }}
+            />
           </div>
         ) : issuesRepo && issueExpanded && issueRef ? (
           <div className="issues-expanded">
