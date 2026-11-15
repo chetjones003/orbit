@@ -13,6 +13,8 @@ import { GitHubClient } from './github-client';
 /** Page size requested from GitHub. A full page means another page may exist. */
 export const ISSUES_PER_PAGE = 30;
 const COMMENTS_PER_PAGE = 100;
+/** Upper bound on comment pages read for one issue (1,000 comments). */
+const COMMENT_PAGE_LIMIT = 10;
 const HTML_ACCEPT = 'application/vnd.github.html+json';
 const STATES: readonly IssueStateFilter[] = ['open', 'closed', 'all'];
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
@@ -99,7 +101,7 @@ export class IssueService {
     const { owner, repo } = this.validateRepo(repoFullName);
     if (!Number.isInteger(number) || number < 1)
       throw new Error('Issue numbers must be positive whole numbers.');
-    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
+    const base = itemPath(owner, repo, 'issues', number);
     const { token, scope } = await this.session();
 
     const issueBody = await this.client.get<unknown>(base, { token, scope, accept: HTML_ACCEPT });
@@ -107,25 +109,55 @@ export class IssueService {
     const summary = toSummary(issueBody);
     if (!summary) throw new Error('GitHub returned an invalid issue.');
     const bodyHtml = (issueBody as GitHubIssueResponse).body_html ?? '';
+    const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
+    return { summary, bodyHtml, comments, commentsPartial };
+  }
 
-    const commentsBody = await this.client.get<unknown>(
-      `${base}/comments?per_page=${COMMENTS_PER_PAGE}&page=1`,
-      { token, scope, accept: HTML_ACCEPT }
-    );
-    if (!Array.isArray(commentsBody)) throw new Error('GitHub returned invalid comments.');
+  /** A pull request conversation, read with the same shape as an issue. */
+  async getPullDetail(repoFullName: string, number: number): Promise<IssueDetail> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(number) || number < 1)
+      throw new Error('Issue numbers must be positive whole numbers.');
+    const base = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+
+    const pullBody = await this.client.get<unknown>(itemPath(owner, repo, 'pulls', number), {
+      token,
+      scope,
+      accept: HTML_ACCEPT
+    });
+    const summary = toSummary(pullBody);
+    if (!summary) throw new Error('GitHub returned an invalid pull request.');
+    const bodyHtml = (pullBody as GitHubIssueResponse).body_html ?? '';
+    const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
+    return { summary, bodyHtml, comments, commentsPartial };
+  }
+
+  /**
+   * Follows comment pages until GitHub returns a short page. Stops at COMMENT_PAGE_LIMIT pages;
+   * a thread longer than that is reported as partial, never as complete.
+   */
+  private async fetchComments(
+    base: string,
+    token: string,
+    scope: string
+  ): Promise<{ comments: IssueComment[]; commentsPartial: boolean }> {
     const comments: IssueComment[] = [];
-    let droppedComment = false;
-    for (const raw of commentsBody as unknown[]) {
-      const comment = toComment(raw);
-      if (comment) comments.push(comment);
-      else droppedComment = true;
+    let dropped = false;
+    for (let page = 1; page <= COMMENT_PAGE_LIMIT; page++) {
+      const body = await this.client.get<unknown>(
+        `${base}/comments?per_page=${COMMENTS_PER_PAGE}&page=${page}`,
+        { token, scope, accept: HTML_ACCEPT }
+      );
+      if (!Array.isArray(body)) throw new Error('GitHub returned invalid comments.');
+      for (const raw of body as unknown[]) {
+        const comment = toComment(raw);
+        if (comment) comments.push(comment);
+        else dropped = true;
+      }
+      if (body.length < COMMENTS_PER_PAGE) return { comments, commentsPartial: dropped };
     }
-    return {
-      summary,
-      bodyHtml,
-      comments,
-      commentsPartial: droppedComment || commentsBody.length === COMMENTS_PER_PAGE
-    };
+    return { comments, commentsPartial: true };
   }
 
   private validateRepo(repoFullName: unknown): { owner: string; repo: string } {
@@ -212,6 +244,11 @@ function toSummary(raw: unknown): IssueSummary | null {
     updatedAt: item.updated_at,
     htmlUrl: item.html_url
   };
+}
+
+/** Repo item path, for issues or pulls. */
+function itemPath(owner: string, repo: string, kind: 'issues' | 'pulls', number: number): string {
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${kind}/${number}`;
 }
 
 function toComment(raw: unknown): IssueComment | null {

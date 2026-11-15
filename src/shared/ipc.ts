@@ -19,6 +19,7 @@ export const IpcChannels = {
   reposRefresh: 'repos:refresh',
   issuesList: 'issues:list',
   issuesDetail: 'issues:detail',
+  pullsDetail: 'pulls:detail',
   refreshWake: 'refresh:wake',
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
@@ -105,6 +106,9 @@ export interface OrbitApi {
   };
   issues: {
     list(query: IssueListQuery): Promise<IssueListPage>;
+    detail(repoFullName: string, number: number): Promise<IssueDetail>;
+  };
+  pulls: {
     detail(repoFullName: string, number: number): Promise<IssueDetail>;
   };
   diagnostics: {

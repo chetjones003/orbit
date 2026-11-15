@@ -31,7 +31,7 @@ export interface IpcOptions {
   settings?: SettingsStore;
   refresh?: RefreshPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
-  issues?: Pick<IssueService, 'listIssues' | 'getIssueDetail'>;
+  issues?: Pick<IssueService, 'listIssues' | 'getIssueDetail' | 'getPullDetail'>;
 }
 
 /** Rejects calls from anything other than the app's own renderer frames. */
@@ -84,6 +84,13 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       (event, repoFullName: string, number: number): Promise<IssueDetail> => {
         assertTrustedSender(event, devServerOrigin);
         return issues.getIssueDetail(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsDetail,
+      (event, repoFullName: string, number: number): Promise<IssueDetail> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.getPullDetail(repoFullName, number);
       }
     );
   }

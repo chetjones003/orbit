@@ -7,11 +7,15 @@ export interface IssueDetailViewProps {
   repoFullName: string;
   number: number;
   signedInLogin: string;
-  /** Opens another issue in the same Orbit view. */
-  onOpenIssue: (repoFullName: string, number: number) => void;
+  /** Opens another issue or pull request in the same Orbit view. */
+  onOpenIssue: (repoFullName: string, number: number, kind: ItemKind) => void;
   /** Compact panel or expanded main view. */
   variant?: 'panel' | 'expanded';
+  /** Which GitHub item this is. Defaults to an issue. */
+  kind?: ItemKind;
 }
+
+export type ItemKind = 'issue' | 'pull';
 
 /** Bodies longer than this (in text characters) start collapsed behind Show full. */
 const COLLAPSE_AFTER_CHARS = 800;
@@ -22,18 +26,18 @@ export function IssueDetailView({
   number,
   signedInLogin,
   onOpenIssue,
-  variant = 'panel'
+  variant = 'panel',
+  kind = 'issue'
 }: IssueDetailViewProps) {
   const [detail, setDetail] = useState<IssueDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setDetail(null);
     setError(null);
-    setNotice(null);
-    window.orbit.issues.detail(repoFullName, number).then(
+    const load = kind === 'pull' ? window.orbit.pulls.detail : window.orbit.issues.detail;
+    load(repoFullName, number).then(
       (next) => {
         if (!cancelled) setDetail(next);
       },
@@ -44,16 +48,12 @@ export function IssueDetailView({
     return () => {
       cancelled = true;
     };
-  }, [repoFullName, number]);
+  }, [repoFullName, number, kind]);
 
   const routeLink = (href: string): void => {
     const target = classifyLink(href, signedInLogin);
     if (target.kind === 'in-app') {
-      if (target.target === 'pull') {
-        setNotice('Pull requests are not in Orbit yet. Open them on GitHub for now.');
-        return;
-      }
-      onOpenIssue(target.repoFullName, target.number);
+      onOpenIssue(target.repoFullName, target.number, target.target);
     } else if (target.kind === 'external') {
       void window.orbit.app.openExternal(target.url);
     }
@@ -78,7 +78,7 @@ export function IssueDetailView({
   return (
     <article className={`issue-detail ${variant}`}>
       <p className="eyebrow">
-        {repoFullName} · #{summary.number}
+        {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
       </p>
       <h2>{summary.title}</h2>
       <p className="issue-meta">
@@ -97,12 +97,6 @@ export function IssueDetailView({
           ))}
         </p>
       )}
-      {notice && (
-        <p className="session-notice" role="status">
-          {notice}
-        </p>
-      )}
-
       <RichBody
         html={detail.bodyHtml}
         viewOnGitHubUrl={summary.htmlUrl}

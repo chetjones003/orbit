@@ -41,7 +41,8 @@ describe('issue IPC handlers', () => {
   it('forwards list queries from trusted renderers and returns the page', async () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
-      getIssueDetail: vi.fn(async () => emptyDetail)
+      getIssueDetail: vi.fn(async () => emptyDetail),
+      getPullDetail: vi.fn(async () => emptyDetail)
     };
     registerIpcHandlers({ issues });
     const query = { repoFullName: 'orbit-owner/app', state: 'open', page: 1 };
@@ -53,7 +54,8 @@ describe('issue IPC handlers', () => {
   it('forwards detail requests with the repo name and number', async () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
-      getIssueDetail: vi.fn(async () => emptyDetail)
+      getIssueDetail: vi.fn(async () => emptyDetail),
+      getPullDetail: vi.fn(async () => emptyDetail)
     };
     registerIpcHandlers({ issues });
 
@@ -68,12 +70,30 @@ describe('issue IPC handlers', () => {
   ])('rejects %s from an untrusted sender before the service runs', (_label, channel, args) => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
-      getIssueDetail: vi.fn(async () => emptyDetail)
+      getIssueDetail: vi.fn(async () => emptyDetail),
+      getPullDetail: vi.fn(async () => emptyDetail)
     };
     registerIpcHandlers({ issues });
 
     expect(() => invoke(channel, untrusted, ...args)).toThrow('Untrusted IPC sender');
     expect(issues.listIssues).not.toHaveBeenCalled();
     expect(issues.getIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('forwards pull request detail requests from trusted renderers only', async () => {
+    const issues = {
+      listIssues: vi.fn(async () => emptyPage),
+      getIssueDetail: vi.fn(async () => emptyDetail),
+      getPullDetail: vi.fn(async () => emptyDetail)
+    };
+    registerIpcHandlers({ issues });
+
+    await invoke(IpcChannels.pullsDetail, trusted, 'orbit-owner/app', 7);
+    expect(issues.getPullDetail).toHaveBeenCalledWith('orbit-owner/app', 7);
+
+    expect(() => invoke(IpcChannels.pullsDetail, untrusted, 'orbit-owner/app', 7)).toThrow(
+      'Untrusted IPC sender'
+    );
+    expect(issues.getPullDetail).toHaveBeenCalledTimes(1);
   });
 });

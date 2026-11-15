@@ -102,7 +102,7 @@ describe('IssueDetailView', () => {
 
     fireEvent.click(await screen.findByText('see 12'));
 
-    expect(onOpenIssue).toHaveBeenCalledWith('orbit-owner/app', 12);
+    expect(onOpenIssue).toHaveBeenCalledWith('orbit-owner/app', 12, 'issue');
     expect(api.app.openExternal).not.toHaveBeenCalled();
   });
 
@@ -201,5 +201,64 @@ describe('IssueDetailView notice links', () => {
 
     expect(openExternal).toHaveBeenCalledWith(SUMMARY.htmlUrl);
     expect(onOpenIssue).not.toHaveBeenCalled();
+  });
+});
+
+describe('IssueDetailView pull requests', () => {
+  it('opens an owner pull request link inside Orbit as a pull request', async () => {
+    window.orbit = {
+      issues: {
+        detail: vi.fn(async () => ({
+          summary: SUMMARY,
+          bodyHtml: '<p><a href="https://github.com/orbit-owner/app/pull/7">PR 7</a></p>',
+          comments: [],
+          commentsPartial: false
+        }))
+      },
+      pulls: { detail: vi.fn() },
+      app: { openExternal: vi.fn(async () => ({ opened: true })) }
+    } as unknown as typeof window.orbit;
+    const onOpenIssue = vi.fn();
+    render(
+      <IssueDetailView
+        repoFullName="orbit-owner/app"
+        number={4}
+        signedInLogin="orbit-owner"
+        onOpenIssue={onOpenIssue}
+      />
+    );
+
+    fireEvent.click(await screen.findByText('PR 7'));
+
+    expect(onOpenIssue).toHaveBeenCalledWith('orbit-owner/app', 7, 'pull');
+    expect(screen.queryByText(/not in Orbit yet/)).toBeNull();
+  });
+
+  it('loads a pull request kind from the pulls API', async () => {
+    const pullDetail = vi.fn(async () => ({
+      summary: { ...SUMMARY, number: 7, title: 'Add the thing' },
+      bodyHtml: '<p>Change body</p>',
+      comments: [],
+      commentsPartial: false
+    }));
+    const issuesDetail = vi.fn();
+    window.orbit = {
+      issues: { detail: issuesDetail },
+      pulls: { detail: pullDetail },
+      app: { openExternal: vi.fn(async () => ({ opened: true })) }
+    } as unknown as typeof window.orbit;
+    render(
+      <IssueDetailView
+        repoFullName="orbit-owner/app"
+        number={7}
+        signedInLogin="orbit-owner"
+        onOpenIssue={vi.fn()}
+        kind="pull"
+      />
+    );
+
+    expect(await screen.findByText('Change body')).toBeInTheDocument();
+    expect(pullDetail).toHaveBeenCalledWith('orbit-owner/app', 7);
+    expect(issuesDetail).not.toHaveBeenCalled();
   });
 });

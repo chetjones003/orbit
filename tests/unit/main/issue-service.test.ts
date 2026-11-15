@@ -199,7 +199,25 @@ describe('IssueService.getIssueDetail', () => {
     expect(detail.bodyHtml).toBe('');
   });
 
-  it('flags comments as partial when the first comment page is full', async () => {
+  it('follows comment pages until a short page, so a long thread is complete', async () => {
+    const pages: Record<string, unknown[]> = {
+      '/comments?per_page=100&page=1': Array.from({ length: 100 }, (_, i) => comment(i + 1)),
+      '/comments?per_page=100&page=2': Array.from({ length: 3 }, (_, i) => comment(101 + i))
+    };
+    const fetch = vi.fn(async (url: string) => {
+      const key = Object.keys(pages).find((page) => url.endsWith(page));
+      if (key) return jsonResponse(pages[key]);
+      return jsonResponse({ ...issue(4), body_html: '' });
+    });
+    const service = makeService(fetch as unknown as typeof globalThis.fetch);
+
+    const detail = await service.getIssueDetail('orbit-owner/app', 4);
+
+    expect(detail.comments).toHaveLength(103);
+    expect(detail.commentsPartial).toBe(false);
+  });
+
+  it('flags comments as partial when the comment page limit is reached', async () => {
     const fullPage = Array.from({ length: 100 }, (_, i) => comment(i + 1));
     const fetch = vi.fn(async (url: string) =>
       url.includes('/comments') ? jsonResponse(fullPage) : jsonResponse({ ...issue(4), body_html: '' })
@@ -208,8 +226,10 @@ describe('IssueService.getIssueDetail', () => {
 
     const detail = await service.getIssueDetail('orbit-owner/app', 4);
 
-    expect(detail.comments).toHaveLength(100);
+    expect(detail.comments).toHaveLength(1000);
     expect(detail.commentsPartial).toBe(true);
+    const commentRequests = fetch.mock.calls.filter(([url]) => String(url).includes('/comments'));
+    expect(commentRequests).toHaveLength(10);
   });
 
   it('refuses pull request numbers', async () => {
@@ -225,6 +245,39 @@ describe('IssueService.getIssueDetail', () => {
 
     await expect(service.getIssueDetail('orbit-owner/app', 0)).rejects.toThrow();
     await expect(service.getIssueDetail('orbit-owner/app', 1.5)).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('IssueService.getPullDetail', () => {
+  it('reads the pull request body from the pulls endpoint and its conversation comments from the issue', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes('/comments')) return jsonResponse([]);
+      return jsonResponse({ ...issue(7), body_html: '<p>Change</p>', pull_request: { url: 'x' } });
+    });
+    const service = makeService(fetch as unknown as typeof globalThis.fetch);
+
+    const detail = await service.getPullDetail('orbit-owner/app', 7);
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.github.test/repos/orbit-owner/app/pulls/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({ accept: 'application/vnd.github.html+json' })
+      })
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.github.test/repos/orbit-owner/app/issues/7/comments?per_page=100&page=1',
+      expect.anything()
+    );
+    expect(detail.summary.number).toBe(7);
+    expect(detail.bodyHtml).toBe('<p>Change</p>');
+  });
+
+  it('rejects a repo the signed-in account does not own before calling GitHub', async () => {
+    const fetch = vi.fn();
+    const service = makeService(fetch as unknown as typeof globalThis.fetch);
+
+    await expect(service.getPullDetail('an-org/app', 7)).rejects.toThrow('personal repos');
     expect(fetch).not.toHaveBeenCalled();
   });
 });

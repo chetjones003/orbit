@@ -13,12 +13,13 @@ import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 import { IssueList } from './issues/IssueList';
-import { IssueDetailView } from './issues/IssueDetail';
+import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
   repoFullName: string;
   number: number;
+  kind: ItemKind;
 }
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
@@ -378,7 +379,8 @@ export function App() {
               repoFullName={issueRef.repoFullName}
               number={issueRef.number}
               signedInLogin={status.login}
-              onOpenIssue={(repoFullName, number) => setIssueRef({ repoFullName, number })}
+              kind={issueRef.kind}
+              onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
               variant="expanded"
             />
           </div>
@@ -403,7 +405,9 @@ export function App() {
               key={issuesRepo.fullName}
               repoFullName={issuesRepo.fullName}
               selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
-              onOpenIssue={(number) => setIssueRef({ repoFullName: issuesRepo.fullName, number })}
+              onOpenIssue={(number) =>
+                setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
+              }
             />
           </div>
         ) : (
@@ -549,7 +553,8 @@ export function App() {
                   repoFullName={issueRef.repoFullName}
                   number={issueRef.number}
                   signedInLogin={status.login}
-                  onOpenIssue={(repoFullName, number) => setIssueRef({ repoFullName, number })}
+                  kind={issueRef.kind}
+                  onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
                 />
               </div>
             ) : selectedRepo ? (
