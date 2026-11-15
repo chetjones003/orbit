@@ -1,0 +1,75 @@
+name: Release
+
+# Pushing vX.Y.Z publishes a GitHub Release. Nothing else publishes.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Tag matches package.json and is on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check tag, package version, and branch
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tagged commit $GITHUB_SHA is not on main"
+            exit 1
+          fi
+
+  # Every check that gates a pull request, rerun on the tagged commit: all three platforms, packaged smoke.
+  verify:
+    name: Checks
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: [guard, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: orbit-*
+          path: artifacts
+      - name: Assemble release assets
+        run: |
+          mkdir -p release-assets
+          # Each macOS architecture writes its own latest-mac.yml; merge them into one feed.
+          mapfile -t mac_meta < <(find artifacts -name latest-mac.yml)
+          node scripts/merge-update-metadata.mjs release-assets/latest-mac.yml "${mac_meta[@]}"
+          find artifacts -type f \( \
+            -name '*.exe' -o -name '*.blockmap' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
+            -o -name 'latest.yml' -o -name 'latest-linux.yml' \) \
+            -exec cp {} release-assets/ \;
+          ls -l release-assets
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag \
+            --title "Orbit ${GITHUB_REF_NAME#v}" \
+            --generate-notes

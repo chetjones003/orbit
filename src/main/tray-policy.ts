@@ -15,9 +15,14 @@ export interface TrayMenuEntry {
 }
 
 /** The tray menu, independent of Electron so its wiring can be tested. */
-export function trayMenuItems(handlers: { show: () => void; quit: () => void }): TrayMenuEntry[] {
+export function trayMenuItems(handlers: {
+  show: () => void;
+  checkForUpdates: () => void;
+  quit: () => void;
+}): TrayMenuEntry[] {
   return [
     { label: 'Show Orbit', onSelect: handlers.show },
+    { label: 'Check for updates', onSelect: handlers.checkForUpdates },
     { separator: true },
     { label: 'Quit Orbit', onSelect: handlers.quit }
   ];

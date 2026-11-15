@@ -56,6 +56,12 @@ function installBridge(
       onDelivered: () => () => undefined,
       onNavigate: () => () => undefined
     },
+    updates: {
+      getStatus: vi.fn(async () => ({ kind: 'idle' }) as const),
+      check: vi.fn(async () => ({ kind: 'up-to-date', checkedAt: 0 }) as const),
+      install: vi.fn(async () => undefined),
+      onStatusChanged: vi.fn(() => () => undefined)
+    },
     refresh: {
       wake: vi.fn(async () => ({ started: true }) as RefreshStart),
       getStatus: vi.fn(

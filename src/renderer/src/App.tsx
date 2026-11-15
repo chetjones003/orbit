@@ -30,6 +30,8 @@ import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { ProjectsView } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
+import { UpdateBanner } from './updates/UpdateBanner';
+import type { UpdateStatus } from '../../shared/updates';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
@@ -67,6 +69,10 @@ export function App() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' });
+  const checkForUpdates = useCallback(() => {
+    void window.orbit.updates.check().then(setUpdateStatus, () => undefined);
+  }, []);
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<string | null>(null);
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
@@ -101,6 +107,15 @@ export function App() {
       pushed = true;
       if (!cancelled) setStatus(next);
     });
+    const unsubscribeUpdates = window.orbit.updates.onStatusChanged((next) => {
+      if (!cancelled) setUpdateStatus(next);
+    });
+    void window.orbit.updates.getStatus().then(
+      (next) => {
+        if (!cancelled) setUpdateStatus((current) => (current.kind === 'idle' ? next : current));
+      },
+      () => undefined
+    );
     const unsubscribeRefresh = window.orbit.refresh.onStatusChanged((next) => {
       if (!cancelled) {
         setRefreshStatus(next);
@@ -132,6 +147,7 @@ export function App() {
       cancelled = true;
       unsubscribe();
       unsubscribeRefresh();
+      unsubscribeUpdates();
     };
   }, []);
 
@@ -511,6 +527,13 @@ export function App() {
               </button>
             )}
             <button
+              className="secondary-action"
+              onClick={checkForUpdates}
+              disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'downloading'}
+            >
+              Check for updates
+            </button>
+            <button
               className="icon-button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
@@ -707,6 +730,12 @@ export function App() {
                 {status.notice}
               </p>
             )}
+            <UpdateBanner
+              status={updateStatus}
+              onCheck={checkForUpdates}
+              onInstall={() => window.orbit.updates.install()}
+              hasUnsavedDrafts={() => drafts.hasDrafts()}
+            />
             {refreshStatus && (
               <ConnectionBanner
                 status={refreshStatus}

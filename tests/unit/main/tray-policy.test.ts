@@ -16,15 +16,23 @@ describe('shouldHideOnClose', () => {
 });
 
 describe('trayMenuItems', () => {
-  it('offers Show Orbit and Quit Orbit, wired to the given handlers', () => {
+  it('offers Show Orbit, Check for updates, and Quit Orbit, wired to the given handlers', () => {
     const show = vi.fn();
+    const checkForUpdates = vi.fn();
     const quit = vi.fn();
-    const items = trayMenuItems({ show, quit });
+    const items = trayMenuItems({ show, checkForUpdates, quit });
 
-    expect(items.map((entry) => entry.label)).toEqual(['Show Orbit', undefined, 'Quit Orbit']);
+    expect(items.map((entry) => entry.label)).toEqual([
+      'Show Orbit',
+      'Check for updates',
+      undefined,
+      'Quit Orbit'
+    ]);
     items[0]?.onSelect?.();
-    items[2]?.onSelect?.();
+    items[1]?.onSelect?.();
+    items[3]?.onSelect?.();
     expect(show).toHaveBeenCalledTimes(1);
+    expect(checkForUpdates).toHaveBeenCalledTimes(1);
     expect(quit).toHaveBeenCalledTimes(1);
   });
 });

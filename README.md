@@ -73,4 +73,26 @@ Orbit v1 is not code-signed or notarized, so each OS asks for confirmation the f
    and bundled assets, then exit with code 0.
 
 Installers are uploaded as `orbit-pr<N>-<shortsha>-<os>-<arch>` with 7-day retention. Downloads
-from a PR check are for testing only; release publishing is a later slice.
+from a PR check are for testing only.
+
+## Releases and updates
+
+`.github/workflows/release.yml` publishes a GitHub Release when a `vX.Y.Z` tag is pushed. It only
+publishes when:
+
+1. the tag matches `version` in `package.json`, and
+2. the tagged commit is on `main`.
+
+It then reruns every `ci.yml` check on all platforms and packaged smoke tests. A single publish job
+creates the release with the installers and `latest*.yml` metadata. The two macOS architectures'
+metadata is merged by `scripts/merge-update-metadata.mjs`. Releases are never prereleases.
+
+Installed copies check for updates at startup, every four hours, and from **Check for updates** (topbar
+or tray). Updates are never offered for prereleases or older versions.
+
+- **Windows, AppImage:** downloaded in the background. Orbit restarts only after you confirm. If you
+  have unsent comments or edits, you are warned first.
+- **Linux .deb:** downloaded and checked against its sha512, then installed with `pkexec`, which asks for
+  administrator credentials.
+- **macOS:** the DMG for your CPU architecture is downloaded, checked against its sha512, and opened.
+  Drag Orbit into Applications to finish.
