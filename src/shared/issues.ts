@@ -3,6 +3,57 @@
  * Bodies are GitHub's own rendered HTML; the renderer sanitizes them before display.
  */
 export type IssueStateFilter = 'open' | 'closed' | 'all';
+export type PullStateFilter = 'open' | 'closed' | 'all';
+
+export interface PullListQuery {
+  repoFullName: string;
+  state: PullStateFilter;
+  label?: string;
+  author?: string;
+  page: number;
+}
+
+export interface PullSummary extends IssueSummary {
+  draft: boolean;
+  headRef: string;
+  baseRef: string;
+}
+
+export interface PullListPage {
+  items: PullSummary[];
+  page: number;
+  hasNextPage: boolean;
+  partial: boolean;
+}
+
+export interface PullReview {
+  id: number;
+  authorLogin: string;
+  state: string;
+  submittedAt: string | null;
+  body: string;
+  htmlUrl: string;
+}
+export interface PullCheck {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  detailsUrl: string | null;
+}
+export interface PullDetail {
+  summary: PullSummary;
+  body: string;
+  bodyHtml: string;
+  comments: IssueComment[];
+  commentsPartial: boolean;
+  reviews: PullReview[];
+  reviewsPartial: boolean;
+  checks: PullCheck[];
+  checksPartial: boolean;
+  mergeable: boolean | null;
+  mergeableState: string;
+  merged: boolean;
+}
 
 export interface IssueListQuery {
   /** `owner/name`. The owner must be the signed-in account (personal repos only). */

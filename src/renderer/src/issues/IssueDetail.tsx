@@ -5,6 +5,7 @@ import type {
   IssueSnapshot,
   IssueSummary
 } from '../../../shared/issues';
+import type { PullDetail } from '../../../shared/issues';
 import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
 import { IssueEditor } from './IssueEditor';
@@ -41,6 +42,7 @@ export function IssueDetailView({
   kind = 'issue'
 }: IssueDetailViewProps) {
   const [detail, setDetail] = useState<IssueDetailData | null>(null);
+  const [pullDetail, setPullDetail] = useState<PullDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -54,7 +56,20 @@ export function IssueDetailView({
     const load = kind === 'pull' ? window.orbit.pulls.detail : window.orbit.issues.detail;
     load(repoFullName, number).then(
       (next) => {
-        if (!cancelled) setDetail(next);
+        if (!cancelled) {
+          setDetail(next);
+          if (kind === 'pull')
+            setPullDetail({
+              ...(next as PullDetail),
+              reviews: (next as PullDetail).reviews ?? [],
+              reviewsPartial: (next as PullDetail).reviewsPartial ?? false,
+              checks: (next as PullDetail).checks ?? [],
+              checksPartial: (next as PullDetail).checksPartial ?? false,
+              mergeable: (next as PullDetail).mergeable ?? null,
+              mergeableState: (next as PullDetail).mergeableState ?? 'unknown',
+              merged: (next as PullDetail).merged ?? false
+            });
+        }
       },
       (cause: unknown) => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load this issue.');
@@ -141,6 +156,51 @@ export function IssueDetailView({
         {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
       </p>
       <h2>{summary.title}</h2>
+      {kind === 'pull' && pullDetail && (
+        <section aria-label="Pull request details" className="pull-detail-metadata">
+          <p>
+            {pullDetail.summary.draft ? 'Draft' : 'Ready for review'} ·{' '}
+            <code>{pullDetail.summary.headRef}</code> → <code>{pullDetail.summary.baseRef}</code>
+          </p>
+          <p>
+            Mergeability:{' '}
+            {pullDetail.mergeable === null ? 'Checking' : pullDetail.mergeable ? 'Mergeable' : 'Conflicts'} (
+            {pullDetail.mergeableState})
+          </p>
+          <h3>Checks</h3>
+          {pullDetail.checksPartial && <p role="note">Some check runs may not be shown.</p>}
+          {pullDetail.checks.length ? (
+            <ul>
+              {pullDetail.checks.map((check, i) => (
+                <li key={check.name + i}>
+                  {check.name}: {check.conclusion ?? check.status}{' '}
+                  {check.detailsUrl && (
+                    <a
+                      href={check.detailsUrl}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void window.orbit.app.openExternal(check.detailsUrl!);
+                      }}
+                    >
+                      View run ↗
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No check runs.</p>
+          )}
+          <h3>Reviews</h3>
+          {pullDetail.reviewsPartial && <p role="note">Some reviews may not be shown.</p>}
+          {pullDetail.reviews.map((review) => (
+            <div key={review.id}>
+              <strong>@{review.authorLogin}</strong> · {review.state}
+              {review.body && <p>{review.body}</p>}
+            </div>
+          ))}
+        </section>
+      )}
       <p className="issue-meta">
         <span className={`issue-state-pill ${summary.state}`}>
           {summary.state === 'open' ? 'Open' : 'Closed'}

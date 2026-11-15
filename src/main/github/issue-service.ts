@@ -22,7 +22,13 @@ import type {
   IssueSnapshot,
   IssueStateFilter,
   IssueSummary,
-  TaskToggleResult
+  TaskToggleResult,
+  PullListQuery,
+  PullListPage,
+  PullSummary,
+  PullDetail,
+  PullReview,
+  PullCheck
 } from '../../shared/issues';
 import type { AuthService } from './auth-service';
 import { GitHubClient, GitHubRequestError } from './github-client';
@@ -31,6 +37,8 @@ import { runWrite, WriteBlockedError } from './write-reconcile';
 
 /** Page size requested from GitHub. A full page means another page may exist. */
 export const ISSUES_PER_PAGE = 30;
+const PULLS_PER_PAGE = 100;
+const PULL_LIST_PAGE_LIMIT = 10;
 const COMMENTS_PER_PAGE = 100;
 /** Upper bound on comment pages read for one issue (1,000 comments). */
 const COMMENT_PAGE_LIMIT = 10;
@@ -553,6 +561,55 @@ export class IssueService {
     return { items, page, hasNextPage: body.length === ISSUES_PER_PAGE, partial };
   }
 
+  async listPulls(query: PullListQuery): Promise<PullListPage> {
+    const { owner, repo } = this.validateRepo(query.repoFullName);
+    const page = validatePage(query.page);
+    const state = validateState(query.state);
+    const label = query.label === undefined ? undefined : validateText(query.label, 'label');
+    const author = query.author === undefined ? undefined : validateText(query.author, 'author');
+    const { token, scope } = await this.session();
+    const matches: PullSummary[] = [];
+    let partial = false;
+    let exhausted = false;
+    for (let sourcePage = 1; sourcePage <= PULL_LIST_PAGE_LIMIT; sourcePage++) {
+      const params = new URLSearchParams({
+        state,
+        per_page: String(PULLS_PER_PAGE),
+        page: String(sourcePage)
+      });
+      const body = await this.client.get<unknown>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?${params}`,
+        { token, scope }
+      );
+      if (!Array.isArray(body)) throw new Error('GitHub returned an invalid pull request list.');
+      for (const raw of body as unknown[]) {
+        const item = toPullSummary(raw);
+        if (!item) {
+          partial = true;
+          continue;
+        }
+        if (label && !item.labels.some((candidate) => candidate.name.toLowerCase() === label.toLowerCase()))
+          continue;
+        if (author && item.authorLogin.toLowerCase() !== author.toLowerCase()) continue;
+        matches.push(item);
+      }
+      if (body.length < PULLS_PER_PAGE) {
+        exhausted = true;
+        break;
+      }
+      if (sourcePage === PULL_LIST_PAGE_LIMIT) partial = true;
+      if (matches.length >= page * ISSUES_PER_PAGE + 1) break;
+    }
+    if (!exhausted && matches.length < page * ISSUES_PER_PAGE + 1) partial = true;
+    const start = (page - 1) * ISSUES_PER_PAGE;
+    return {
+      items: matches.slice(start, start + ISSUES_PER_PAGE),
+      page,
+      hasNextPage: matches.length > start + ISSUES_PER_PAGE,
+      partial
+    };
+  }
+
   async getIssueDetail(repoFullName: string, number: number): Promise<IssueDetail> {
     const { owner, repo } = this.validateRepo(repoFullName);
     if (!Number.isInteger(number) || number < 1)
@@ -570,7 +627,7 @@ export class IssueService {
   }
 
   /** A pull request conversation, read with the same shape as an issue. */
-  async getPullDetail(repoFullName: string, number: number): Promise<IssueDetail> {
+  async getPullDetail(repoFullName: string, number: number): Promise<PullDetail> {
     const { owner, repo } = this.validateRepo(repoFullName);
     if (!Number.isInteger(number) || number < 1)
       throw new Error('Issue numbers must be positive whole numbers.');
@@ -586,7 +643,80 @@ export class IssueService {
     if (!summary) throw new Error('GitHub returned an invalid pull request.');
     const bodyHtml = (pullBody as GitHubIssueResponse).body_html ?? '';
     const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
-    return { summary, body: rawBody(pullBody), bodyHtml, comments, commentsPartial };
+    const pr = pullBody as {
+      head?: { sha?: string };
+      mergeable?: unknown;
+      mergeable_state?: unknown;
+      merged?: unknown;
+    };
+    const [reviewsRaw, runsRaw] = await Promise.all([
+      this.client.get<unknown>(`${itemPath(owner, repo, 'pulls', number)}/reviews?per_page=100&page=1`, {
+        token,
+        scope
+      }),
+      this.client.get<unknown>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(String(pr.head?.sha ?? ''))}/check-runs?per_page=100`,
+        { token, scope }
+      )
+    ]);
+    const reviews: PullReview[] = Array.isArray(reviewsRaw)
+      ? reviewsRaw.flatMap((raw: unknown) => {
+          if (typeof raw !== 'object' || raw === null) return [];
+          const r = raw as {
+            id?: unknown;
+            user?: { login?: unknown } | null;
+            state?: unknown;
+            submitted_at?: unknown;
+            body?: unknown;
+            html_url?: unknown;
+          };
+          return typeof r.id === 'number'
+            ? [
+                {
+                  id: r.id,
+                  authorLogin: typeof r.user?.login === 'string' ? r.user.login : 'unknown',
+                  state: String(r.state ?? 'COMMENTED'),
+                  submittedAt: typeof r.submitted_at === 'string' ? r.submitted_at : null,
+                  body: typeof r.body === 'string' ? r.body : '',
+                  htmlUrl: typeof r.html_url === 'string' ? r.html_url : ''
+                }
+              ]
+            : [];
+        })
+      : [];
+    const runs =
+      (
+        runsRaw as {
+          check_runs?: Array<{ name?: unknown; status?: unknown; conclusion?: unknown; html_url?: unknown }>;
+        } | null
+      )?.check_runs ?? [];
+    const checks: PullCheck[] = runs.flatMap((c) =>
+      typeof c.name === 'string'
+        ? [
+            {
+              name: c.name,
+              status: String(c.status ?? 'queued'),
+              conclusion: typeof c.conclusion === 'string' ? c.conclusion : null,
+              detailsUrl: typeof c.html_url === 'string' ? c.html_url : null
+            }
+          ]
+        : []
+    );
+    const checkRunTotal = (runsRaw as { total_count?: unknown } | null)?.total_count;
+    return {
+      summary: toPullSummary(pullBody) ?? { ...summary, draft: false, headRef: '', baseRef: '' },
+      body: rawBody(pullBody),
+      bodyHtml,
+      comments,
+      commentsPartial,
+      reviews,
+      reviewsPartial: !Array.isArray(reviewsRaw) || reviewsRaw.length >= 100,
+      checks,
+      checksPartial: typeof checkRunTotal === 'number' && checkRunTotal > checks.length,
+      mergeable: typeof pr.mergeable === 'boolean' ? pr.mergeable : null,
+      mergeableState: String(pr.mergeable_state ?? 'unknown'),
+      merged: pr.merged === true
+    };
   }
 
   /**
@@ -756,6 +886,23 @@ function toSummary(raw: unknown): IssueSummary | null {
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     htmlUrl: item.html_url
+  };
+}
+
+function toPullSummary(raw: unknown): PullSummary | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const pullRaw = raw as Record<string, unknown>;
+  const summary = toSummary({
+    ...pullRaw,
+    comments: typeof pullRaw.comments === 'number' ? pullRaw.comments : 0
+  });
+  if (!summary) return null;
+  const pull = raw as { draft?: unknown; head?: { ref?: unknown }; base?: { ref?: unknown } };
+  return {
+    ...summary,
+    draft: pull.draft === true,
+    headRef: typeof pull.head?.ref === 'string' ? pull.head.ref : '',
+    baseRef: typeof pull.base?.ref === 'string' ? pull.base.ref : ''
   };
 }
 

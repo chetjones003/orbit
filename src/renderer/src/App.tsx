@@ -13,6 +13,7 @@ import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 import { IssueList } from './issues/IssueList';
+import { PullList } from './issues/PullList';
 import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { drafts } from './comments/draft-store';
@@ -43,6 +44,7 @@ export function App() {
   const [issueExpanded, setIssueExpanded] = useState(false);
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
+  const [pullMode, setPullMode] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -432,9 +434,32 @@ export function App() {
               </button>
               <div>
                 <h2>{issuesRepo.fullName}</h2>
-                <p>Issues in this personal repo</p>
+                <p>{pullMode ? 'Pull requests in this personal repo' : 'Issues in this personal repo'}</p>
               </div>
-              {!creatingIssue && (
+              <div className="repo-view-switch">
+                <button
+                  className="secondary-action"
+                  aria-pressed={!pullMode}
+                  onClick={() => {
+                    setPullMode(false);
+                    setIssueRef(null);
+                  }}
+                >
+                  Issues
+                </button>
+                <button
+                  className="secondary-action"
+                  aria-pressed={pullMode}
+                  onClick={() => {
+                    setPullMode(true);
+                    setIssueRef(null);
+                    setCreatingIssue(false);
+                  }}
+                >
+                  Pull requests
+                </button>
+              </div>
+              {!creatingIssue && !pullMode && (
                 <button className="secondary-action" onClick={() => setCreatingIssue(true)}>
                   New issue
                 </button>
@@ -449,6 +474,15 @@ export function App() {
                   setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
                 }}
                 onCancel={() => setCreatingIssue(false)}
+              />
+            ) : pullMode ? (
+              <PullList
+                key={issuesRepo.fullName}
+                repoFullName={issuesRepo.fullName}
+                selectedNumber={issueRef?.kind === 'pull' ? issueRef.number : null}
+                onOpenPull={(number) =>
+                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
+                }
               />
             ) : (
               <IssueList

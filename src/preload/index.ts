@@ -58,6 +58,7 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IpcChannels.issuesSetTask, repoFullName, number, input)
   },
   pulls: {
+    list: (query) => ipcRenderer.invoke(IpcChannels.pullsList, query),
     detail: (repoFullName: string, number: number) =>
       ipcRenderer.invoke(IpcChannels.pullsDetail, repoFullName, number)
   },

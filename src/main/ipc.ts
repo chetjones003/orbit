@@ -24,7 +24,10 @@ import type {
   IssueRepoOptions,
   IssueSnapshot,
   IssueSummary,
-  TaskToggleResult
+  TaskToggleResult,
+  PullListQuery,
+  PullListPage,
+  PullDetail
 } from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
@@ -46,19 +49,25 @@ export interface IpcOptions {
   settings?: SettingsStore;
   refresh?: RefreshPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
-  issues?: Pick<
-    IssueService,
-    | 'listIssues'
-    | 'getIssueDetail'
-    | 'getPullDetail'
-    | 'createIssue'
-    | 'updateIssue'
-    | 'updateIssueFields'
-    | 'setIssueState'
-    | 'getRepoOptions'
-    | 'setTaskItem'
-    | 'uploadAttachment'
-  >;
+  issues?: Omit<
+    Pick<
+      IssueService,
+      | 'listIssues'
+      | 'getIssueDetail'
+      | 'getPullDetail'
+      | 'createIssue'
+      | 'updateIssue'
+      | 'updateIssueFields'
+      | 'setIssueState'
+      | 'getRepoOptions'
+      | 'setTaskItem'
+      | 'uploadAttachment'
+    >,
+    'getPullDetail'
+  > &
+    Partial<Pick<IssueService, 'listPulls'>> & {
+      getPullDetail(repoFullName: string, number: number): Promise<IssueDetail | PullDetail>;
+    };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
 }
 
@@ -103,6 +112,11 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     });
   }
   if (issues) {
+    ipcMain.handle(IpcChannels.pullsList, (event, query: PullListQuery): Promise<PullListPage> => {
+      assertTrustedSender(event, devServerOrigin);
+      if (!issues.listPulls) throw new Error('Pull request lists are unavailable.');
+      return issues.listPulls(query);
+    });
     ipcMain.handle(IpcChannels.issuesList, (event, query: IssueListQuery): Promise<IssueListPage> => {
       assertTrustedSender(event, devServerOrigin);
       return issues.listIssues(query);
@@ -116,9 +130,9 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     );
     ipcMain.handle(
       IpcChannels.pullsDetail,
-      (event, repoFullName: string, number: number): Promise<IssueDetail> => {
+      (event, repoFullName: string, number: number): Promise<PullDetail> => {
         assertTrustedSender(event, devServerOrigin);
-        return issues.getPullDetail(repoFullName, number);
+        return issues.getPullDetail(repoFullName, number) as Promise<PullDetail>;
       }
     );
     ipcMain.handle(
