@@ -18,7 +18,16 @@ export interface ItemGroup {
   items: ProjectItem[];
 }
 
-export type MappingSlot = 'columnFieldId' | 'swimlaneFieldId' | 'groupFieldId' | 'sort' | 'condition';
+export type MappingSlot =
+  | 'columnFieldId'
+  | 'swimlaneFieldId'
+  | 'groupFieldId'
+  | 'startFieldId'
+  | 'targetFieldId'
+  | 'iterationFieldId'
+  | 'calendarFieldId'
+  | 'sort'
+  | 'condition';
 
 export interface MappingRepair {
   slot: MappingSlot;
@@ -55,6 +64,15 @@ export function findMappingRepairs(view: CustomViewDefinition, fields: ProjectFi
   check('columnFieldId', view.columnFieldId, groupable);
   check('swimlaneFieldId', view.swimlaneFieldId, groupable);
   check('groupFieldId', view.groupFieldId, groupable);
+  // Only the schedule fields the layout reads are checked, so a stale one on another layout raises nothing.
+  if (view.layout === 'gantt' && view.ganttSource === 'dates') {
+    check('startFieldId', view.startFieldId, isDate);
+    check('targetFieldId', view.targetFieldId, isDate);
+  }
+  if (view.layout === 'gantt' && view.ganttSource === 'iteration') {
+    check('iterationFieldId', view.iterationFieldId, isIteration);
+  }
+  if (view.layout === 'calendar') check('calendarFieldId', view.calendarFieldId, isDate);
   if (view.sort) check('sort', view.sort.fieldId, () => true);
   for (const condition of view.conditions) {
     const accept = conditionAccepts(condition);
@@ -62,6 +80,9 @@ export function findMappingRepairs(view: CustomViewDefinition, fields: ProjectFi
   }
   return repairs;
 }
+
+const isDate = (field: ProjectField) => field.kind === 'date';
+const isIteration = (field: ProjectField) => field.kind === 'iteration';
 
 function conditionAccepts(condition: CustomViewCondition): (field: ProjectField) => boolean {
   switch (condition.kind) {

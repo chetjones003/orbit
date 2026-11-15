@@ -2,10 +2,45 @@ import { useState } from 'react';
 import {
   CUSTOM_VIEW_NAME_MAX,
   type CustomViewCondition,
-  type CustomViewDefinition
+  type CustomViewDefinition,
+  type CustomViewLayout
 } from '../../../shared/custom-views';
 import type { ProjectField } from '../../../shared/projects';
-import { findMappingRepairs, suggestMapping, type MappingRepair } from './custom-view-model';
+import {
+  findMappingRepairs,
+  suggestMapping,
+  type MappingRepair,
+  type MappingSlot
+} from './custom-view-model';
+
+/** The mapping slots that hold a field, as opposed to a sort or a filter. */
+type FieldSlot = Exclude<MappingSlot, 'sort' | 'condition'>;
+
+const FIELD_SLOT_LABELS: Record<FieldSlot, string> = {
+  columnFieldId: 'Column field',
+  swimlaneFieldId: 'Swimlane field',
+  groupFieldId: 'Group field',
+  startFieldId: 'Start field',
+  targetFieldId: 'Target field',
+  iterationFieldId: 'Iteration field',
+  calendarFieldId: 'Date field'
+};
+
+/** The fields a mapping slot can take: each slot only accepts the kind of field its role needs. */
+function candidatesFor(slot: FieldSlot, fields: ProjectField[]): ProjectField[] {
+  switch (slot) {
+    case 'startFieldId':
+    case 'targetFieldId':
+    case 'calendarFieldId':
+      return fields.filter((f) => f.kind === 'date');
+    case 'iterationFieldId':
+      return fields.filter((f) => f.kind === 'iteration');
+    case 'columnFieldId':
+    case 'swimlaneFieldId':
+    case 'groupFieldId':
+      return fields.filter((f) => f.kind === 'single-select' || f.kind === 'iteration');
+  }
+}
 
 export interface CustomViewEditorProps {
   view: CustomViewDefinition;
@@ -32,7 +67,7 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
   const [confirming, setConfirming] = useState(false);
   // The name as typed. Only a non-blank name is saved: a blank one would be dropped from storage on reload.
   const [nameDraft, setNameDraft] = useState(view.name);
-  const groupable = fields.filter((f) => f.kind === 'single-select' || f.kind === 'iteration');
+  const groupable = candidatesFor('columnFieldId', fields);
   const repairs = findMappingRepairs(view, fields);
   const suggestion = suggestMapping(fields);
   const update = (patch: Partial<CustomViewDefinition>) => onChange({ ...view, ...patch });
@@ -80,10 +115,12 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         Layout
         <select
           value={view.layout}
-          onChange={(event) => update({ layout: event.target.value === 'table' ? 'table' : 'kanban' })}
+          onChange={(event) => update({ layout: event.target.value as CustomViewLayout })}
         >
           <option value="kanban">Kanban</option>
           <option value="table">Table</option>
+          <option value="gantt">Gantt</option>
+          <option value="calendar">Calendar</option>
         </select>
       </label>
 
@@ -162,7 +199,7 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         </label>
       )}
 
-      {view.layout === 'kanban' ? (
+      {view.layout === 'kanban' && (
         <>
           <MappingSelect
             label="Columns"
@@ -186,7 +223,8 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
             onChange={(swimlaneFieldId) => update({ swimlaneFieldId })}
           />
         </>
-      ) : (
+      )}
+      {view.layout === 'table' && (
         <MappingSelect
           label="Group by"
           value={view.groupFieldId}
@@ -195,12 +233,77 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
           onChange={(groupFieldId) => update({ groupFieldId })}
         />
       )}
+      {view.layout === 'gantt' && (
+        <>
+          <label>
+            Bars from
+            <select
+              value={view.ganttSource}
+              onChange={(event) =>
+                update({ ganttSource: event.target.value === 'iteration' ? 'iteration' : 'dates' })
+              }
+            >
+              <option value="dates">Start and target dates</option>
+              <option value="iteration">An iteration field</option>
+            </select>
+          </label>
+          {view.ganttSource === 'dates' ? (
+            <>
+              <MappingSelect
+                label="Start field"
+                value={view.startFieldId}
+                options={candidatesFor('startFieldId', fields)}
+                emptyLabel="Choose a field"
+                onChange={(startFieldId) => update({ startFieldId })}
+              />
+              <MappingSelect
+                label="Target field"
+                value={view.targetFieldId}
+                options={candidatesFor('targetFieldId', fields)}
+                emptyLabel="Choose a field"
+                onChange={(targetFieldId) => update({ targetFieldId })}
+              />
+            </>
+          ) : (
+            <MappingSelect
+              label="Iteration field"
+              value={view.iterationFieldId}
+              options={candidatesFor('iterationFieldId', fields)}
+              emptyLabel="Choose a field"
+              onChange={(iterationFieldId) => update({ iterationFieldId })}
+            />
+          )}
+        </>
+      )}
+      {view.layout === 'calendar' && (
+        <>
+          <MappingSelect
+            label="Date field"
+            value={view.calendarFieldId}
+            options={candidatesFor('calendarFieldId', fields)}
+            emptyLabel="Choose a field"
+            onChange={(calendarFieldId) => update({ calendarFieldId })}
+          />
+          <label>
+            Calendar scale
+            <select
+              value={view.calendarScale}
+              onChange={(event) =>
+                update({ calendarScale: event.target.value === 'week' ? 'week' : 'month' })
+              }
+            >
+              <option value="month">Month</option>
+              <option value="week">Week</option>
+            </select>
+          </label>
+        </>
+      )}
 
       {repairs.map((repair, index) => (
         <RepairNote
           key={`${index}-${repair.slot}-${repair.fieldId}`}
           repair={repair}
-          groupable={groupable}
+          fields={fields}
           current={view}
           onFix={update}
           onClearBrokenFilters={() =>
@@ -273,13 +376,13 @@ function SuggestionNote({ name, what, onUse }: { name: string; what: string; onU
 
 function RepairNote({
   repair,
-  groupable,
+  fields,
   current,
   onFix,
   onClearBrokenFilters
 }: {
   repair: MappingRepair;
-  groupable: ProjectField[];
+  fields: ProjectField[];
   current: CustomViewDefinition;
   onFix: (patch: Partial<CustomViewDefinition>) => void;
   onClearBrokenFilters: () => void;
@@ -306,13 +409,8 @@ function RepairNote({
       </p>
     );
   }
-  const names: Record<'columnFieldId' | 'swimlaneFieldId' | 'groupFieldId', string> = {
-    columnFieldId: 'Column field',
-    swimlaneFieldId: 'Swimlane field',
-    groupFieldId: 'Group field'
-  };
-  const slot = repair.slot as 'columnFieldId' | 'swimlaneFieldId' | 'groupFieldId';
-  const label = names[slot];
+  const slot = repair.slot as FieldSlot;
+  const label = FIELD_SLOT_LABELS[slot];
   return (
     <p role="alert" className="project-message">
       {label} {reason}.{' '}
@@ -324,7 +422,7 @@ function RepairNote({
           onChange={(event) => onFix({ [slot]: event.target.value === '' ? null : event.target.value })}
         >
           <option value="">Clear</option>
-          {groupable.map((f) => (
+          {candidatesFor(slot, fields).map((f) => (
             <option key={f.id} value={f.id}>
               {f.name}
             </option>

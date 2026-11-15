@@ -231,7 +231,13 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
       sort: null,
       groupFieldId: null,
       columnFieldId: null,
-      swimlaneFieldId: null
+      swimlaneFieldId: null,
+      ganttSource: 'dates',
+      startFieldId: null,
+      targetFieldId: null,
+      iterationFieldId: null,
+      calendarFieldId: null,
+      calendarScale: 'month'
     };
     saveCustomViews([...customViews, created]);
     setCustomId(created.id);
