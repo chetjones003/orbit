@@ -7,6 +7,8 @@ const DEFAULTS: OrbitSettings = {
   pinnedRepoIds: [],
   customViews: [],
   theme: 'dark',
+  openItemsIn: 'side',
+  motion: 'always',
   windowState: null,
   publicUploadNoticeAcknowledged: false
 };
@@ -39,6 +41,8 @@ export class SettingsStore {
         pinnedRepoIds: preferenceUpdate.pinnedRepoIds ?? current.pinnedRepoIds,
         customViews: preferenceUpdate.customViews ?? current.customViews,
         theme: preferenceUpdate.theme ?? current.theme,
+        openItemsIn: preferenceUpdate.openItemsIn ?? current.openItemsIn,
+        motion: preferenceUpdate.motion ?? current.motion,
         windowState: current.windowState,
         // Set only by acknowledgePublicUploadNotice, never by a general update from the renderer.
         publicUploadNoticeAcknowledged: current.publicUploadNoticeAcknowledged
@@ -101,6 +105,8 @@ function normalizeSettings(value: unknown): OrbitSettings {
       : [],
     customViews: normalizeCustomViews(value['customViews']),
     theme: value['theme'] === 'light' ? 'light' : 'dark',
+    openItemsIn: value['openItemsIn'] === 'full' ? 'full' : 'side',
+    motion: value['motion'] === 'system' ? 'system' : 'always',
     windowState,
     publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
   };

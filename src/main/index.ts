@@ -45,6 +45,10 @@ if (isolatedProfile) {
 // Windows groups and attributes native notifications by this id. It must match the installer's id.
 app.setAppUserModelId('dev.orbit.app');
 
+// On some Windows GPUs the compositor stops producing frames once an item opens, so transitions freeze (the side
+// panel animations among them). Orbit is a light UI, so it draws in software instead. Must run before ready.
+app.disableHardwareAcceleration();
+
 // Set on the real quit path (tray menu, app menu, OS shutdown). Closing the window alone only hides it.
 let quitting = false;
 app.on('before-quit', () => {

@@ -1,13 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent
-} from 'react';
-import type { AppInfo, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AppInfo, OpenItemsIn, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
@@ -32,8 +24,13 @@ import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { ProjectsView } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
 import { UpdateDialog } from './updates/UpdateDialog';
-import { WorkspaceNav, type WorkspaceView } from './chrome/WorkspaceNav';
-import { TrackedRepoGroups } from './issues/TrackedRepoGroups';
+import type { WorkspaceView } from './chrome/WorkspaceNav';
+import { BottomRail, type RailTarget } from './shell/BottomRail';
+import { ItemMenu } from './shell/ItemMenu';
+import { SettingsDialog } from './shell/SettingsDialog';
+import { SideList, type ItemRef } from './shell/SideList';
+import { SidePanelStack } from './shell/SidePanelStack';
+import { motionMode, useSystemReducedMotion } from './shell/motion';
 import type { IssueStateFilter } from '../../shared/issues';
 import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
@@ -64,11 +61,17 @@ export function App() {
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
   const [showForksAndArchived, setShowForksAndArchived] = useState(false);
   // Closed on every launch: the panel opens when the user picks an item, and its open state is not saved.
-  const [detailsOpen, setDetailsOpen] = useState(false);
   /** Repo whose issue list replaces the repository list in the workspace. */
   const [issuesRepo, setIssuesRepo] = useState<PersonalRepo | null>(null);
   const [issueRef, setIssueRef] = useState<IssueRef | null>(null);
   const [issueExpanded, setIssueExpanded] = useState(false);
+  const [listKind, setListKind] = useState<'issue' | 'pull'>('issue');
+  // The right-hand side panels, oldest first. Two at most, so two items can be read side by side.
+  const [sideItems, setSideItems] = useState<ItemRef[]>([]);
+  const [sideWidth, setSideWidth] = useState(440);
+  const systemReducedMotion = useSystemReducedMotion();
+  const [itemMenu, setItemMenu] = useState<{ item: ItemRef; x: number; y: number } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
   /** Which section fills the workspace. The details panel follows the selected item in every section. */
@@ -262,6 +265,7 @@ export function App() {
       setIssuesRepo(repo);
       setView(target.kind === 'pull' ? 'pulls' : 'issues');
       setIssueRef({ repoFullName: target.repoFullName, number: target.number, kind: target.kind });
+      setIssueExpanded(true);
     },
     [pushToasts]
   );
@@ -397,6 +401,45 @@ export function App() {
     void updateSettings({ pinnedRepoIds: [...ids] }).catch(() => setActionError('Could not save this pin.'));
   };
 
+  /** Opens an issue or pull request: full screen, or in the side panel. There is one side panel; a new pick replaces it. */
+  const openItem = (item: ItemRef, mode: OpenItemsIn = settings?.openItemsIn ?? 'side'): void => {
+    if (mode === 'full') {
+      setIssueRef({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
+      setIssueExpanded(true);
+      setView(item.kind === 'pull' ? 'pulls' : 'issues');
+      return;
+    }
+    setSideItems([item]);
+  };
+
+  /** A single pick from a list. With nothing open the item opens full screen; otherwise the setting decides. */
+  const pickItem = (item: ItemRef): void => {
+    const somethingOpen = sideItems.length > 0 || (issueExpanded && issueRef !== null);
+    openItem(item, somethingOpen ? (settings?.openItemsIn ?? 'side') : 'full');
+  };
+
+  const railActive: RailTarget | null = settingsOpen
+    ? 'settings'
+    : view === 'issues' || view === 'pulls' || view === 'projects' || view === 'repos' || view === 'inbox'
+      ? (view as RailTarget)
+      : null;
+
+  const selectRail = (target: RailTarget): void => {
+    if (target === 'settings') return setSettingsOpen(true);
+    if (target === 'update') {
+      setUpdateDialogOpen(true);
+      checkForUpdates();
+      return;
+    }
+    // Switching lists only changes the left panel. The centre changes when an item in the list is clicked.
+    if (target === 'issues' || target === 'pulls') {
+      setListKind(target === 'pulls' ? 'pull' : 'issue');
+      setView(target);
+      return;
+    }
+    setView(target);
+  };
+
   const toggleTheme = (): void => {
     if (!settings) return;
     void updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' }).catch(() =>
@@ -405,52 +448,6 @@ export function App() {
   };
 
   /** The details panel may take at most half of the window, so the list always keeps room. */
-  const maxDetailsWidth = (): number => Math.max(260, Math.floor(window.innerWidth / 2));
-
-  const resizeDetails = (event: PointerEvent<HTMLDivElement>): void => {
-    if (!settings) return;
-    const startX = event.clientX;
-    const startWidth = settings.windowState?.detailsWidth ?? 320;
-    let lastX = startX;
-    const move = (moveEvent: globalThis.PointerEvent): void => {
-      lastX = moveEvent.clientX;
-      const nextWidth = Math.max(260, Math.min(maxDetailsWidth(), startWidth + startX - moveEvent.clientX));
-      setSettings((current) =>
-        current
-          ? {
-              ...current,
-              windowState: {
-                ...(current.windowState ?? { width: 1100, height: 720, maximized: false }),
-                detailsWidth: nextWidth
-              }
-            }
-          : current
-      );
-    };
-    const finish = (): void => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', finish);
-      const finalWidth = Math.max(260, Math.min(maxDetailsWidth(), startWidth + startX - lastX));
-      void updateSettings({ detailsWidth: finalWidth }).catch(() =>
-        setActionError('Could not save the panel size.')
-      );
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', finish, { once: true });
-  };
-
-  const resizeWithKeyboard = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (!settings || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
-    event.preventDefault();
-    const delta = event.key === 'ArrowLeft' ? 24 : -24;
-    void updateSettings({
-      detailsWidth: Math.max(
-        260,
-        Math.min(maxDetailsWidth(), (settings.windowState?.detailsWidth ?? 320) + delta)
-      )
-    });
-  };
-
   const refreshNow = (): void => {
     setActionError(null);
     void window.orbit.repos.refresh().then(
@@ -500,24 +497,36 @@ export function App() {
         onCheckUpdates={openUpdates}
         onSignOut={signOut}
       />
-      <main className="orbit-shell" aria-label="Orbit">
+      <main
+        className="orbit-shell"
+        aria-label="Orbit"
+        data-motion={motionMode(settings?.motion, systemReducedMotion)}
+      >
+        {status?.kind === 'signed-in' && (
+          <aside className="side-list" aria-label="Lists">
+            <div className="side-list-scroll">
+              <SideList
+                kind={listKind}
+                repos={trackedRepos}
+                selected={issueExpanded && issueRef ? issueRef : null}
+                onOpen={pickItem}
+                onOpenFull={(item) => {
+                  // A double click means full screen: drop the side panel its first click may have opened.
+                  setSideItems((current) => current.filter((entry) => !sameItem(entry, item)));
+                  openItem(item, 'full');
+                }}
+                onContextMenu={(item, x, y) => setItemMenu({ item, x, y })}
+                onRefreshRepos={refreshNow}
+              />
+            </div>
+            <BottomRail
+              active={railActive}
+              updateAvailable={updateStatus.kind === 'available'}
+              onSelect={selectRail}
+            />
+          </aside>
+        )}
         <section className="workspace" aria-label="Workspace">
-          <WorkspaceNav
-            view={view}
-            signedInLogin={status?.kind === 'signed-in' ? status.login : null}
-            refreshing={loadingRepos}
-            theme={settings?.theme ?? 'dark'}
-            buildLabel={info?.version ?? 'Starting…'}
-            onView={(next) => {
-              setView(next);
-              setIssueExpanded(false);
-              setCreatingIssue(false);
-            }}
-            onRefresh={refreshNow}
-            onCheckUpdates={openUpdates}
-            onToggleTheme={toggleTheme}
-            onSignOut={signOut}
-          />
           {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
             <div className="scope-bar">
               <label className="scope-field">
@@ -598,13 +607,8 @@ export function App() {
               <Inbox
                 selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
                 onOpenItem={(item) => {
-                  setIssueRef({
-                    repoFullName: item.repoFullName,
-                    number: item.number,
-                    kind: item.kind
-                  });
+                  openItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
                   setIssueExpanded(false);
-                  setDetailsOpen(true);
                 }}
               />
             </div>
@@ -617,9 +621,8 @@ export function App() {
               </div>
               <ProjectsView
                 onOpenItem={(repoFullName, number, kind) => {
-                  setIssueRef({ repoFullName, number, kind });
+                  openItem({ repoFullName, number, kind });
                   setIssueExpanded(false);
-                  setDetailsOpen(true);
                 }}
               />
             </div>
@@ -652,7 +655,7 @@ export function App() {
                   signedInLogin={status.login}
                   onCreated={(number) => {
                     setCreatingIssue(false);
-                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
+                    openItem({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
                   }}
                   onCancel={() => setCreatingIssue(false)}
                 />
@@ -662,7 +665,7 @@ export function App() {
                   repoFullName={issuesRepo.fullName}
                   selectedNumber={issueRef?.kind === 'pull' ? issueRef.number : null}
                   onOpenPull={(number) =>
-                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
+                    openItem({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
                   }
                 />
               ) : (
@@ -671,7 +674,7 @@ export function App() {
                   repoFullName={issuesRepo.fullName}
                   selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
                   onOpenIssue={(number) =>
-                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
+                    openItem({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
                   }
                 />
               )}
@@ -690,22 +693,10 @@ export function App() {
                   </button>
                 </div>
               ) : (
-                <TrackedRepoGroups
-                  kind={pullMode ? 'pull' : 'issue'}
-                  repos={trackedRepos}
-                  state={stateFilter}
-                  selected={issueRef}
-                  onOpen={(repoFullName, number, kind) => {
-                    setIssueRef({ repoFullName, number, kind });
-                    setIssueExpanded(false);
-                    setDetailsOpen(true);
-                  }}
-                  onScope={(repo) => {
-                    setIssuesRepo(repo);
-                    setIssueRef(null);
-                    setCreatingIssue(false);
-                  }}
-                />
+                <div className="issue-empty">
+                  <h2>Pick an {pullMode ? 'pull request' : 'issue'} from the list</h2>
+                  <p>It opens here in full, or beside this view, depending on your settings.</p>
+                </div>
               )}
             </div>
           ) : (
@@ -736,19 +727,6 @@ export function App() {
                 <p role="status" className="session-notice">
                   {status.notice}
                 </p>
-              )}
-              {updateDialogOpen && (
-                <UpdateDialog
-                  status={updateStatus}
-                  currentVersion={info?.version}
-                  onClose={() => setUpdateDialogOpen(false)}
-                  onCheck={checkForUpdates}
-                  onDownload={() =>
-                    void window.orbit.updates.download().then(setUpdateStatus, () => undefined)
-                  }
-                  onInstall={() => window.orbit.updates.install()}
-                  hasUnsavedDrafts={() => drafts.hasDrafts()}
-                />
               )}
               {refreshStatus && (
                 <ConnectionBanner
@@ -834,85 +812,80 @@ export function App() {
           />
         </section>
 
-        {status?.kind === 'signed-in' && detailsOpen && (
-          <>
-            <div
-              className="resize-handle"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize details panel"
-              aria-valuenow={settings?.windowState?.detailsWidth ?? 320}
-              aria-valuemin={260}
-              aria-valuemax={maxDetailsWidth()}
-              tabIndex={0}
-              onPointerDown={resizeDetails}
-              onKeyDown={resizeWithKeyboard}
+        {status?.kind === 'signed-in' && view === 'repos' && selectedRepo && (
+          <aside className="details-panel" aria-label="Repository details">
+            <RepoDetails
+              repo={selectedRepo}
+              onViewIssues={() => {
+                setIssuesRepo(selectedRepo);
+                setIssueRef(null);
+                setIssueExpanded(false);
+                setView('issues');
+              }}
             />
-            <aside
-              className="details-panel"
-              aria-label="Repository details"
-              style={{ width: Math.min(settings?.windowState?.detailsWidth ?? 320, maxDetailsWidth()) }}
-            >
-              <div className="details-header">
-                <span className="eyebrow">DETAILS</span>
-                <button
-                  className="icon-button"
-                  onClick={() => setDetailsOpen(false)}
-                  aria-label="Collapse details panel"
-                  title="Collapse details"
-                >
-                  <Icon name="close" size={16} />
-                </button>
-              </div>
-              {issueRef ? (
-                <div className="issue-panel">
-                  <button className="secondary-action" onClick={() => setIssueExpanded(true)}>
-                    Expand
-                  </button>
-                  <IssueDetailView
-                    key={`${issueRef.repoFullName}#${issueRef.number}`}
-                    repoFullName={issueRef.repoFullName}
-                    number={issueRef.number}
-                    signedInLogin={status.login}
-                    kind={issueRef.kind}
-                    onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
-                  />
-                </div>
-              ) : view === 'repos' && selectedRepo ? (
-                <RepoDetails
-                  repo={selectedRepo}
-                  onViewIssues={() => {
-                    setIssuesRepo(selectedRepo);
-                    setIssueRef(null);
-                    setIssueExpanded(false);
-                    setView('issues');
-                  }}
-                />
-              ) : (
-                <div className="details-empty">
-                  <span className="details-glyph">
-                    <OrbitMark size={26} />
-                  </span>
-                  <h2>{view === 'repos' ? 'Select a repository' : 'Select an item'}</h2>
-                  <p>
-                    {view === 'repos'
-                      ? 'Choose a repository to see its details here.'
-                      : 'Choose an item to read it here.'}
-                  </p>
-                </div>
-              )}
-            </aside>
-          </>
+          </aside>
         )}
-        {status?.kind === 'signed-in' && !detailsOpen && (
-          <button
-            className="expand-details"
-            onClick={() => setDetailsOpen(true)}
-            aria-label="Expand details panel"
-            title="Expand details"
-          >
-            <Icon name="chevronLeft" size={16} />
-          </button>
+        {status?.kind === 'signed-in' && sideItems.length > 0 && (
+          <SidePanelStack
+            items={sideItems}
+            signedInLogin={status.login}
+            width={sideWidth}
+            motion={motionMode(settings?.motion, systemReducedMotion)}
+            onWidth={setSideWidth}
+            onExpand={(next) => {
+              setSideItems((current) => current.filter((entry) => !sameItem(entry, next)));
+              openItem(next, 'full');
+            }}
+            onClose={(next) => setSideItems((current) => current.filter((entry) => !sameItem(entry, next)))}
+            onOpenItem={(next) => openItem(next)}
+          />
+        )}
+        {itemMenu && (
+          <ItemMenu
+            x={itemMenu.x}
+            y={itemMenu.y}
+            onOpenFull={() => {
+              openItem(itemMenu.item, 'full');
+              setItemMenu(null);
+            }}
+            onOpenSide={() => {
+              openItem(itemMenu.item, 'side');
+              setItemMenu(null);
+            }}
+            onClose={() => setItemMenu(null)}
+          />
+        )}
+        {settingsOpen && settings && (
+          <SettingsDialog
+            theme={settings.theme}
+            openItemsIn={settings.openItemsIn}
+            motion={settings.motion}
+            systemReducedMotion={systemReducedMotion}
+            version={info?.version}
+            onTheme={(theme) =>
+              void updateSettings({ theme }).catch(() => setActionError('Could not save the theme.'))
+            }
+            onOpenItemsIn={(openItemsIn) =>
+              void updateSettings({ openItemsIn }).catch(() => setActionError('Could not save this setting.'))
+            }
+            onMotion={(motion) =>
+              void updateSettings({ motion }).catch(() => setActionError('Could not save this setting.'))
+            }
+            onSignOut={() => signOut()}
+            login={status?.kind === 'signed-in' ? status.login : null}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
+        {updateDialogOpen && (
+          <UpdateDialog
+            status={updateStatus}
+            currentVersion={info?.version}
+            onClose={() => setUpdateDialogOpen(false)}
+            onCheck={checkForUpdates}
+            onDownload={() => void window.orbit.updates.download().then(setUpdateStatus, () => undefined)}
+            onInstall={() => window.orbit.updates.install()}
+            hasUnsavedDrafts={() => drafts.hasDrafts()}
+          />
         )}
       </main>
     </div>
@@ -1014,4 +987,8 @@ function AuthPanel({ status, onStartSignIn, onCancel }: AuthPanelProps) {
         </section>
       );
   }
+}
+
+function sameItem(a: ItemRef, b: ItemRef): boolean {
+  return a.repoFullName === b.repoFullName && a.number === b.number && a.kind === b.kind;
 }

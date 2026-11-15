@@ -159,12 +159,27 @@ export interface OrbitSettings {
   /** Definitions of Orbit's custom views. Never item data. */
   customViews: CustomViewDefinition[];
   theme: 'light' | 'dark';
+  /** Where an issue or pull request opens when it is picked from a list. */
+  openItemsIn: OpenItemsIn;
+  /** Whether the side panels animate when Windows has animations off. */
+  motion: MotionSetting;
   windowState: WindowState | null;
   /** The user has accepted that uploads to public repos are public as soon as they upload. */
   publicUploadNoticeAcknowledged: boolean;
 }
 
-export type SettingsUpdate = Partial<Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme'>> & {
+/** The two places an issue or pull request can open. */
+export type OpenItemsIn = 'full' | 'side';
+
+/**
+ * 'always' (the default) animates the panels whatever Windows says. 'system' follows Windows: when animations are off
+ * there, panels fade instead of sliding.
+ */
+export type MotionSetting = 'system' | 'always';
+
+export type SettingsUpdate = Partial<
+  Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme' | 'openItemsIn' | 'motion'>
+> & {
   detailsWidth?: number;
 };
 

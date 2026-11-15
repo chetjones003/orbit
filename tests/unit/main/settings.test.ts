@@ -57,11 +57,31 @@ describe('SettingsStore', () => {
     const file = JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>;
     expect(Object.keys(file).sort()).toEqual([
       'customViews',
+      'motion',
+      'openItemsIn',
       'pinnedRepoIds',
       'publicUploadNoticeAcknowledged',
       'theme',
       'windowState'
     ]);
+  });
+
+  it('opens items in the side panel unless full screen is chosen', async () => {
+    const { store } = await makeStore();
+    expect((await store.load()).openItemsIn).toBe('side');
+    await store.update({ openItemsIn: 'full' });
+    expect((await store.load()).openItemsIn).toBe('full');
+    await store.update({ openItemsIn: 'sideways' as never });
+    expect((await store.load()).openItemsIn).toBe('side');
+  });
+
+  it('animates the side panels by default, and follows Windows only when that is chosen', async () => {
+    const { store } = await makeStore();
+    expect((await store.load()).motion).toBe('always');
+    await store.update({ motion: 'system' });
+    expect((await store.load()).motion).toBe('system');
+    await store.update({ motion: 'sometimes' as never });
+    expect((await store.load()).motion).toBe('always');
   });
 
   it('ignores invalid settings and clamps the details width', async () => {

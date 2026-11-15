@@ -128,7 +128,6 @@ describe('App', () => {
   it('stays not-ready while the app info call is pending', () => {
     installBridge({ getInfo: () => new Promise(() => {}) });
     render(<App />);
-    expect(screen.getByText('Starting…')).toBeInTheDocument();
     expect(document.documentElement.dataset['orbitReady']).toBeUndefined();
   });
 
@@ -185,6 +184,7 @@ describe('App', () => {
         status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true }
       });
       render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
       expect(await screen.findByText('Signed in as @chetjones003')).toBeInTheDocument();
     });
 
@@ -194,6 +194,7 @@ describe('App', () => {
       });
       vi.mocked(window.confirm).mockReturnValueOnce(false);
       render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
       expect(window.confirm).toHaveBeenCalled();
       expect(api.auth.signOut).not.toHaveBeenCalled();
@@ -241,6 +242,7 @@ describe('App', () => {
         listener({ kind: 'signed-in', sessionId: 2, login: 'chetjones003', persistent: true });
       }
     });
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(await screen.findByText('Signed in as @chetjones003')).toBeInTheDocument();
   });
 
@@ -307,8 +309,7 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Open chetjones003/orbit' })).toBeInTheDocument();
     expect(api.repos.list).toHaveBeenCalledOnce();
     expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand details panel' }));
-    expect(screen.getByRole('complementary', { name: 'Repository details' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Lists' })).toBeInTheDocument();
   });
 
   it('pins repositories, filters forks and archived repos, and shows archived repositories as read only', async () => {
@@ -355,7 +356,7 @@ describe('App', () => {
       repos
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
     const normal = await screen.findByRole('button', { name: 'Open chet/normal' });
     expect(screen.queryByRole('button', { name: 'Open chet/fork' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pin normal' }));
@@ -364,8 +365,6 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open chet/old, read only' }));
     expect(await screen.findByText('Archived repositories are read only.')).toBeInTheDocument();
     fireEvent.click(normal);
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse details panel' }));
-    expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
   });
 });
 
@@ -448,7 +447,7 @@ describe('issues in the workspace', () => {
       commentsPartial: false
     }));
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
     fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));
@@ -457,7 +456,7 @@ describe('issues in the workspace', () => {
     expect(await screen.findByText('Body text')).toBeInTheDocument();
     expect(api.issues.detail).toHaveBeenCalledWith('chetjones003/app', 4);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    fireEvent.click(screen.getByRole('button', { name: /full screen/ }));
     expect(await screen.findByRole('button', { name: '← Back to issues' })).toBeInTheDocument();
   });
 
@@ -507,7 +506,7 @@ describe('issues in the workspace', () => {
       commentsPartial: false
     }));
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Expand details panel' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
     fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));
@@ -545,6 +544,7 @@ describe('unsent comment text', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<App />);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
     expect(window.confirm).toHaveBeenCalledWith(
@@ -558,6 +558,7 @@ describe('unsent comment text', () => {
     const { listeners } = installBridge({ status: SIGNED_IN, repos: [] });
     drafts.set(DRAFT, 'Survives re-authentication');
     render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     await screen.findByRole('button', { name: 'Sign out' });
 
     act(() => {
@@ -581,6 +582,7 @@ describe('unsent comment text', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<App />);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
     expect(api.auth.signOut).not.toHaveBeenCalled();
