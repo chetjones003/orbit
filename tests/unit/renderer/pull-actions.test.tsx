@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PullCi } from '../../../src/renderer/src/issues/PullCi';
 import { PullActionsPanel } from '../../../src/renderer/src/issues/PullActions';
 import { NewPullForm } from '../../../src/renderer/src/issues/NewPullForm';
 import type { PullActions, WorkflowRun } from '../../../src/shared/issues';
@@ -118,7 +119,13 @@ describe('PullActionsPanel', () => {
 
   it('re-runs only the failed jobs or the whole workflow run', async () => {
     const pulls = installApi();
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
+    (window.orbit as unknown as { actions: unknown }).actions = {
+      jobs: vi.fn(async () => []),
+      workflowGraph: vi.fn(async () => []),
+      jobLogs: vi.fn(async () => ''),
+      cancelRun: vi.fn(async () => ({ kind: 'changed' }))
+    };
+    render(<PullCi repoFullName="orbit-owner/app" number={7} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Re-run failed jobs for CI' }));
     await waitFor(() => expect(pulls.rerun).toHaveBeenCalledWith('orbit-owner/app', 11, 'failed', 'head-1'));
     fireEvent.click(screen.getByRole('button', { name: 'Re-run all jobs for CI' }));

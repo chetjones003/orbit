@@ -202,7 +202,9 @@ describe('IssueDetailView notice links', () => {
       />
     );
 
-    fireEvent.click((await screen.findByRole('link', { name: 'View on GitHub' })) as HTMLElement);
+    // The header link has the same name, so pick the Mermaid link by its external-link marker.
+    const links = await screen.findAllByRole('link', { name: 'View on GitHub' });
+    fireEvent.click(links.find((link) => link.hasAttribute('data-external')) as HTMLElement);
 
     expect(openExternal).toHaveBeenCalledWith(SUMMARY.htmlUrl);
     expect(onOpenIssue).not.toHaveBeenCalled();

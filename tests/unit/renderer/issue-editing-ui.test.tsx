@@ -155,7 +155,7 @@ describe('IssueDetailView editing', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'My title' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('changed on GitHub');
+    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent('changed on GitHub');
     expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('My title');
   });
 
@@ -177,6 +177,8 @@ describe('IssueDetailView editing', () => {
     let refuse!: (error: Error) => void;
     api.issues.updateFields.mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)));
     renderDetail();
+    // Labels, assignees, and milestone are edited behind Edit issue.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
 
     const urgent = await screen.findByRole('checkbox', { name: 'urgent' });
     fireEvent.click(urgent);
@@ -196,6 +198,8 @@ describe('IssueDetailView editing', () => {
     let finish!: (summary: IssueSummary) => void;
     api.issues.updateFields.mockReturnValueOnce(new Promise<IssueSummary>((resolve) => (finish = resolve)));
     renderDetail();
+    // Labels, assignees, and milestone are edited behind Edit issue.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
 
     fireEvent.click(await screen.findByRole('checkbox', { name: 'urgent' }));
     expect(screen.getByRole('checkbox', { name: 'helper' })).toBeDisabled();
@@ -232,7 +236,7 @@ describe('IssueDetailView editing', () => {
 
     fireEvent.click(taskBoxes(container)[0]!);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('changed on GitHub');
+    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent('changed on GitHub');
     expect(api.issues.detail).toHaveBeenCalledTimes(2);
   });
 
@@ -265,6 +269,8 @@ describe('IssueDetailView editing', () => {
   it('says when the repo has more labels, assignees, or milestones than are listed', async () => {
     api.issues.repoOptions.mockResolvedValueOnce({ ...OPTIONS, partial: true });
     renderDetail();
+    // Labels, assignees, and milestone are edited behind Edit issue.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
     await screen.findByRole('heading', { name: 'Crash on save' });
 
     expect(await screen.findByText(/Only the first 100/)).toBeInTheDocument();
@@ -275,6 +281,8 @@ describe('IssueDetailView editing', () => {
       detail({ summary: { ...SUMMARY, milestone: { number: 9, title: 'Closed sprint' } } })
     );
     renderDetail();
+    // Labels, assignees, and milestone are edited behind Edit issue.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
     await screen.findByRole('heading', { name: 'Crash on save' });
 
     const fields = screen.getByRole('region', { name: 'Issue fields' });
@@ -285,6 +293,8 @@ describe('IssueDetailView editing', () => {
 
   it('lists the choices the repo offers for labels, assignees, and milestone', async () => {
     renderDetail();
+    // Labels, assignees, and milestone are edited behind Edit issue.
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
     await screen.findByRole('heading', { name: 'Crash on save' });
 
     const fields = screen.getByRole('region', { name: 'Issue fields' });

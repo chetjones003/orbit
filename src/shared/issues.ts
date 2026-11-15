@@ -331,3 +331,23 @@ export interface PullCreateInput {
   base: string;
   draft: boolean;
 }
+
+/** One job of a workflow run, with its status and timing, as the CI section shows it. */
+export interface WorkflowJob {
+  id: number;
+  name: string;
+  /** queued, in_progress, or completed. */
+  status: string;
+  /** success, failure, cancelled, skipped, and so on, once completed. */
+  conclusion: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  htmlUrl: string;
+}
+
+/** A job as the workflow file declares it: its key, its display name, and the jobs it needs. */
+export interface WorkflowGraphJob {
+  key: string;
+  name: string;
+  needs: string[];
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MergeMethod, PullActions as PullActionsData, WorkflowRun } from '../../../shared/issues';
+import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
   merge: 'Merge commit',
@@ -14,13 +14,14 @@ export interface PullActionsPanelProps {
   onChanged: () => void;
 }
 
+const STALE_MESSAGE = 'This pull request changed since you opened it. Review the new head, then try again.';
+
 /**
- * The write actions for one pull request: merge, auto-merge, draft state, and workflow re-runs. Every
- * action is pinned to the head commit the panel loaded, so a head that moved since is refused, not merged.
+ * Merge, auto-merge, and draft state for one pull request. Every action is pinned to the head commit the panel
+ * loaded, so a head that moved since is refused, not merged. Workflow runs live in the CI section.
  */
 export function PullActionsPanel({ repoFullName, number, onChanged }: PullActionsPanelProps) {
   const [actions, setActions] = useState<PullActionsData | null>(null);
-  const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [method, setMethod] = useState<MergeMethod | ''>('');
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -30,20 +31,16 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      window.orbit.pulls.actions(repoFullName, number),
-      window.orbit.pulls.runs(repoFullName, number)
-    ]).then(
-      ([nextActions, nextRuns]) => {
+    void window.orbit.pulls.actions(repoFullName, number).then(
+      (next) => {
         if (cancelled) return;
-        setActions(nextActions);
-        setRuns(nextRuns);
+        setActions(next);
         setMethod((current) =>
-          current !== '' && nextActions.allowedMergeMethods.includes(current)
+          current !== '' && next.allowedMergeMethods.includes(current)
             ? current
-            : (nextActions.allowedMergeMethods[0] ?? '')
+            : (next.allowedMergeMethods[0] ?? '')
         );
-        setDeleteBranch(nextActions.deleteBranchOnMerge && nextActions.headInRepo);
+        setDeleteBranch(next.deleteBranchOnMerge && next.headInRepo);
       },
       (cause: unknown) => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load the actions.');
@@ -54,15 +51,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     };
   }, [repoFullName, number, loadVersion]);
 
-  const reload = (): void => {
-    setLoadVersion((version) => version + 1);
-    onChanged();
-  };
-
-  /**
-   * Runs one action and reloads afterwards. `work` returns the status to show, or null when it reported
-   * its own outcome (a stale head is shown as an error, never as success).
-   */
+  /** Runs one action and reloads afterwards. A stale head is an error, never a success. */
   const run = async (work: () => Promise<string | null>): Promise<void> => {
     setBusy(true);
     setError(null);
@@ -74,11 +63,10 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
       setError(cause instanceof Error ? cause.message : 'That action failed. Try again.');
     } finally {
       setBusy(false);
-      reload();
+      setLoadVersion((version) => version + 1);
+      onChanged();
     }
   };
-
-  const STALE_MESSAGE = 'This pull request changed since you opened it. Review the new head, then try again.';
 
   const merge = (): Promise<void> => {
     if (!actions || method === '') return Promise.resolve();
@@ -125,17 +113,6 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     });
   };
 
-  const rerun = (runId: number, name: string, mode: 'all' | 'failed'): Promise<void> =>
-    run(async () => {
-      if (!actions) return null;
-      const result = await window.orbit.pulls.rerun(repoFullName, runId, mode, actions.headSha);
-      if (result.kind === 'new-commits') {
-        setError(STALE_MESSAGE);
-        return null;
-      }
-      return `Re-run requested for ${name}.`;
-    });
-
   if (error && !actions) {
     return (
       <p role="alert" className="session-notice">
@@ -144,7 +121,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     );
   }
   if (!actions) {
-    return <p className="empty-state">Loading actions…</p>;
+    return <p className="detail-muted">Loading actions…</p>;
   }
 
   const canMerge =
@@ -153,97 +130,100 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     !actions.merged &&
     actions.state === 'open' &&
     actions.allowedMergeMethods.length > 0;
+  const open = !actions.merged && actions.state === 'open';
 
   return (
-    <section aria-label="Pull request actions" className="pull-actions">
-      <h3>Actions</h3>
-      <div className="pull-actions-draft">
-        <button className="secondary-action" disabled={busy} onClick={() => void toggleDraft()}>
+    <section aria-label="Pull request actions" className="detail-card pull-actions">
+      <div className="pull-actions-head">
+        <h3 className="detail-card-title">Merge</h3>
+        <button
+          type="button"
+          className="secondary-action"
+          disabled={busy || !open}
+          onClick={() => void toggleDraft()}
+        >
           {actions.draft ? 'Mark ready for review' : 'Convert to draft'}
         </button>
       </div>
-
-      {actions.merged || actions.state !== 'open' ? (
-        <p>{actions.merged ? 'Merged.' : 'Closed.'}</p>
+      {!open ? (
+        <p className="detail-muted">
+          {actions.merged ? 'This pull request is merged.' : 'This pull request is closed.'}
+        </p>
       ) : (
-        <div className="pull-actions-merge">
-          <label className="field">
-            <span>Merge method</span>
-            <select
-              aria-label="Merge method"
-              value={method}
-              disabled={busy || actions.allowedMergeMethods.length === 0}
-              onChange={(event) => setMethod(event.target.value as MergeMethod)}
-            >
-              {actions.allowedMergeMethods.length === 0 && (
-                <option value="">No merge method is allowed</option>
-              )}
-              {actions.allowedMergeMethods.map((allowed) => (
-                <option key={allowed} value={allowed}>
-                  {METHOD_LABELS[allowed]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <input
-              type="checkbox"
-              checked={deleteBranch}
-              disabled={busy || !actions.headInRepo}
-              onChange={(event) => setDeleteBranch(event.target.checked)}
-            />
-            <span>Delete branch after merge</span>
-          </label>
-          <button className="primary-action" disabled={!canMerge} onClick={() => void merge()}>
+        <>
+          <div className="merge-row">
+            <label className="merge-field">
+              <span>Method</span>
+              <select
+                aria-label="Merge method"
+                value={method}
+                disabled={busy || actions.allowedMergeMethods.length === 0}
+                onChange={(event) => setMethod(event.target.value as MergeMethod)}
+              >
+                {actions.allowedMergeMethods.length === 0 && (
+                  <option value="">No merge method is allowed</option>
+                )}
+                {actions.allowedMergeMethods.map((allowed) => (
+                  <option key={allowed} value={allowed}>
+                    {METHOD_LABELS[allowed]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="merge-check">
+              <input
+                type="checkbox"
+                checked={deleteBranch}
+                disabled={busy || !actions.headInRepo}
+                onChange={(event) => setDeleteBranch(event.target.checked)}
+              />
+              <span>Delete branch after merge</span>
+            </label>
+          </div>
+          <button
+            type="button"
+            className="primary-action merge-button"
+            disabled={!canMerge}
+            onClick={() => void merge()}
+          >
             Merge
           </button>
-          {actions.draft && <p>Mark the pull request ready for review before merging.</p>}
-          {actions.autoMergeMethod ? (
-            <button className="secondary-action" disabled={busy} onClick={() => void toggleAutoMerge(false)}>
-              Disable auto-merge
-            </button>
-          ) : (
-            <button
-              className="secondary-action"
-              disabled={busy || !actions.allowAutoMerge || method === ''}
-              onClick={() => void toggleAutoMerge(true)}
-            >
-              Enable auto-merge
-            </button>
+          {actions.draft && (
+            <p className="detail-muted">Mark the pull request ready for review before merging.</p>
           )}
-          {!actions.allowAutoMerge && <p>Auto-merge is not allowed in this repo.</p>}
-        </div>
+          <div className="merge-auto">
+            {actions.autoMergeMethod ? (
+              <>
+                <span className="merge-auto-note">Auto-merge is on. It merges once the checks pass.</span>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={busy}
+                  onClick={() => void toggleAutoMerge(false)}
+                >
+                  Disable auto-merge
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="merge-auto-note">
+                  {actions.allowAutoMerge
+                    ? 'Merge automatically once the checks pass.'
+                    : 'Auto-merge is not allowed in this repo.'}
+                </span>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={busy || !actions.allowAutoMerge || method === ''}
+                  onClick={() => void toggleAutoMerge(true)}
+                >
+                  Enable auto-merge
+                </button>
+              </>
+            )}
+          </div>
+        </>
       )}
-
-      <h3>Workflow runs</h3>
-      {runs.length === 0 ? (
-        <p>No workflow runs for this commit.</p>
-      ) : (
-        <ul className="pull-actions-runs">
-          {runs.map((workflow) => (
-            <li key={workflow.id}>
-              {workflow.name}: {workflow.conclusion ?? workflow.status}{' '}
-              <button
-                className="secondary-action"
-                disabled={busy}
-                aria-label={`Re-run failed jobs for ${workflow.name}`}
-                onClick={() => void rerun(workflow.id, workflow.name, 'failed')}
-              >
-                Re-run failed jobs
-              </button>{' '}
-              <button
-                className="secondary-action"
-                disabled={busy}
-                aria-label={`Re-run all jobs for ${workflow.name}`}
-                onClick={() => void rerun(workflow.id, workflow.name, 'all')}
-              >
-                Re-run all jobs
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {status && (
         <p role="status" className="session-notice">
           {status}

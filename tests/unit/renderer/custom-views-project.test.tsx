@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { dragCard, dropOn } from './pointer-drag';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectsView } from '../../../src/renderer/src/projects/ProjectsView';
 import type { CustomViewDefinition } from '../../../src/shared/custom-views';
@@ -137,9 +138,8 @@ describe('ProjectsView custom views', () => {
       fieldValues: { FLD_status: { kind: 'single-select', optionId: 'done', name: 'Done' } }
     };
     api.projects.setField.mockResolvedValue({ kind: 'saved', item: saved });
-    fireEvent.dragStart(card, { dataTransfer: { setData: () => undefined, getData: () => '' } });
-    fireEvent.dragOver(screen.getByRole('listitem', { name: /^Done,/ }));
-    fireEvent.drop(screen.getByRole('listitem', { name: /^Done,/ }));
+    dragCard(card);
+    dropOn(screen.getByRole('listitem', { name: /^Done,/ }));
     await waitFor(() =>
       expect(api.projects.setField).toHaveBeenCalledWith('PVT_1', 'issue-1', {
         fieldId: 'FLD_status',
@@ -170,9 +170,25 @@ describe('ProjectsView custom views', () => {
     expect(JSON.stringify(payload)).not.toContain('Fix crash');
   });
 
+  it('opens the settings of a new custom view at once', async () => {
+    await openProject();
+    fireEvent.click(await screen.findByRole('button', { name: /New custom view/ }));
+    expect(await screen.findByRole('dialog', { name: 'View settings' })).toBeInTheDocument();
+  });
+
+  it('filters a view’s items by keyword as the user types', async () => {
+    await openProject();
+    fireEvent.click(await screen.findByRole('tab', { name: /Sprint board/ }));
+    expect(await screen.findByText('Fix crash')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter items' }), { target: { value: 'write' } });
+    expect(screen.getByText('Write docs')).toBeInTheDocument();
+    expect(screen.queryByText('Fix crash')).not.toBeInTheDocument();
+  });
+
   it('autosaves a renamed view', async () => {
     await openProject();
     fireEvent.click(await screen.findByRole('tab', { name: /Sprint board/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View settings' }));
     fireEvent.change(await screen.findByLabelText('View name'), { target: { value: 'Triage' } });
     await waitFor(() =>
       expect(api.settings.update).toHaveBeenLastCalledWith({

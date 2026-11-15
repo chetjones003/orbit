@@ -9,6 +9,8 @@ import type {
   PullWriteResult,
   PullReviewState,
   RerunMode,
+  WorkflowGraphJob,
+  WorkflowJob,
   WorkflowRun,
   ReviewAnchor,
   ReviewCommentResult,
@@ -58,6 +60,7 @@ import type { AuthService } from './auth-service';
 import { GitHubClient, GitHubRequestError } from './github-client';
 import { setTaskItemChecked } from './task-list';
 import { runWrite, WriteBlockedError, type ReconcileResult } from './write-reconcile';
+import { parse as parseYaml } from 'yaml';
 
 /** Page size requested from GitHub. A full page means another page may exist. */
 export const ISSUES_PER_PAGE = 30;
@@ -1398,6 +1401,76 @@ export class IssueService {
     return { kind: 'changed' };
   }
 
+  /** The jobs of one workflow run, with status and timing, for the CI section. */
+  async getRunJobs(repoFullName: string, runId: number): Promise<WorkflowJob[]> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(runId) || runId < 1)
+      throw new Error('Workflow run ids must be positive whole numbers.');
+    const { token, scope } = await this.session();
+    const raw = await this.client.get<unknown>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/jobs?per_page=100`,
+      { token, scope }
+    );
+    const jobs = (raw as { jobs?: unknown } | null)?.jobs;
+    return Array.isArray(jobs) ? jobs.flatMap(toWorkflowJob) : [];
+  }
+
+  /**
+   * The jobs of a run's workflow file and what each one needs, read at the run's commit. A file that cannot be
+   * read or parsed gives an empty list, and the CI section falls back to the run's own job order.
+   */
+  async getWorkflowGraph(repoFullName: string, runId: number): Promise<WorkflowGraphJob[]> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(runId) || runId < 1)
+      throw new Error('Workflow run ids must be positive whole numbers.');
+    const { token, scope } = await this.session();
+    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    try {
+      const run = await this.client.get<unknown>(`${base}/actions/runs/${runId}`, { token, scope });
+      const path = (run as { path?: unknown } | null)?.path;
+      const sha = (run as { head_sha?: unknown } | null)?.head_sha;
+      if (typeof path !== 'string' || typeof sha !== 'string') return [];
+      const file = await this.client.get<unknown>(
+        `${base}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(sha)}`,
+        { token, scope }
+      );
+      const content = (file as { content?: unknown } | null)?.content;
+      if (typeof content !== 'string') return [];
+      return workflowGraphOf(Buffer.from(content, 'base64').toString('utf8'));
+    } catch {
+      return [];
+    }
+  }
+
+  /** The plain-text log of one job. Large logs are cut to the last part, with the cut said in the text. */
+  async getJobLogs(repoFullName: string, jobId: number): Promise<string> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(jobId) || jobId < 1) throw new Error('Job ids must be positive whole numbers.');
+    const { token, scope } = await this.session();
+    const text = await this.client.send<string>(
+      'GET',
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/jobs/${jobId}/logs`,
+      { token, scope, text: true }
+    );
+    const limit = 400_000;
+    return text.length > limit ? `[Earlier output is not shown]\n${text.slice(-limit)}` : text;
+  }
+
+  /** Cancels a run that is still queued or running. Nothing is retried after an uncertain outcome. */
+  async cancelRun(repoFullName: string, runId: number): Promise<PullWriteResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(runId) || runId < 1)
+      throw new Error('Workflow run ids must be positive whole numbers.');
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    await this.client.send<unknown>(
+      'POST',
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/cancel`,
+      { token, scope, text: true }
+    );
+    return { kind: 'changed' };
+  }
+
   /**
    * Opens a pull request from a branch in the same personal repo. An uncertain create is reconciled by
    * looking for a pull request with this title and base created since the request began, in any state.
@@ -2088,6 +2161,23 @@ function readPullFields(raw: unknown): {
   };
 }
 
+function toWorkflowJob(raw: unknown): WorkflowJob[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const job = raw as Record<string, unknown>;
+  if (typeof job.id !== 'number' || typeof job.name !== 'string') return [];
+  return [
+    {
+      id: job.id,
+      name: job.name,
+      status: typeof job.status === 'string' ? job.status : 'unknown',
+      conclusion: typeof job.conclusion === 'string' ? job.conclusion : null,
+      startedAt: typeof job.started_at === 'string' ? job.started_at : null,
+      completedAt: typeof job.completed_at === 'string' ? job.completed_at : null,
+      htmlUrl: typeof job.html_url === 'string' ? job.html_url : ''
+    }
+  ];
+}
+
 function toWorkflowRun(raw: unknown): WorkflowRun[] {
   if (typeof raw !== 'object' || raw === null) return [];
   const run = raw as Record<string, unknown>;
@@ -2297,4 +2387,26 @@ function toPendingReview(
 ): PendingReview | null {
   if (typeof raw.id !== 'string' || typeof raw.commit?.oid !== 'string') return null;
   return { id: raw.id, commitSha: raw.commit.oid, comments, commentsPartial };
+}
+
+/** The jobs of a workflow file. Jobs without a name are shown by their key. */
+export function workflowGraphOf(text: string): WorkflowGraphJob[] {
+  let document: unknown;
+  try {
+    document = parseYaml(text);
+  } catch {
+    return [];
+  }
+  const jobs = (document as { jobs?: unknown } | null)?.jobs;
+  if (typeof jobs !== 'object' || jobs === null) return [];
+  return Object.entries(jobs as Record<string, unknown>).map(([key, value]) => {
+    const job = (value ?? {}) as { name?: unknown; needs?: unknown };
+    const needs =
+      typeof job.needs === 'string'
+        ? [job.needs]
+        : Array.isArray(job.needs)
+          ? job.needs.filter((n): n is string => typeof n === 'string')
+          : [];
+    return { key, name: typeof job.name === 'string' ? job.name : key, needs };
+  });
 }

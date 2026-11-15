@@ -1,8 +1,18 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { IpcChannels, type AppInfo, type OpenExternalResult, type SettingsUpdate } from '../shared/ipc';
+import {
+  IpcChannels,
+  isShellAction,
+  type AppInfo,
+  type OpenExternalResult,
+  type SettingsUpdate,
+  type ShellState
+} from '../shared/ipc';
+import { runShellAction, shellStateOf } from './shell-actions';
 import type { AuthStatus } from '../shared/auth';
 import type { AttachmentFile, AttachmentUploadResult } from '../shared/attachments';
+import type { WorkflowGraphJob, WorkflowJob } from '../shared/issues';
 import { openExternalIfAllowed } from './window';
+import { debugMediaOrigin } from './github/endpoints';
 import { isAppUrl } from './security';
 import type { AuthService } from './github/auth-service';
 import type { RepoService } from './github/repo-service';
@@ -125,6 +135,10 @@ export interface IpcOptions {
         | 'setPullDraft'
         | 'getPullWorkflowRuns'
         | 'rerunPullWorkflow'
+        | 'getRunJobs'
+        | 'getJobLogs'
+        | 'cancelRun'
+        | 'getWorkflowGraph'
         | 'createPull'
         | 'listBranches'
       >
@@ -172,12 +186,27 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
-    return { name: app.getName(), version: app.getVersion(), platform: process.platform };
+    return {
+      name: app.getName(),
+      version: app.getVersion(),
+      platform: process.platform,
+      debugMediaOrigin: debugMediaOrigin(process.env['ORBIT_GITHUB_URL'])
+    };
   });
 
   ipcMain.handle(IpcChannels.appOpenExternal, (event, url: unknown): OpenExternalResult => {
     assertTrustedSender(event, devServerOrigin);
     return { opened: openExternalIfAllowed(url) };
+  });
+
+  ipcMain.handle(IpcChannels.shellGetState, (event): ShellState => {
+    assertTrustedSender(event, devServerOrigin);
+    return shellStateOf(BrowserWindow.fromWebContents(event.sender));
+  });
+  ipcMain.handle(IpcChannels.shellControl, (event, action: unknown): void => {
+    assertTrustedSender(event, devServerOrigin);
+    if (!isShellAction(action)) throw new Error('Unknown window command');
+    runShellAction(event.sender, BrowserWindow.fromWebContents(event.sender), action);
   });
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
@@ -385,6 +414,38 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
         assertTrustedSender(event, devServerOrigin);
         if (!issues.rerunPullWorkflow) throw new Error('Re-running workflows is unavailable.');
         return issues.rerunPullWorkflow(repoFullName, runId, mode, expectedHeadSha);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.actionsJobs,
+      (event, repoFullName: string, runId: number): Promise<WorkflowJob[]> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getRunJobs) throw new Error('Workflow jobs are unavailable.');
+        return issues.getRunJobs(repoFullName, runId);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.actionsJobLogs,
+      (event, repoFullName: string, jobId: number): Promise<string> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getJobLogs) throw new Error('Job logs are unavailable.');
+        return issues.getJobLogs(repoFullName, jobId);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.actionsWorkflowGraph,
+      (event, repoFullName: string, runId: number): Promise<WorkflowGraphJob[]> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getWorkflowGraph) return Promise.resolve([]);
+        return issues.getWorkflowGraph(repoFullName, runId);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.actionsCancelRun,
+      (event, repoFullName: string, runId: number): Promise<PullWriteResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.cancelRun) throw new Error('Cancelling runs is unavailable.');
+        return issues.cancelRun(repoFullName, runId);
       }
     );
     ipcMain.handle(

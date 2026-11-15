@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { IpcChannels, type OrbitApi } from '../shared/ipc';
+import { IpcChannels, type OrbitApi, type ShellAction, type ShellState } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
 import type { ConnectionStatus } from '../shared/connection';
 import type { NotificationDelivery, NotificationOpenResult } from '../shared/notifications';
@@ -13,6 +13,17 @@ const api: OrbitApi = {
   app: {
     getInfo: () => ipcRenderer.invoke(IpcChannels.appGetInfo),
     openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.appOpenExternal, url)
+  },
+  shell: {
+    control: (action: ShellAction) => ipcRenderer.invoke(IpcChannels.shellControl, action),
+    getState: () => ipcRenderer.invoke(IpcChannels.shellGetState),
+    onStateChanged: (listener: (state: ShellState) => void) => {
+      const handler = (_event: IpcRendererEvent, state: ShellState): void => listener(state);
+      ipcRenderer.on(IpcChannels.shellStateChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.shellStateChanged, handler);
+      };
+    }
   },
   auth: {
     getStatus: () => ipcRenderer.invoke(IpcChannels.authGetStatus),
@@ -87,6 +98,16 @@ const api: OrbitApi = {
     repoOptions: (repoFullName: string) => ipcRenderer.invoke(IpcChannels.issuesRepoOptions, repoFullName),
     setTask: (repoFullName: string, number: number, input) =>
       ipcRenderer.invoke(IpcChannels.issuesSetTask, repoFullName, number, input)
+  },
+  actions: {
+    jobs: (repoFullName: string, runId: number) =>
+      ipcRenderer.invoke(IpcChannels.actionsJobs, repoFullName, runId),
+    jobLogs: (repoFullName: string, jobId: number) =>
+      ipcRenderer.invoke(IpcChannels.actionsJobLogs, repoFullName, jobId),
+    workflowGraph: (repoFullName: string, runId: number) =>
+      ipcRenderer.invoke(IpcChannels.actionsWorkflowGraph, repoFullName, runId),
+    cancelRun: (repoFullName: string, runId: number) =>
+      ipcRenderer.invoke(IpcChannels.actionsCancelRun, repoFullName, runId)
   },
   pulls: {
     list: (query) => ipcRenderer.invoke(IpcChannels.pullsList, query),

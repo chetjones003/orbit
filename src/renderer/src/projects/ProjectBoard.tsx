@@ -1,6 +1,7 @@
-import { useState } from 'react';
 import type { ProjectField, ProjectItem } from '../../../shared/projects';
-import { boardColumns, describeValue, openableKind, type SingleSelectField } from './project-model';
+import { boardColumns, openableKind, type SingleSelectField } from './project-model';
+import { ProjectValueLabel } from './ProjectValueLabel';
+import { cardRows, useCardDrag } from './card-drag';
 
 export interface ProjectBoardProps {
   field: SingleSelectField;
@@ -13,17 +14,16 @@ export interface ProjectBoardProps {
   onOpen: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
 }
 
-/** Columns for one single-select field. Cards move by drag, or by the select on each card. */
+/**
+ * Columns for one single-select field. Cards move by drag, or by the select on each card. A drag copies the
+ * card under the pointer, and the other cards slide aside where it would land.
+ */
 export function ProjectBoard({ field, items, cardFields, pendingIds, onMove, onOpen }: ProjectBoardProps) {
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const columns = boardColumns(field, items);
   const byId = new Map(items.map((item) => [item.id, item]));
 
-  const drop = (optionId: string | null) => {
-    setDropTarget(null);
-    const item = dragging ? byId.get(dragging) : undefined;
-    setDragging(null);
+  const moveTo = (itemId: string, optionId: string | null) => {
+    const item = byId.get(itemId);
     if (!item || pendingIds.has(item.id)) return;
     const current = item.fieldValues[field.id];
     const currentOption = current?.kind === 'single-select' ? current.optionId : null;
@@ -32,42 +32,39 @@ export function ProjectBoard({ field, items, cardFields, pendingIds, onMove, onO
     onMove(item, optionId);
   };
 
+  const drag = useCardDrag((target, itemId) => {
+    const column = columns.find((candidate) => candidate.key === target.cellKey);
+    if (column) moveTo(itemId, column.optionId);
+  });
+
   return (
-    <div className="project-board" role="list" aria-label={`Board grouped by ${field.name}`}>
+    <div
+      ref={drag.rootRef}
+      className="project-board"
+      role="list"
+      aria-label={`Board grouped by ${field.name}`}
+    >
       {columns.map((column) => (
         <section
           key={column.key}
-          className={`project-column ${dropTarget === column.key ? 'drop-target' : ''}`}
+          data-drop-key={column.key}
+          className={`project-column ${drag.slotFor(column.key) !== null ? 'drop-target' : ''}`}
           role="listitem"
           aria-label={`${column.label}, ${column.items.length} items`}
-          onDragOver={(event) => {
-            if (!dragging) return;
-            event.preventDefault();
-            setDropTarget(column.key);
-          }}
-          onDragLeave={() => setDropTarget((current) => (current === column.key ? null : current))}
-          onDrop={(event) => {
-            event.preventDefault();
-            drop(column.optionId);
-          }}
         >
           <h3>
             {column.label} <span className="project-column-count">{column.items.length}</span>
           </h3>
-          {column.items.map((item) => {
+          {cardRows(column.items, drag.draggingId, drag.slotFor(column.key), drag.slotHeight, (item) => {
             const pending = pendingIds.has(item.id);
             const kind = openableKind(item);
             return (
               <article
                 key={item.id}
+                data-card-id={item.id}
                 className={`project-card ${pending ? 'pending' : ''}`}
-                draggable={!pending}
                 aria-busy={pending || undefined}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData('text/plain', item.id);
-                  setDragging(item.id);
-                }}
-                onDragEnd={() => setDragging(null)}
+                {...drag.cardHandlers(item.id, !pending)}
               >
                 <p className="project-card-title">
                   {kind && item.repoFullName && item.number !== null ? (
@@ -91,7 +88,7 @@ export function ProjectBoard({ field, items, cardFields, pendingIds, onMove, onO
                   .filter((f) => f.id !== field.id && item.fieldValues[f.id] !== undefined)
                   .map((f) => (
                     <p key={f.id} className="project-card-field">
-                      {f.name}: {describeValue(item.fieldValues[f.id])}
+                      {f.name}: <ProjectValueLabel field={f} value={item.fieldValues[f.id]} />
                     </p>
                   ))}
                 <label className="project-card-move">

@@ -24,6 +24,7 @@ import {
   type NotificationTarget
 } from '../../shared/notifications';
 import { IssueList } from './issues/IssueList';
+import { setDebugMediaOrigin } from './issues/sanitize-issue-html';
 import { PullList } from './issues/PullList';
 import { Inbox } from './inbox/Inbox';
 import { NewIssueForm } from './issues/NewIssueForm';
@@ -31,7 +32,13 @@ import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { ProjectsView } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
 import { UpdateBanner } from './updates/UpdateBanner';
+import { WorkspaceNav, type WorkspaceView } from './chrome/WorkspaceNav';
+import { TrackedRepoGroups } from './issues/TrackedRepoGroups';
+import type { IssueStateFilter } from '../../shared/issues';
 import type { UpdateStatus } from '../../shared/updates';
+import { Icon } from './icons';
+import { OrbitMark } from './brand/OrbitMark';
+import { TitleBar } from './chrome/TitleBar';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
@@ -56,16 +63,19 @@ export function App() {
   const [repos, setRepos] = useState<PersonalRepo[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
   const [showForksAndArchived, setShowForksAndArchived] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  // Closed on every launch: the panel opens when the user picks an item, and its open state is not saved.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   /** Repo whose issue list replaces the repository list in the workspace. */
   const [issuesRepo, setIssuesRepo] = useState<PersonalRepo | null>(null);
   const [issueRef, setIssueRef] = useState<IssueRef | null>(null);
   const [issueExpanded, setIssueExpanded] = useState(false);
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
-  const [pullMode, setPullMode] = useState(false);
-  /** Which top-level view fills the workspace. The details panel follows the selected item in either view. */
-  const [view, setView] = useState<'repos' | 'inbox' | 'projects'>('repos');
+  /** Which section fills the workspace. The details panel follows the selected item in every section. */
+  const [view, setView] = useState<WorkspaceView>('repos');
+  const pullMode = view === 'pulls';
+  /** Open, closed, or all, for the grouped issue and pull request lists. */
+  const [stateFilter, setStateFilter] = useState<IssueStateFilter>('open');
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -136,8 +146,12 @@ export function App() {
       ([nextInfo, nextStatus, nextSettings]) => {
         if (cancelled) return;
         setInfo(nextInfo);
+        setDebugMediaOrigin(nextInfo.debugMediaOrigin);
         setSettings(nextSettings);
         document.documentElement.dataset['theme'] = nextSettings.theme;
+        if (nextSettings.pinnedRepoIds.length > 0) {
+          setView((current) => (current === 'repos' ? 'issues' : current));
+        }
         if (!pushed) setStatus(nextStatus);
         document.documentElement.dataset.orbitReady = 'true';
       },
@@ -236,7 +250,7 @@ export function App() {
       }
       setSelectedRepoId(repo.id);
       setIssuesRepo(repo);
-      setPullMode(target.kind === 'pull');
+      setView(target.kind === 'pull' ? 'pulls' : 'issues');
       setIssueRef({ repoFullName: target.repoFullName, number: target.number, kind: target.kind });
     },
     [pushToasts]
@@ -351,6 +365,14 @@ export function App() {
     );
   }, [repos, settings?.pinnedRepoIds, showForksAndArchived]);
   const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
+  /** The repositories the user chose to track. Orbit keeps them in settings, so the choice survives a restart. */
+  const trackedRepos = useMemo(
+    () =>
+      repos
+        .filter((repo) => settings?.pinnedRepoIds.includes(repo.id))
+        .toSorted((a, b) => a.name.localeCompare(b.name)),
+    [repos, settings?.pinnedRepoIds]
+  );
 
   const run = (action: () => Promise<AuthStatus>): void => {
     setActionError(null);
@@ -372,6 +394,9 @@ export function App() {
     );
   };
 
+  /** The details panel may take at most half of the window, so the list always keeps room. */
+  const maxDetailsWidth = (): number => Math.max(260, Math.floor(window.innerWidth / 2));
+
   const resizeDetails = (event: PointerEvent<HTMLDivElement>): void => {
     if (!settings) return;
     const startX = event.clientX;
@@ -379,7 +404,7 @@ export function App() {
     let lastX = startX;
     const move = (moveEvent: globalThis.PointerEvent): void => {
       lastX = moveEvent.clientX;
-      const nextWidth = Math.max(260, Math.min(600, startWidth + startX - moveEvent.clientX));
+      const nextWidth = Math.max(260, Math.min(maxDetailsWidth(), startWidth + startX - moveEvent.clientX));
       setSettings((current) =>
         current
           ? {
@@ -395,7 +420,7 @@ export function App() {
     const finish = (): void => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', finish);
-      const finalWidth = Math.max(260, Math.min(600, startWidth + startX - lastX));
+      const finalWidth = Math.max(260, Math.min(maxDetailsWidth(), startWidth + startX - lastX));
       void updateSettings({ detailsWidth: finalWidth }).catch(() =>
         setActionError('Could not save the panel size.')
       );
@@ -409,7 +434,10 @@ export function App() {
     event.preventDefault();
     const delta = event.key === 'ArrowLeft' ? 24 : -24;
     void updateSettings({
-      detailsWidth: Math.max(260, Math.min(600, (settings.windowState?.detailsWidth ?? 320) + delta))
+      detailsWidth: Math.max(
+        260,
+        Math.min(maxDetailsWidth(), (settings.windowState?.detailsWidth ?? 320) + delta)
+      )
     });
   };
 
@@ -453,447 +481,425 @@ export function App() {
   };
 
   return (
-    <main className="orbit-shell" aria-label="Orbit">
-      <nav className="rail" aria-label="Primary navigation">
-        <div className="brand-mark" aria-label="Orbit">
-          O
-        </div>
-        <button
-          className={`rail-button ${view === 'repos' ? 'active' : ''}`}
-          aria-current={view === 'repos' ? 'page' : undefined}
-          aria-label="Repositories"
-          title="Repositories"
-          onClick={() => setView('repos')}
-        >
-          ◫
-        </button>
-        <button
-          className={`rail-button ${view === 'inbox' ? 'active' : ''}`}
-          aria-current={view === 'inbox' ? 'page' : undefined}
-          aria-label="Inbox"
-          title="Inbox"
-          disabled={status?.kind !== 'signed-in'}
-          onClick={() => setView('inbox')}
-        >
-          ⌑
-        </button>
-        <button
-          className={`rail-button ${view === 'projects' ? 'active' : ''}`}
-          aria-current={view === 'projects' ? 'page' : undefined}
-          aria-label="Projects"
-          title="Projects"
-          disabled={status?.kind !== 'signed-in'}
-          onClick={() => setView('projects')}
-        >
-          ▤
-        </button>
-        <div className="rail-spacer" />
-        <button
-          className="rail-button"
-          onClick={toggleTheme}
-          aria-label={`Switch to ${settings?.theme === 'dark' ? 'light' : 'dark'} theme`}
-          title="Toggle theme"
-        >
-          ◐
-        </button>
-        {status?.kind === 'signed-in' && (
-          <button
-            className="avatar"
-            aria-label={`Signed in as @${status.login}`}
-            title={`@${status.login}`}
-            onClick={signOut}
-          >
-            {status.login.slice(0, 1).toUpperCase()}
-          </button>
-        )}
-      </nav>
-
-      <section className="workspace" aria-label="Workspace">
-        <header className="topbar">
-          <div className="workspace-heading">
-            <span className="eyebrow">PERSONAL WORKSPACE</span>
-            <h1>{status?.kind === 'signed-in' ? `@${status.login}` : 'Your repositories'}</h1>
-          </div>
-          <div className="topbar-actions">
-            {status?.kind === 'signed-in' && (
-              <button
-                className="icon-button"
-                onClick={refreshNow}
-                disabled={loadingRepos}
-                aria-label="Refresh repositories"
-                title="Refresh"
-              >
-                ↻
-              </button>
-            )}
-            <button
-              className="secondary-action"
-              onClick={checkForUpdates}
-              disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'downloading'}
-            >
-              Check for updates
-            </button>
-            <button
-              className="icon-button"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              title="Toggle theme"
-            >
-              ◐
-            </button>
-            {status?.kind === 'signed-in' && (
-              <span className="account-indicator">Signed in as @{status.login}</span>
-            )}
-            {status?.kind === 'signed-in' && (
-              <button className="secondary-action sign-out-action" onClick={signOut}>
-                Sign out
-              </button>
-            )}
-            <span className="build-label">{info?.version ?? 'Starting…'}</span>
-          </div>
-        </header>
-
-        {!status || status.kind !== 'signed-in' ? (
-          <div className="welcome-state">
-            <div className="welcome-orbit">◉</div>
-            <p className="eyebrow">YOUR WORK, IN ORBIT</p>
-            <h2>
-              {status?.kind === 'device-pending'
-                ? 'Connect your GitHub account'
-                : 'A clearer view of your GitHub'}
-            </h2>
-            <p className="welcome-copy">
-              Sign in to see the repositories you own and the work happening across them.
-            </p>
-            {status && (
-              <AuthPanel
-                status={status}
-                onStartSignIn={() => run(() => window.orbit.auth.startSignIn())}
-                onCancel={() => run(() => window.orbit.auth.cancelSignIn())}
-              />
-            )}
-            {info && (
-              <p className="app-meta">
-                {info.name} {info.version} on {info.platform}
-              </p>
-            )}
-          </div>
-        ) : view === 'inbox' ? (
-          <div className="issues-view">
-            <div className="repo-toolbar">
-              <div>
-                <h2>Inbox</h2>
-                <p>Across your personal repositories</p>
-              </div>
-            </div>
-            <Inbox
-              selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
-              onOpenItem={(item) => {
-                setIssueRef({
-                  repoFullName: item.repoFullName,
-                  number: item.number,
-                  kind: item.kind
-                });
-                setIssueExpanded(false);
-                setDetailsOpen(true);
-              }}
-            />
-          </div>
-        ) : view === 'projects' ? (
-          <div className="issues-view">
-            <div className="repo-toolbar">
-              <div>
-                <h2>Projects</h2>
-                <p>Your projects, their saved views, and the items in them</p>
-              </div>
-            </div>
-            <ProjectsView
-              onOpenItem={(repoFullName, number, kind) => {
-                setIssueRef({ repoFullName, number, kind });
-                setIssueExpanded(false);
-                setDetailsOpen(true);
-              }}
-            />
-          </div>
-        ) : issuesRepo && issueExpanded && issueRef ? (
-          <div className="issues-expanded">
-            <button className="secondary-action" onClick={() => setIssueExpanded(false)}>
-              ← Back to issues
-            </button>
-            <IssueDetailView
-              key={`${issueRef.repoFullName}#${issueRef.number}`}
-              repoFullName={issueRef.repoFullName}
-              number={issueRef.number}
-              signedInLogin={status.login}
-              kind={issueRef.kind}
-              onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
-              variant="expanded"
-            />
-          </div>
-        ) : issuesRepo ? (
-          <div className="issues-view">
-            <div className="repo-toolbar">
-              <button
-                className="secondary-action"
-                onClick={() => {
-                  setIssuesRepo(null);
-                  setIssueRef(null);
-                  setCreatingIssue(false);
-                }}
-              >
-                ← Repositories
-              </button>
-              <div>
-                <h2>{issuesRepo.fullName}</h2>
-                <p>{pullMode ? 'Pull requests in this personal repo' : 'Issues in this personal repo'}</p>
-              </div>
-              <div className="repo-view-switch">
-                <button
-                  className="secondary-action"
-                  aria-pressed={!pullMode}
-                  onClick={() => {
-                    setPullMode(false);
-                    setIssueRef(null);
-                  }}
-                >
-                  Issues
-                </button>
-                <button
-                  className="secondary-action"
-                  aria-pressed={pullMode}
-                  onClick={() => {
-                    setPullMode(true);
+    <div className="app-frame">
+      <TitleBar
+        platform={info?.platform}
+        signedIn={status?.kind === 'signed-in'}
+        nextThemeLabel={`Switch to ${settings?.theme === 'dark' ? 'light' : 'dark'} theme`}
+        onToggleTheme={toggleTheme}
+        onCheckUpdates={checkForUpdates}
+        onSignOut={signOut}
+      />
+      <main className="orbit-shell" aria-label="Orbit">
+        <section className="workspace" aria-label="Workspace">
+          <WorkspaceNav
+            view={view}
+            signedInLogin={status?.kind === 'signed-in' ? status.login : null}
+            refreshing={loadingRepos}
+            checkingUpdates={updateStatus.kind === 'checking' || updateStatus.kind === 'downloading'}
+            theme={settings?.theme ?? 'dark'}
+            buildLabel={info?.version ?? 'Starting…'}
+            onView={(next) => {
+              setView(next);
+              setIssueExpanded(false);
+              setCreatingIssue(false);
+            }}
+            onRefresh={refreshNow}
+            onCheckUpdates={checkForUpdates}
+            onToggleTheme={toggleTheme}
+            onSignOut={signOut}
+          />
+          {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
+            <div className="scope-bar">
+              <label className="scope-field">
+                <span>Repository</span>
+                <select
+                  value={issuesRepo?.fullName ?? ''}
+                  onChange={(event) => {
+                    setIssuesRepo(trackedRepos.find((repo) => repo.fullName === event.target.value) ?? null);
                     setIssueRef(null);
                     setCreatingIssue(false);
                   }}
                 >
-                  Pull requests
-                </button>
-              </div>
-              {!creatingIssue && !pullMode && (
-                <button className="secondary-action" onClick={() => setCreatingIssue(true)}>
+                  <option value="">All tracked ({trackedRepos.length})</option>
+                  {trackedRepos.map((repo) => (
+                    <option key={repo.id} value={repo.fullName}>
+                      {repo.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!issuesRepo && (
+                <div className="scope-state" role="group" aria-label="Item state">
+                  {(['open', 'closed', 'all'] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className="secondary-action"
+                      aria-pressed={stateFilter === option}
+                      onClick={() => setStateFilter(option)}
+                    >
+                      {option === 'open' ? 'Open' : option === 'closed' ? 'Closed' : 'All'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {issuesRepo && !pullMode && !creatingIssue && (
+                <button type="button" className="secondary-action" onClick={() => setCreatingIssue(true)}>
                   New issue
                 </button>
               )}
             </div>
-            {creatingIssue ? (
-              <NewIssueForm
-                repoFullName={issuesRepo.fullName}
-                signedInLogin={status.login}
-                onCreated={(number) => {
-                  setCreatingIssue(false);
-                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
-                }}
-                onCancel={() => setCreatingIssue(false)}
-              />
-            ) : pullMode ? (
-              <PullList
-                key={issuesRepo.fullName}
-                repoFullName={issuesRepo.fullName}
-                selectedNumber={issueRef?.kind === 'pull' ? issueRef.number : null}
-                onOpenPull={(number) =>
-                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
-                }
-              />
-            ) : (
-              <IssueList
-                key={issuesRepo.fullName}
-                repoFullName={issuesRepo.fullName}
-                selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
-                onOpenIssue={(number) =>
-                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
-                }
-              />
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="repo-toolbar">
-              <div>
-                <h2>Repositories</h2>
-                <p>
-                  {orderedRepos.length} {orderedRepos.length === 1 ? 'repository' : 'repositories'}
-                  {settings?.pinnedRepoIds.length ? ` · ${settings.pinnedRepoIds.length} pinned` : ''}
-                </p>
+          )}
+
+          {!status || status.kind !== 'signed-in' ? (
+            <div className="welcome-state">
+              <div className="welcome-orbit">
+                <OrbitMark size={34} />
               </div>
-              <label className="toggle-label">
-                <input
-                  type="checkbox"
-                  checked={showForksAndArchived}
-                  onChange={(event) => setShowForksAndArchived(event.target.checked)}
+              <p className="eyebrow">YOUR WORK, IN ORBIT</p>
+              <h2>
+                {status?.kind === 'device-pending'
+                  ? 'Connect your GitHub account'
+                  : 'A clearer view of your GitHub'}
+              </h2>
+              <p className="welcome-copy">
+                Sign in to see the repositories you own and the work happening across them.
+              </p>
+              {status && (
+                <AuthPanel
+                  status={status}
+                  onStartSignIn={() => run(() => window.orbit.auth.startSignIn())}
+                  onCancel={() => run(() => window.orbit.auth.cancelSignIn())}
                 />
-                <span>Show forks &amp; archived</span>
-              </label>
+              )}
+              {info && (
+                <p className="app-meta">
+                  {info.name} {info.version} on {info.platform}
+                </p>
+              )}
             </div>
-            {status.notice && (
-              <p role="status" className="session-notice">
-                {status.notice}
-              </p>
-            )}
-            <UpdateBanner
-              status={updateStatus}
-              onCheck={checkForUpdates}
-              onInstall={() => window.orbit.updates.install()}
-              hasUnsavedDrafts={() => drafts.hasDrafts()}
-            />
-            {refreshStatus && (
-              <ConnectionBanner
-                status={refreshStatus}
-                onRefresh={refreshNow}
-                refreshBlocked={rateLimitBlocked}
-                now={now}
+          ) : view === 'inbox' ? (
+            <div className="issues-view">
+              <div className="repo-toolbar">
+                <div>
+                  <p>Across your personal repositories</p>
+                </div>
+              </div>
+              <Inbox
+                selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
+                onOpenItem={(item) => {
+                  setIssueRef({
+                    repoFullName: item.repoFullName,
+                    number: item.number,
+                    kind: item.kind
+                  });
+                  setIssueExpanded(false);
+                  setDetailsOpen(true);
+                }}
               />
-            )}
-            {refreshStatus && !writesAllowed(refreshStatus) && (
-              <p className="session-notice" role="note">
-                Changes are paused until GitHub is reachable again.
-              </p>
-            )}
-            <div className="repo-list" role="list" aria-label="Personal repositories">
-              {loadingRepos && (
-                <p className="empty-state" role="status">
-                  Loading your repositories…
-                </p>
-              )}
-              {!loadingRepos && orderedRepos.length === 0 && !actionError && (
-                <p className="empty-state">
-                  No repositories to show. Try showing forks and archived repositories.
-                </p>
-              )}
-              {orderedRepos.map((repo) => {
-                const isPinned = settings?.pinnedRepoIds.includes(repo.id) ?? false;
-                return (
-                  <article
-                    className={`repo-row ${selectedRepoId === repo.id ? 'selected' : ''}`}
-                    key={repo.id}
-                    role="listitem"
-                  >
-                    <button
-                      className="repo-select"
-                      onClick={() => setSelectedRepoId(repo.id)}
-                      aria-label={`Open ${repo.fullName}${repo.isArchived ? ', read only' : ''}`}
-                      aria-current={selectedRepoId === repo.id ? 'true' : undefined}
-                    >
-                      <span className="repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</span>
-                      <span className="repo-copy">
-                        <span className="repo-name">
-                          {repo.name}
-                          {repo.isPrivate && (
-                            <span className="private-mark" aria-label="Private">
-                              ◆
-                            </span>
-                          )}
-                        </span>
-                        <span className="repo-description">{repo.description || 'No description'}</span>
-                      </span>
-                      {repo.isArchived && <span className="repo-badge">Archived</span>}
-                      {repo.isFork && <span className="repo-badge">Fork</span>}
-                    </button>
-                    <button
-                      className={`pin-button ${isPinned ? 'pinned' : ''}`}
-                      onClick={() => togglePin(repo)}
-                      aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${repo.name}`}
-                      aria-pressed={isPinned}
-                      title={isPinned ? 'Unpin repository' : 'Pin repository'}
-                    >
-                      ★
-                    </button>
-                  </article>
-                );
-              })}
             </div>
-            <footer className="workspace-footer">{status.login} · Personal repositories only</footer>
+          ) : view === 'projects' ? (
+            <div className="issues-view projects-page">
+              <div className="repo-toolbar">
+                <div>
+                  <p>Your projects, their saved views, and the items in them</p>
+                </div>
+              </div>
+              <ProjectsView
+                onOpenItem={(repoFullName, number, kind) => {
+                  setIssueRef({ repoFullName, number, kind });
+                  setIssueExpanded(false);
+                  setDetailsOpen(true);
+                }}
+              />
+            </div>
+          ) : (view === 'issues' || view === 'pulls') && issueExpanded && issueRef ? (
+            <div className="issues-expanded">
+              <button className="secondary-action" onClick={() => setIssueExpanded(false)}>
+                ← Back to issues
+              </button>
+              <IssueDetailView
+                key={`${issueRef.repoFullName}#${issueRef.number}`}
+                repoFullName={issueRef.repoFullName}
+                number={issueRef.number}
+                signedInLogin={status.login}
+                kind={issueRef.kind}
+                onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+                variant="expanded"
+              />
+            </div>
+          ) : (view === 'issues' || view === 'pulls') && issuesRepo ? (
+            <div className="issues-view">
+              <div className="repo-toolbar">
+                <div>
+                  <h2>{issuesRepo.fullName}</h2>
+                  <p>{pullMode ? 'Pull requests in this personal repo' : 'Issues in this personal repo'}</p>
+                </div>
+              </div>
+              {creatingIssue ? (
+                <NewIssueForm
+                  repoFullName={issuesRepo.fullName}
+                  signedInLogin={status.login}
+                  onCreated={(number) => {
+                    setCreatingIssue(false);
+                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
+                  }}
+                  onCancel={() => setCreatingIssue(false)}
+                />
+              ) : pullMode ? (
+                <PullList
+                  key={issuesRepo.fullName}
+                  repoFullName={issuesRepo.fullName}
+                  selectedNumber={issueRef?.kind === 'pull' ? issueRef.number : null}
+                  onOpenPull={(number) =>
+                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
+                  }
+                />
+              ) : (
+                <IssueList
+                  key={issuesRepo.fullName}
+                  repoFullName={issuesRepo.fullName}
+                  selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
+                  onOpenIssue={(number) =>
+                    setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
+                  }
+                />
+              )}
+            </div>
+          ) : view === 'issues' || view === 'pulls' ? (
+            <div className="issues-view">
+              {trackedRepos.length === 0 ? (
+                <div className="setup-card">
+                  <h2>Choose the repositories to track</h2>
+                  <p>
+                    Orbit groups your issues and pull requests by the repositories you track, and remembers
+                    your choice.
+                  </p>
+                  <button type="button" className="primary-action" onClick={() => setView('repos')}>
+                    Choose repositories
+                  </button>
+                </div>
+              ) : (
+                <TrackedRepoGroups
+                  kind={pullMode ? 'pull' : 'issue'}
+                  repos={trackedRepos}
+                  state={stateFilter}
+                  selected={issueRef}
+                  onOpen={(repoFullName, number, kind) => {
+                    setIssueRef({ repoFullName, number, kind });
+                    setIssueExpanded(false);
+                    setDetailsOpen(true);
+                  }}
+                  onScope={(repo) => {
+                    setIssuesRepo(repo);
+                    setIssueRef(null);
+                    setCreatingIssue(false);
+                  }}
+                />
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="repo-toolbar">
+                <div>
+                  <p>
+                    {orderedRepos.length} {orderedRepos.length === 1 ? 'repository' : 'repositories'}
+                    {settings?.pinnedRepoIds.length ? ` · ${settings.pinnedRepoIds.length} tracked` : ''}
+                  </p>
+                </div>
+                <label className="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={showForksAndArchived}
+                    onChange={(event) => setShowForksAndArchived(event.target.checked)}
+                  />
+                  <span>Show forks &amp; archived</span>
+                </label>
+              </div>
+              {trackedRepos.length === 0 && (
+                <p className="setup-banner" role="note">
+                  Choose the repositories Orbit should track. Issues and pull requests are grouped by them,
+                  and Orbit remembers the choice.
+                </p>
+              )}
+              {status.notice && (
+                <p role="status" className="session-notice">
+                  {status.notice}
+                </p>
+              )}
+              <UpdateBanner
+                status={updateStatus}
+                onCheck={checkForUpdates}
+                onInstall={() => window.orbit.updates.install()}
+                hasUnsavedDrafts={() => drafts.hasDrafts()}
+              />
+              {refreshStatus && (
+                <ConnectionBanner
+                  status={refreshStatus}
+                  onRefresh={refreshNow}
+                  refreshBlocked={rateLimitBlocked}
+                  now={now}
+                />
+              )}
+              {refreshStatus && !writesAllowed(refreshStatus) && (
+                <p className="session-notice" role="note">
+                  Changes are paused until GitHub is reachable again.
+                </p>
+              )}
+              <div className="repo-list" role="list" aria-label="Personal repositories">
+                {loadingRepos && (
+                  <p className="empty-state" role="status">
+                    Loading your repositories…
+                  </p>
+                )}
+                {!loadingRepos && orderedRepos.length === 0 && !actionError && (
+                  <p className="empty-state">
+                    No repositories to show. Try showing forks and archived repositories.
+                  </p>
+                )}
+                {orderedRepos.map((repo) => {
+                  const isPinned = settings?.pinnedRepoIds.includes(repo.id) ?? false;
+                  return (
+                    <article
+                      className={`repo-row ${selectedRepoId === repo.id ? 'selected' : ''}`}
+                      key={repo.id}
+                      role="listitem"
+                    >
+                      <button
+                        className="repo-select"
+                        onClick={() => setSelectedRepoId(repo.id)}
+                        aria-label={`Open ${repo.fullName}${repo.isArchived ? ', read only' : ''}`}
+                        aria-current={selectedRepoId === repo.id ? 'true' : undefined}
+                      >
+                        <span className="repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</span>
+                        <span className="repo-copy">
+                          <span className="repo-name">
+                            {repo.name}
+                            {repo.isPrivate && (
+                              <span className="private-mark" aria-label="Private">
+                                <Icon name="lock" size={11} />
+                              </span>
+                            )}
+                          </span>
+                          <span className="repo-description">{repo.description || 'No description'}</span>
+                        </span>
+                        {repo.isArchived && <span className="repo-badge">Archived</span>}
+                        {repo.isFork && <span className="repo-badge">Fork</span>}
+                      </button>
+                      <button
+                        className={`pin-button ${isPinned ? 'pinned' : ''}`}
+                        onClick={() => togglePin(repo)}
+                        aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${repo.name}`}
+                        aria-pressed={isPinned}
+                        title={isPinned ? 'Unpin repository' : 'Pin repository'}
+                      >
+                        <Icon name="star" size={16} filled={isPinned} />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+              <footer className="workspace-footer">{status.login} · Personal repositories only</footer>
+            </>
+          )}
+          {actionError && (
+            <InlineError
+              message={actionError}
+              onRetry={status?.kind === 'signed-in' ? () => void loadRepos() : undefined}
+              onCopyDiagnostics={copyDiagnostics}
+            />
+          )}
+          {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+          <NotificationToasts
+            toasts={notificationToasts}
+            onOpen={openNotification}
+            onDismiss={(id) => setNotificationToasts((current) => current.filter((item) => item.id !== id))}
+          />
+        </section>
+
+        {status?.kind === 'signed-in' && detailsOpen && (
+          <>
+            <div
+              className="resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize details panel"
+              aria-valuenow={settings?.windowState?.detailsWidth ?? 320}
+              aria-valuemin={260}
+              aria-valuemax={maxDetailsWidth()}
+              tabIndex={0}
+              onPointerDown={resizeDetails}
+              onKeyDown={resizeWithKeyboard}
+            />
+            <aside
+              className="details-panel"
+              aria-label="Repository details"
+              style={{ width: Math.min(settings?.windowState?.detailsWidth ?? 320, maxDetailsWidth()) }}
+            >
+              <div className="details-header">
+                <span className="eyebrow">DETAILS</span>
+                <button
+                  className="icon-button"
+                  onClick={() => setDetailsOpen(false)}
+                  aria-label="Collapse details panel"
+                  title="Collapse details"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+              {issueRef ? (
+                <div className="issue-panel">
+                  <button className="secondary-action" onClick={() => setIssueExpanded(true)}>
+                    Expand
+                  </button>
+                  <IssueDetailView
+                    key={`${issueRef.repoFullName}#${issueRef.number}`}
+                    repoFullName={issueRef.repoFullName}
+                    number={issueRef.number}
+                    signedInLogin={status.login}
+                    kind={issueRef.kind}
+                    onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+                  />
+                </div>
+              ) : view === 'repos' && selectedRepo ? (
+                <RepoDetails
+                  repo={selectedRepo}
+                  onViewIssues={() => {
+                    setIssuesRepo(selectedRepo);
+                    setIssueRef(null);
+                    setIssueExpanded(false);
+                    setView('issues');
+                  }}
+                />
+              ) : (
+                <div className="details-empty">
+                  <span className="details-glyph">
+                    <OrbitMark size={26} />
+                  </span>
+                  <h2>{view === 'repos' ? 'Select a repository' : 'Select an item'}</h2>
+                  <p>
+                    {view === 'repos'
+                      ? 'Choose a repository to see its details here.'
+                      : 'Choose an item to read it here.'}
+                  </p>
+                </div>
+              )}
+            </aside>
           </>
         )}
-        {actionError && (
-          <InlineError
-            message={actionError}
-            onRetry={status?.kind === 'signed-in' ? () => void loadRepos() : undefined}
-            onCopyDiagnostics={copyDiagnostics}
-          />
-        )}
-        {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
-        <NotificationToasts
-          toasts={notificationToasts}
-          onOpen={openNotification}
-          onDismiss={(id) => setNotificationToasts((current) => current.filter((item) => item.id !== id))}
-        />
-      </section>
-
-      {status?.kind === 'signed-in' && detailsOpen && (
-        <>
-          <div
-            className="resize-handle"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize details panel"
-            aria-valuenow={settings?.windowState?.detailsWidth ?? 320}
-            aria-valuemin={260}
-            aria-valuemax={600}
-            tabIndex={0}
-            onPointerDown={resizeDetails}
-            onKeyDown={resizeWithKeyboard}
-          />
-          <aside
-            className="details-panel"
-            aria-label="Repository details"
-            style={{ width: settings?.windowState?.detailsWidth ?? 320 }}
+        {status?.kind === 'signed-in' && !detailsOpen && (
+          <button
+            className="expand-details"
+            onClick={() => setDetailsOpen(true)}
+            aria-label="Expand details panel"
+            title="Expand details"
           >
-            <div className="details-header">
-              <span className="eyebrow">DETAILS</span>
-              <button
-                className="icon-button"
-                onClick={() => setDetailsOpen(false)}
-                aria-label="Collapse details panel"
-                title="Collapse details"
-              >
-                →
-              </button>
-            </div>
-            {issueRef ? (
-              <div className="issue-panel">
-                <button className="secondary-action" onClick={() => setIssueExpanded(true)}>
-                  Expand
-                </button>
-                <IssueDetailView
-                  key={`${issueRef.repoFullName}#${issueRef.number}`}
-                  repoFullName={issueRef.repoFullName}
-                  number={issueRef.number}
-                  signedInLogin={status.login}
-                  kind={issueRef.kind}
-                  onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
-                />
-              </div>
-            ) : selectedRepo ? (
-              <RepoDetails
-                repo={selectedRepo}
-                onViewIssues={() => {
-                  setIssuesRepo(selectedRepo);
-                  setIssueRef(null);
-                  setIssueExpanded(false);
-                }}
-              />
-            ) : (
-              <div className="details-empty">
-                <span className="details-glyph">⌁</span>
-                <h2>Select a repository</h2>
-                <p>Choose a repository to see its details here.</p>
-              </div>
-            )}
-          </aside>
-        </>
-      )}
-      {status?.kind === 'signed-in' && !detailsOpen && (
-        <button
-          className="expand-details"
-          onClick={() => setDetailsOpen(true)}
-          aria-label="Expand details panel"
-          title="Expand details"
-        >
-          ←
-        </button>
-      )}
-    </main>
+            <Icon name="chevronLeft" size={16} />
+          </button>
+        )}
+      </main>
+    </div>
   );
 }
 
@@ -934,7 +940,7 @@ function RepoDetails({ repo, onViewIssues }: { repo: PersonalRepo; onViewIssues:
           void window.orbit.app.openExternal(repo.htmlUrl);
         }}
       >
-        Open on GitHub ↗
+        Open on GitHub <Icon name="external" size={12} />
       </a>
     </div>
   );

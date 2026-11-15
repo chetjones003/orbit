@@ -21,6 +21,9 @@ import {
 /** Width of one day on the timeline, in pixels. */
 export const GANTT_DAY_WIDTH = 28;
 
+/** Width of the item column that stays in view while the timeline scrolls. */
+export const GANTT_LABEL_WIDTH = 240;
+
 export interface GanttViewProps {
   source: GanttSource;
   /** Dates source: where a bar starts. */
@@ -214,52 +217,70 @@ export function GanttView({
   return (
     <div className="gantt-view" aria-label="Gantt">
       {note && (
-        <p role="alert" className="project-message">
+        <p role="alert" className="cve-note cve-alert">
           {note}
         </p>
       )}
       <section role="region" aria-label="Unscheduled" className="gantt-unscheduled">
-        <h4>
-          Unscheduled <span className="project-column-count">{unscheduled.length}</span>
-        </h4>
-        {unscheduled.length === 0 && <p className="project-note">Every item is scheduled.</p>}
-        {unscheduled.map((item) => (
-          <article
-            key={item.id}
-            className="gantt-chip"
-            draggable={!pendingIds.has(item.id)}
-            onDragStart={(event) => {
-              event.dataTransfer.setData('text/plain', item.id);
-              setDragging(item.id);
-            }}
-            onDragEnd={() => setDragging(null)}
-          >
-            <p>{item.title}</p>
-          </article>
-        ))}
+        <div className="gantt-unscheduled-head">
+          <h4>Unscheduled</h4>
+          <span className="gantt-count">{unscheduled.length}</span>
+          <span className="gantt-hint">Drag an item onto a day to schedule it.</span>
+        </div>
+        {unscheduled.length === 0 && <p className="gantt-empty">Every item is on the timeline.</p>}
+        <div className="gantt-chips">
+          {unscheduled.map((item) => (
+            <article
+              key={item.id}
+              className="gantt-chip"
+              draggable={!pendingIds.has(item.id)}
+              onDragStart={(event) => {
+                event.dataTransfer.setData('text/plain', item.id);
+                setDragging(item.id);
+              }}
+              onDragEnd={() => setDragging(null)}
+            >
+              <p>{item.title}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <div className="gantt-scroll">
-        <div className="gantt-grid" style={{ width: days.length * GANTT_DAY_WIDTH }}>
+        <div className="gantt-grid" style={{ width: GANTT_LABEL_WIDTH + days.length * GANTT_DAY_WIDTH }}>
           <div className="gantt-header">
-            {days.map((day) => (
-              <div
-                key={day}
-                role="columnheader"
-                aria-label={day}
-                className="gantt-day"
-                style={{ width: GANTT_DAY_WIDTH }}
-                onDragOver={(event) => {
-                  if (dragging) event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  dropOnDay(day);
-                }}
-              >
-                {Number(day.slice(8))}
+            <div className="gantt-label gantt-corner">Item</div>
+            <div className="gantt-track-head" style={{ width: days.length * GANTT_DAY_WIDTH }}>
+              {monthSpans(days).map((span) => (
+                <div
+                  key={span.key}
+                  className="gantt-month"
+                  style={{ left: span.start * GANTT_DAY_WIDTH, width: span.length * GANTT_DAY_WIDTH }}
+                >
+                  {span.label}
+                </div>
+              ))}
+              <div className="gantt-days">
+                {days.map((day) => (
+                  <div
+                    key={day}
+                    role="columnheader"
+                    aria-label={day}
+                    className={`gantt-day ${dayClass(day, today)}`}
+                    style={{ width: GANTT_DAY_WIDTH }}
+                    onDragOver={(event) => {
+                      if (dragging) event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      dropOnDay(day);
+                    }}
+                  >
+                    {Number(day.slice(8))}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
           {scheduled.map(({ item, bar }) => {
             const pending = pendingIds.has(item.id);
@@ -269,46 +290,56 @@ export function GanttView({
             const kind = openableKind(item);
             return (
               <div key={item.id} className="gantt-row">
-                {days.map((day) => (
-                  <div
-                    key={day}
-                    className="gantt-cell"
-                    style={{ width: GANTT_DAY_WIDTH }}
-                    onDragOver={(event) => {
-                      if (dragging) event.preventDefault();
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      dropOnDay(day);
-                    }}
-                  />
-                ))}
-                <div
-                  className={`gantt-bar ${pending ? 'pending' : ''}`}
-                  aria-label={`${item.title}, ${bar.start} to ${bar.end}`}
-                  aria-busy={pending || undefined}
-                  style={{ left: left * GANTT_DAY_WIDTH, width: width * GANTT_DAY_WIDTH - 2 }}
-                  onPointerDown={(event) => begin(event, item, 'move')}
-                  onDoubleClick={() => {
-                    if (kind && item.repoFullName && item.number !== null)
-                      onOpen(item.repoFullName, item.number, kind);
-                  }}
-                >
-                  {source === 'dates' && (
-                    <>
-                      <span
-                        className="gantt-handle start"
-                        aria-label={`Change start of ${item.title}`}
-                        onPointerDown={(event) => begin(event, item, 'start')}
-                      />
-                      <span
-                        className="gantt-handle end"
-                        aria-label={`Change end of ${item.title}`}
-                        onPointerDown={(event) => begin(event, item, 'end')}
-                      />
-                    </>
+                <div className="gantt-label" title={item.title}>
+                  <span className="gantt-label-title">{item.title}</span>
+                  {item.repoFullName && item.number !== null && (
+                    <span className="gantt-label-ref">
+                      {item.repoFullName}#{item.number}
+                    </span>
                   )}
-                  <span className="gantt-bar-title">{item.title}</span>
+                </div>
+                <div className="gantt-track" style={{ width: days.length * GANTT_DAY_WIDTH }}>
+                  {days.map((day) => (
+                    <div
+                      key={day}
+                      className={`gantt-cell ${dayClass(day, today)}`}
+                      style={{ width: GANTT_DAY_WIDTH }}
+                      onDragOver={(event) => {
+                        if (dragging) event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        dropOnDay(day);
+                      }}
+                    />
+                  ))}
+                  <div
+                    className={`gantt-bar ${pending ? 'pending' : ''}`}
+                    aria-label={`${item.title}, ${bar.start} to ${bar.end}`}
+                    aria-busy={pending || undefined}
+                    style={{ left: left * GANTT_DAY_WIDTH, width: width * GANTT_DAY_WIDTH - 2 }}
+                    onPointerDown={(event) => begin(event, item, 'move')}
+                    onDoubleClick={() => {
+                      if (kind && item.repoFullName && item.number !== null)
+                        onOpen(item.repoFullName, item.number, kind);
+                    }}
+                  >
+                    {source === 'dates' && (
+                      <>
+                        <span
+                          className="gantt-handle start"
+                          aria-label={`Change start of ${item.title}`}
+                          onPointerDown={(event) => begin(event, item, 'start')}
+                        />
+                        <span
+                          className="gantt-handle end"
+                          aria-label={`Change end of ${item.title}`}
+                          onPointerDown={(event) => begin(event, item, 'end')}
+                        />
+                      </>
+                    )}
+                    <span className="gantt-bar-title">{item.title}</span>
+                  </div>
                 </div>
               </div>
             );
@@ -317,6 +348,34 @@ export function GanttView({
       </div>
     </div>
   );
+}
+
+/** Days that fall on a weekend or today get their own shading. */
+function dayClass(day: string, today: string): string {
+  const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+  const weekend = weekday === 0 || weekday === 6 ? 'weekend' : '';
+  return [weekend, day === today ? 'today' : ''].filter(Boolean).join(' ');
+}
+
+/** Runs of consecutive days in one month, so the header can label each month once. */
+function monthSpans(days: string[]): Array<{ key: string; label: string; start: number; length: number }> {
+  const spans: Array<{ key: string; label: string; start: number; length: number }> = [];
+  days.forEach((day, index) => {
+    const key = day.slice(0, 7);
+    const last = spans[spans.length - 1];
+    if (last && last.key === key) {
+      last.length += 1;
+      return;
+    }
+    const [year, month] = [Number(day.slice(0, 4)), Number(day.slice(5, 7))];
+    const label = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC'
+    });
+    spans.push({ key, label, start: index, length: 1 });
+  });
+  return spans;
 }
 
 /** The writes a drag of some days makes to a dates bar: a move shifts both ends, a resize moves one end. */

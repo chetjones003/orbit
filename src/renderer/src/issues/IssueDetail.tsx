@@ -1,3 +1,4 @@
+import { Icon } from '../icons';
 import { useEffect, useState } from 'react';
 import type {
   IssueCloseReason,
@@ -12,8 +13,28 @@ import { IssueEditor } from './IssueEditor';
 import { IssueFields } from './IssueFields';
 import { ItemProjects } from '../projects/ItemProjects';
 import { PullActionsPanel } from './PullActions';
+import { PullCi } from './PullCi';
 import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
+import { IssueLabelChip } from './IssueLabelChip';
+
+/** Reader-facing names for a review's state. */
+function reviewStateLabel(state: string): string {
+  switch (state) {
+    case 'APPROVED':
+      return 'Approved';
+    case 'CHANGES_REQUESTED':
+      return 'Changes requested';
+    case 'COMMENTED':
+      return 'Commented';
+    case 'DISMISSED':
+      return 'Dismissed';
+    case 'PENDING':
+      return 'Pending';
+    default:
+      return state;
+  }
+}
 
 export interface IssueDetailViewProps {
   repoFullName: string;
@@ -161,100 +182,34 @@ export function IssueDetailView({
   const { summary } = detail;
   return (
     <article className={`issue-detail ${variant}`}>
-      <p className="eyebrow">
-        {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
-      </p>
-      <h2>{summary.title}</h2>
-      {kind === 'pull' && pullDetail && (
-        <section aria-label="Pull request details" className="pull-detail-metadata">
-          <p>
-            {pullDetail.summary.draft ? 'Draft' : 'Ready for review'} ·{' '}
-            <code>{pullDetail.summary.headRef}</code> → <code>{pullDetail.summary.baseRef}</code>
-          </p>
-          <p>
-            Mergeability:{' '}
-            {pullDetail.mergeable === null ? 'Checking' : pullDetail.mergeable ? 'Mergeable' : 'Conflicts'} (
-            {pullDetail.mergeableState})
-          </p>
-          <h3>Checks</h3>
-          {pullDetail.checksPartial && <p role="note">Some check runs may not be shown.</p>}
-          {pullDetail.checks.length ? (
-            <ul>
-              {pullDetail.checks.map((check, i) => (
-                <li key={check.name + i}>
-                  {check.name}: {check.conclusion ?? check.status}{' '}
-                  {check.detailsUrl && (
-                    <a
-                      href={check.detailsUrl}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void window.orbit.app.openExternal(check.detailsUrl!);
-                      }}
-                    >
-                      View run ↗
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No check runs.</p>
-          )}
-          <h3>Reviews</h3>
-          {pullDetail.reviewsPartial && <p role="note">Some reviews may not be shown.</p>}
-          {pullDetail.reviews.map((review) => (
-            <div key={review.id}>
-              <strong>@{review.authorLogin}</strong> · {review.state}
-              {review.body && <p>{review.body}</p>}
-            </div>
-          ))}
-        </section>
-      )}
-      {kind === 'pull' && <PullActionsPanel repoFullName={repoFullName} number={number} onChanged={reload} />}
-      <p className="issue-meta">
-        <span className={`issue-state-pill ${summary.state}`}>
-          {summary.state === 'open' ? 'Open' : 'Closed'}
-        </span>{' '}
-        @{summary.authorLogin} opened {new Date(summary.createdAt).toLocaleDateString()} · Updated{' '}
-        {new Date(summary.updatedAt).toLocaleDateString()}
-      </p>
-      {summary.labels.length > 0 && (
-        <p className="issue-labels">
-          {summary.labels.map((label) => (
-            <span className="issue-label" key={label.name} style={{ borderColor: `#${label.color}` }}>
-              {label.name}
-            </span>
-          ))}
+      <section className="detail-card detail-head" aria-label="Summary">
+        <p className="eyebrow">
+          {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
         </p>
-      )}
+        <h2>{summary.title}</h2>
+        <p className="issue-meta">
+          <span className={`issue-state-pill ${summary.state}`}>
+            {summary.state === 'open' ? 'Open' : 'Closed'}
+          </span>{' '}
+          @{summary.authorLogin} opened {new Date(summary.createdAt).toLocaleDateString()} · Updated{' '}
+          {new Date(summary.updatedAt).toLocaleDateString()}
+        </p>
+        {summary.labels.length > 0 && (
+          <div className="issue-labels">
+            {summary.labels.map((label) => (
+              <IssueLabelChip key={label.name} label={label} />
+            ))}
+          </div>
+        )}
+      </section>
 
       {notice}
 
-      <ItemProjects repoFullName={repoFullName} number={number} />
-
       {editable && (
-        <div className="issue-actions">
-          {editing ? (
-            <IssueEditor
-              repoFullName={repoFullName}
-              number={number}
-              signedInLogin={signedInLogin}
-              snapshot={{ summary, body: detail.body, bodyHtml: detail.bodyHtml }}
-              onSaved={(issue) => {
-                applySnapshot(issue);
-                setEditing(false);
-              }}
-              onCancel={() => setEditing(false)}
-              onReload={() => {
-                setEditing(false);
-                reload();
-              }}
-              onLink={routeLink}
-              viewOnGitHubUrl={summary.htmlUrl}
-            />
-          ) : (
+        <div className="detail-actions" role="toolbar" aria-label="Issue actions">
+          {!editing && (
             <button
-              className="secondary-action"
+              className="primary-action"
               onClick={() => {
                 setActionError(null);
                 setEditing(true);
@@ -263,61 +218,168 @@ export function IssueDetailView({
               Edit issue
             </button>
           )}
-          <div className="state-actions">
-            {summary.state === 'open' ? (
-              <>
-                <button className="secondary-action" onClick={() => changeState('closed', 'completed')}>
-                  Close as completed
-                </button>
-                <button className="secondary-action" onClick={() => changeState('closed', 'not_planned')}>
-                  Close as not planned
-                </button>
-              </>
-            ) : (
-              <button className="secondary-action" onClick={() => changeState('open')}>
-                Reopen
+          {summary.state === 'open' ? (
+            <>
+              <button className="secondary-action" onClick={() => changeState('closed', 'completed')}>
+                Close as completed
               </button>
-            )}
-          </div>
-          <IssueFields
-            repoFullName={repoFullName}
-            number={number}
-            summary={summary}
-            onChange={applySummary}
-            onError={setActionError}
-          />
+              <button className="secondary-action" onClick={() => changeState('closed', 'not_planned')}>
+                Close as not planned
+              </button>
+            </>
+          ) : (
+            <button className="secondary-action" onClick={() => changeState('open')}>
+              Reopen
+            </button>
+          )}
         </div>
       )}
 
-      <RichBody
-        html={detail.bodyHtml}
-        viewOnGitHubUrl={summary.htmlUrl}
-        onLink={routeLink}
-        emptyText="No description provided."
-        onTaskToggle={editable ? toggleTask : undefined}
-      />
-
+      {kind === 'pull' && pullDetail && (
+        <section aria-label="Pull request details" className="detail-card pr-summary">
+          <div className="pr-status-row">
+            <span className={`pr-pill ${pullDetail.summary.draft ? 'draft' : 'ready'}`}>
+              {pullDetail.summary.draft ? 'Draft' : 'Ready for review'}
+            </span>
+            <span
+              className={`pr-pill ${pullDetail.mergeable === null ? 'checking' : pullDetail.mergeable ? 'ok' : 'bad'}`}
+            >
+              {pullDetail.mergeable === null
+                ? 'Checking mergeability'
+                : pullDetail.mergeable
+                  ? `Mergeable · ${pullDetail.mergeableState}`
+                  : 'Has conflicts'}
+            </span>
+          </div>
+          <div className="pr-branches">
+            <code>{pullDetail.summary.headRef}</code>
+            <Icon name="chevronRight" size={14} />
+            <code>{pullDetail.summary.baseRef}</code>
+          </div>
+          <h3 className="detail-card-title">Reviews</h3>
+          {pullDetail.reviewsPartial && <p className="detail-muted">Some reviews may not be shown.</p>}
+          {pullDetail.reviews.length === 0 ? (
+            <p className="detail-muted">No reviews yet.</p>
+          ) : (
+            <ul className="review-list">
+              {pullDetail.reviews.map((review) => (
+                <li key={review.id} className="review-item">
+                  <span className={`review-state ${review.state.toLowerCase()}`}>
+                    {reviewStateLabel(review.state)}
+                  </span>
+                  <strong>@{review.authorLogin}</strong>
+                  {review.body && <p>{review.body}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {kind === 'pull' && <PullActionsPanel repoFullName={repoFullName} number={number} onChanged={reload} />}
       {kind === 'pull' && (
-        <PullDiffView
-          repoFullName={repoFullName}
-          number={number}
-          variant={variant}
-          onLink={routeLink}
-          signedInLogin={signedInLogin}
-        />
+        <section className="detail-card" aria-label="Continuous integration">
+          <PullCi repoFullName={repoFullName} number={number} />
+        </section>
       )}
 
-      <CommentThread
-        repoFullName={repoFullName}
-        number={number}
-        signedInLogin={signedInLogin}
-        commentCount={summary.commentCount}
-        initialComments={detail.comments}
-        commentsPartial={detail.commentsPartial}
-        viewOnGitHubUrl={summary.htmlUrl}
-        onLink={routeLink}
-        canWrite={editable}
-      />
+      {editable && editing && (
+        <section className="detail-card" aria-label="Edit issue">
+          <IssueEditor
+            repoFullName={repoFullName}
+            number={number}
+            signedInLogin={signedInLogin}
+            snapshot={{ summary, body: detail.body, bodyHtml: detail.bodyHtml }}
+            onSaved={(issue) => {
+              applySnapshot(issue);
+              setEditing(false);
+            }}
+            onCancel={() => setEditing(false)}
+            onReload={() => {
+              setEditing(false);
+              reload();
+            }}
+            onLink={routeLink}
+            viewOnGitHubUrl={summary.htmlUrl}
+          />
+        </section>
+      )}
+
+      {editable && (
+        <section className="detail-card" aria-label="Assignees, labels, and milestone">
+          <h3 className="detail-card-title">{editing ? 'Edit details' : 'Details'}</h3>
+          {editing ? (
+            <IssueFields
+              repoFullName={repoFullName}
+              number={number}
+              summary={summary}
+              onChange={applySummary}
+              onError={setActionError}
+            />
+          ) : (
+            <dl className="detail-facts">
+              <div>
+                <dt>Assignees</dt>
+                <dd>
+                  {summary.assignees.length
+                    ? summary.assignees.map((login) => (
+                        <span key={login} className="person-chip">
+                          @{login}
+                        </span>
+                      ))
+                    : 'No one assigned'}
+                </dd>
+              </div>
+              <div>
+                <dt>Milestone</dt>
+                <dd>{summary.milestone ? summary.milestone.title : 'No milestone'}</dd>
+              </div>
+            </dl>
+          )}
+        </section>
+      )}
+
+      {kind === 'issue' && (
+        <section className="detail-card" aria-label="Projects">
+          <ItemProjects repoFullName={repoFullName} number={number} />
+        </section>
+      )}
+
+      <section className="detail-card" aria-label="Description">
+        <h3 className="detail-card-title">Description</h3>
+        <RichBody
+          html={detail.bodyHtml}
+          viewOnGitHubUrl={summary.htmlUrl}
+          onLink={routeLink}
+          emptyText="No description provided."
+          onTaskToggle={editable ? toggleTask : undefined}
+        />
+      </section>
+
+      {kind === 'pull' && (
+        <section className="detail-card" aria-label="Changed files">
+          <PullDiffView
+            repoFullName={repoFullName}
+            number={number}
+            variant={variant}
+            onLink={routeLink}
+            signedInLogin={signedInLogin}
+          />
+        </section>
+      )}
+
+      <div className="detail-card">
+        <CommentThread
+          repoFullName={repoFullName}
+          number={number}
+          signedInLogin={signedInLogin}
+          commentCount={summary.commentCount}
+          initialComments={detail.comments}
+          commentsPartial={detail.commentsPartial}
+          viewOnGitHubUrl={summary.htmlUrl}
+          onLink={routeLink}
+          canWrite={editable}
+        />
+      </div>
 
       <a
         className="github-link"
@@ -327,7 +389,7 @@ export function IssueDetailView({
           void window.orbit.app.openExternal(summary.htmlUrl);
         }}
       >
-        View on GitHub ↗
+        View on GitHub <Icon name="external" size={12} />
       </a>
     </article>
   );
