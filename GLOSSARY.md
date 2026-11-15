@@ -52,7 +52,7 @@ _Avoid_: Logs (ambiguous with the log file on disk), telemetry
 **Uncertain write**: A GitHub write whose outcome is unknown because the request may not have reached GitHub. Orbit's write helper checks GitHub for the result before retrying, so the write is never applied twice. Comment writes use the helper.
 _Avoid_: Failed write (it may have succeeded)
 
-**Issue view**: Detail of one issue: its metadata, body, and comments. From it the user can add comments and edit or delete their own. It opens in the details panel, and can be expanded to fill the main view.
+**Issue view**: Detail of one issue: its metadata, body, and comments. From it the user can add comments and edit or delete their own, and for their own issues, edit the title and body, change the issue fields and state, and tick task checkboxes. It opens in the details panel, and can be expanded to fill the main view.
 _Avoid_: Issue page, issue modal
 
 **Partial list**: An issue or comment list that Orbit could not fully load or read. It is shown with a notice that it may be incomplete, never as the full result.
@@ -65,4 +65,12 @@ _Avoid_: Autosave, saved text (drafts are never written to disk)
 
 **Own comment**: A comment whose author is the signed-in account. Only own comments can be edited or deleted.
 
-**Edit conflict**: An edit started from a comment version that GitHub has since replaced. Orbit keeps the user's own text and lets them view GitHub's version, overwrite it, or copy their text to the clipboard. Nothing is overwritten silently.
+**Edit conflict**: An edit started from a comment version that GitHub has since replaced. Orbit keeps the user's own text and lets them view GitHub's version, overwrite it, or copy their text to the clipboard. Nothing is overwritten silently. An issue title and body edit with a conflict is not overwritten either: the user keeps their text and loads GitHub's latest version.
+
+**New issue**: An issue the user creates in one of their personal repos from that repo's issue list. Like other writes, an uncertain failure is checked against GitHub before retrying, so the issue is never created twice.
+
+**Issue fields**: An issue's labels, assignees, and milestone. A change shows at once and is undone if GitHub refuses it. Each list is saved in full, replacing GitHub's list.
+_Avoid_: Metadata (too broad, and it includes the title and body)
+
+**Task checkbox**: A checkbox that comes from a task-list item (`- [ ]` or `- [x]`) in an issue body. Ticking one changes only that line of the body's source, and only when the body on GitHub is still the version the user saw. If it changed, nothing is written and the issue is reloaded.
+_Avoid_: Checklist item (the rendered list item is not the checkbox)

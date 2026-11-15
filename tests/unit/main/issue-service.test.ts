@@ -82,6 +82,8 @@ describe('IssueService.listIssues', () => {
         stateReason: null,
         authorLogin: 'someone',
         labels: [{ name: 'bug', color: 'd73a4a' }],
+        assignees: [],
+        milestone: null,
         commentCount: 2,
         createdAt: '2026-01-02T00:00:00Z',
         updatedAt: '2026-01-03T00:00:00Z',

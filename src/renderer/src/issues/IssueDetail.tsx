@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
-import type { IssueDetail as IssueDetailData } from '../../../shared/issues';
+import type {
+  IssueCloseReason,
+  IssueDetail as IssueDetailData,
+  IssueSnapshot,
+  IssueSummary
+} from '../../../shared/issues';
 import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
+import { IssueEditor } from './IssueEditor';
+import { IssueFields } from './IssueFields';
 import { RichBody } from './RichBody';
 
 export interface IssueDetailViewProps {
@@ -18,7 +25,13 @@ export interface IssueDetailViewProps {
 
 export type ItemKind = 'issue' | 'pull';
 
-/** View of one issue: metadata, sanitized body, and the comment thread. */
+const STALE_MESSAGE =
+  'This issue changed on GitHub since you opened it. Its latest version is loaded; try the change again.';
+
+/**
+ * View of one issue: metadata, sanitized body, and the comment thread. Issues can also be edited here;
+ * pull requests are read-only in this view.
+ */
 export function IssueDetailView({
   repoFullName,
   number,
@@ -29,6 +42,10 @@ export function IssueDetailView({
 }: IssueDetailViewProps) {
   const [detail, setDetail] = useState<IssueDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
+  const editable = kind === 'issue';
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +63,9 @@ export function IssueDetailView({
     return () => {
       cancelled = true;
     };
-  }, [repoFullName, number, kind]);
+  }, [repoFullName, number, kind, loadVersion]);
+
+  const reload = (): void => setLoadVersion((version) => version + 1);
 
   const routeLink = (href: string): void => {
     const target = classifyLink(href, signedInLogin);
@@ -57,6 +76,41 @@ export function IssueDetailView({
     }
   };
 
+  const applySnapshot = (issue: IssueSnapshot): void =>
+    setDetail((current) =>
+      current ? { ...current, summary: issue.summary, body: issue.body, bodyHtml: issue.bodyHtml } : current
+    );
+
+  const applySummary = (summary: IssueSummary): void =>
+    setDetail((current) => (current ? { ...current, summary } : current));
+
+  const changeState = (state: 'open' | 'closed', reason?: IssueCloseReason): void => {
+    setActionError(null);
+    const request =
+      reason === undefined
+        ? window.orbit.issues.setState(repoFullName, number, state)
+        : window.orbit.issues.setState(repoFullName, number, state, reason);
+    request.then(applySummary, () => setActionError('Could not change the state of this issue. Try again.'));
+  };
+
+  /** Ticks one checkbox. The body is checked on GitHub first; a body that changed upstream is reloaded instead. */
+  const toggleTask = (index: number, checked: boolean): void => {
+    if (!detail) return;
+    setActionError(null);
+    window.orbit.issues.setTask(repoFullName, number, { index, checked, expectedBody: detail.body }).then(
+      (result) => {
+        if (result.kind === 'saved') {
+          applySnapshot(result.issue);
+        } else {
+          setActionError(STALE_MESSAGE);
+          reload();
+        }
+      },
+      (cause: unknown) =>
+        setActionError(cause instanceof Error ? cause.message : 'That checkbox could not be saved.')
+    );
+  };
+
   if (error) {
     return (
       <div className="issue-detail" role="alert">
@@ -64,11 +118,19 @@ export function IssueDetailView({
       </div>
     );
   }
+  const notice = actionError ? (
+    <p className="session-notice" role="alert">
+      {actionError}
+    </p>
+  ) : null;
   if (!detail) {
     return (
-      <p className="empty-state" role="status">
-        Loading issue…
-      </p>
+      <>
+        {notice}
+        <p className="empty-state" role="status">
+          Loading issue…
+        </p>
+      </>
     );
   }
 
@@ -95,11 +157,72 @@ export function IssueDetailView({
           ))}
         </p>
       )}
+
+      {notice}
+
+      {editable && (
+        <div className="issue-actions">
+          {editing ? (
+            <IssueEditor
+              repoFullName={repoFullName}
+              number={number}
+              signedInLogin={signedInLogin}
+              snapshot={{ summary, body: detail.body, bodyHtml: detail.bodyHtml }}
+              onSaved={(issue) => {
+                applySnapshot(issue);
+                setEditing(false);
+              }}
+              onCancel={() => setEditing(false)}
+              onReload={() => {
+                setEditing(false);
+                reload();
+              }}
+              onLink={routeLink}
+              viewOnGitHubUrl={summary.htmlUrl}
+            />
+          ) : (
+            <button
+              className="secondary-action"
+              onClick={() => {
+                setActionError(null);
+                setEditing(true);
+              }}
+            >
+              Edit issue
+            </button>
+          )}
+          <div className="state-actions">
+            {summary.state === 'open' ? (
+              <>
+                <button className="secondary-action" onClick={() => changeState('closed', 'completed')}>
+                  Close as completed
+                </button>
+                <button className="secondary-action" onClick={() => changeState('closed', 'not_planned')}>
+                  Close as not planned
+                </button>
+              </>
+            ) : (
+              <button className="secondary-action" onClick={() => changeState('open')}>
+                Reopen
+              </button>
+            )}
+          </div>
+          <IssueFields
+            repoFullName={repoFullName}
+            number={number}
+            summary={summary}
+            onChange={applySummary}
+            onError={setActionError}
+          />
+        </div>
+      )}
+
       <RichBody
         html={detail.bodyHtml}
         viewOnGitHubUrl={summary.htmlUrl}
         onLink={routeLink}
         emptyText="No description provided."
+        onTaskToggle={editable ? toggleTask : undefined}
       />
 
       <CommentThread
@@ -111,7 +234,7 @@ export function IssueDetailView({
         commentsPartial={detail.commentsPartial}
         viewOnGitHubUrl={summary.htmlUrl}
         onLink={routeLink}
-        canWrite={kind === 'issue'}
+        canWrite={editable}
       />
 
       <a

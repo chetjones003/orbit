@@ -10,6 +10,8 @@ const SUMMARY: IssueSummary = {
   title: 'Crash on save',
   state: 'open',
   stateReason: null,
+  assignees: [],
+  milestone: null,
   authorLogin: 'someone',
   labels: [{ name: 'bug', color: 'd73a4a' }],
   commentCount: 1,

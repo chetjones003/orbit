@@ -12,10 +12,18 @@ import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
 import type {
   CommentUpdateResult,
+  IssueCloseReason,
   IssueComment,
+  IssueContentInput,
   IssueDetail,
+  IssueEditResult,
+  IssueFieldsInput,
   IssueListPage,
-  IssueListQuery
+  IssueListQuery,
+  IssueRepoOptions,
+  IssueSnapshot,
+  IssueSummary,
+  TaskToggleResult
 } from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
@@ -37,7 +45,18 @@ export interface IpcOptions {
   settings?: SettingsStore;
   refresh?: RefreshPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
-  issues?: Pick<IssueService, 'listIssues' | 'getIssueDetail' | 'getPullDetail'>;
+  issues?: Pick<
+    IssueService,
+    | 'listIssues'
+    | 'getIssueDetail'
+    | 'getPullDetail'
+    | 'createIssue'
+    | 'updateIssue'
+    | 'updateIssueFields'
+    | 'setIssueState'
+    | 'getRepoOptions'
+    | 'setTaskItem'
+  >;
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
 }
 
@@ -98,6 +117,65 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       (event, repoFullName: string, number: number): Promise<IssueDetail> => {
         assertTrustedSender(event, devServerOrigin);
         return issues.getPullDetail(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesCreate,
+      (event, repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.createIssue(repoFullName, input);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesUpdate,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: IssueContentInput,
+        base: IssueContentInput
+      ): Promise<IssueEditResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.updateIssue(repoFullName, number, input, base);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesUpdateFields,
+      (event, repoFullName: string, number: number, fields: IssueFieldsInput): Promise<IssueSummary> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.updateIssueFields(repoFullName, number, fields);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesSetState,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        state: 'open' | 'closed',
+        reason?: IssueCloseReason
+      ): Promise<IssueSummary> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.setIssueState(repoFullName, number, state, reason);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesRepoOptions,
+      (event, repoFullName: string): Promise<IssueRepoOptions> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.getRepoOptions(repoFullName);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesSetTask,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { index: number; checked: boolean; expectedBody: string }
+      ): Promise<TaskToggleResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.setTaskItem(repoFullName, number, input);
       }
     );
   }

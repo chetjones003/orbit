@@ -42,7 +42,13 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
-      getPullDetail: vi.fn(async () => emptyDetail)
+      getPullDetail: vi.fn(async () => emptyDetail),
+      createIssue: vi.fn(),
+      updateIssue: vi.fn(),
+      updateIssueFields: vi.fn(),
+      setIssueState: vi.fn(),
+      getRepoOptions: vi.fn(),
+      setTaskItem: vi.fn()
     };
     registerIpcHandlers({ issues });
     const query = { repoFullName: 'orbit-owner/app', state: 'open', page: 1 };
@@ -55,7 +61,13 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
-      getPullDetail: vi.fn(async () => emptyDetail)
+      getPullDetail: vi.fn(async () => emptyDetail),
+      createIssue: vi.fn(),
+      updateIssue: vi.fn(),
+      updateIssueFields: vi.fn(),
+      setIssueState: vi.fn(),
+      getRepoOptions: vi.fn(),
+      setTaskItem: vi.fn()
     };
     registerIpcHandlers({ issues });
 
@@ -71,7 +83,13 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
-      getPullDetail: vi.fn(async () => emptyDetail)
+      getPullDetail: vi.fn(async () => emptyDetail),
+      createIssue: vi.fn(),
+      updateIssue: vi.fn(),
+      updateIssueFields: vi.fn(),
+      setIssueState: vi.fn(),
+      getRepoOptions: vi.fn(),
+      setTaskItem: vi.fn()
     };
     registerIpcHandlers({ issues });
 
@@ -84,7 +102,13 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
-      getPullDetail: vi.fn(async () => emptyDetail)
+      getPullDetail: vi.fn(async () => emptyDetail),
+      createIssue: vi.fn(),
+      updateIssue: vi.fn(),
+      updateIssueFields: vi.fn(),
+      setIssueState: vi.fn(),
+      getRepoOptions: vi.fn(),
+      setTaskItem: vi.fn()
     };
     registerIpcHandlers({ issues });
 

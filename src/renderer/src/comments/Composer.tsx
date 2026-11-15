@@ -23,6 +23,10 @@ export interface ComposerProps {
    */
   onSubmit: (text: string) => Promise<'keep' | void>;
   onCancel?: () => void;
+  /** Lets an empty box be sent, for example an issue whose description is optional. */
+  allowEmpty?: boolean;
+  /** Blocks sending for a reason the text box cannot see, such as a missing title. */
+  submitDisabled?: boolean;
   /** Links in the preview open outside Orbit, through the controlled external-open path. */
   onExternalLink: (href: string) => void;
   /** The item's own GitHub URL, used for the preview's "View on GitHub" fallback. */
@@ -59,6 +63,8 @@ export function Composer({
   previewText,
   onSubmit,
   onCancel,
+  allowEmpty = false,
+  submitDisabled: blockedByCaller = false,
   onExternalLink,
   viewOnGitHubUrl
 }: ComposerProps) {
@@ -101,7 +107,7 @@ export function Composer({
   };
 
   const send = (): void => {
-    if (sending || empty || overLimit) return;
+    if (sending || (!allowEmpty && empty) || overLimit || blockedByCaller) return;
     setSending(true);
     setError(null);
     onSubmit(text).then(
@@ -119,7 +125,7 @@ export function Composer({
     );
   };
 
-  const submitDisabled = sending || empty || overLimit;
+  const submitDisabled = sending || (!allowEmpty && empty) || overLimit || blockedByCaller;
 
   return (
     <div className="composer">
@@ -229,6 +235,6 @@ export function Composer({
 
 /** A stable id prefix for ARIA relationships, derived from the draft target. */
 function draftKeyId(key: DraftKey): string {
-  const target = key.target === 'new' ? 'new' : `comment-${key.target.commentId}`;
+  const target = typeof key.target === 'string' ? key.target : `comment-${key.target.commentId}`;
   return `composer-${key.kind}-${key.number}-${target}`.replace(/[^A-Za-z0-9-]/g, '-');
 }

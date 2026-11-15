@@ -1,6 +1,20 @@
 import type { AuthStatus } from './auth';
 import type { ConnectionStatus, RefreshStart } from './connection';
-import type { CommentUpdateResult, IssueComment, IssueDetail, IssueListPage, IssueListQuery } from './issues';
+import type {
+  CommentUpdateResult,
+  IssueCloseReason,
+  IssueComment,
+  IssueContentInput,
+  IssueDetail,
+  IssueEditResult,
+  IssueFieldsInput,
+  IssueListPage,
+  IssueListQuery,
+  IssueRepoOptions,
+  IssueSnapshot,
+  IssueSummary,
+  TaskToggleResult
+} from './issues';
 
 /**
  * Contract shared by main, preload, and renderer. Keep this file free of
@@ -19,6 +33,12 @@ export const IpcChannels = {
   reposRefresh: 'repos:refresh',
   issuesList: 'issues:list',
   issuesDetail: 'issues:detail',
+  issuesCreate: 'issues:create',
+  issuesUpdate: 'issues:update',
+  issuesUpdateFields: 'issues:update-fields',
+  issuesSetState: 'issues:set-state',
+  issuesRepoOptions: 'issues:repo-options',
+  issuesSetTask: 'issues:set-task',
   pullsDetail: 'pulls:detail',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
@@ -111,6 +131,30 @@ export interface OrbitApi {
   issues: {
     list(query: IssueListQuery): Promise<IssueListPage>;
     detail(repoFullName: string, number: number): Promise<IssueDetail>;
+    /** Opens a new issue in one of the user's personal repos. */
+    create(repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot>;
+    /** `base` is the title and body the edit started from. A difference on GitHub comes back as a conflict. */
+    update(
+      repoFullName: string,
+      number: number,
+      input: IssueContentInput,
+      base: IssueContentInput
+    ): Promise<IssueEditResult>;
+    /** Replaces labels, assignees, and milestone. Resolves with GitHub's version of the issue. */
+    updateFields(repoFullName: string, number: number, fields: IssueFieldsInput): Promise<IssueSummary>;
+    setState(
+      repoFullName: string,
+      number: number,
+      state: 'open' | 'closed',
+      reason?: IssueCloseReason
+    ): Promise<IssueSummary>;
+    repoOptions(repoFullName: string): Promise<IssueRepoOptions>;
+    /** Ticks one task checkbox, only if the body is still `expectedBody`. */
+    setTask(
+      repoFullName: string,
+      number: number,
+      input: { index: number; checked: boolean; expectedBody: string }
+    ): Promise<TaskToggleResult>;
   };
   pulls: {
     detail(repoFullName: string, number: number): Promise<IssueDetail>;

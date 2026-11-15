@@ -16,6 +16,8 @@ const SUMMARY: IssueSummary = {
   title: 'Crash on save',
   state: 'open',
   stateReason: null,
+  assignees: [],
+  milestone: null,
   authorLogin: 'someone',
   labels: [],
   commentCount: 2,
@@ -75,7 +77,10 @@ let api: {
 describe('IssueDetailView comments', () => {
   beforeEach(() => {
     api = {
-      issues: { detail: vi.fn(async () => detail()) },
+      issues: {
+        detail: vi.fn(async () => detail()),
+        repoOptions: vi.fn(async () => ({ labels: [], assignees: [], milestones: [] }))
+      },
       pulls: { detail: vi.fn(async () => detail()) },
       markdown: { preview: vi.fn(async (_repo: string, text: string) => `<p>${text}</p>`) },
       comments: {
