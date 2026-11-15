@@ -10,14 +10,22 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
+// GitHub's shape: fullDatabaseId is a BigInt (a string in JSON); a comment has no side, its thread does.
 const PENDING_COMMENT = {
-  databaseId: 900,
+  fullDatabaseId: '900',
   path: 'src/a.ts',
   line: 1,
-  originalLine: 1,
-  diffSide: 'RIGHT',
-  body: 'Nit'
+  body: 'Nit',
+  state: 'PENDING'
 };
+
+/** The pull request's threads, holding the viewer's pending comments on one right-side thread. */
+function pendingThreads(comments: unknown[] = []) {
+  return {
+    totalCount: comments.length > 0 ? 1 : 0,
+    nodes: comments.length > 0 ? [{ diffSide: 'RIGHT', comments: { nodes: comments } }] : []
+  };
+}
 
 function pullRequest(overrides: Record<string, unknown> = {}) {
   return {
@@ -25,16 +33,13 @@ function pullRequest(overrides: Record<string, unknown> = {}) {
     headRefOid: 'head-1',
     author: { login: 'someone-else' },
     reviews: { nodes: [] },
+    reviewThreads: { totalCount: 0, nodes: [] },
     ...overrides
   };
 }
 
-function pendingReview(comments: unknown[] = []) {
-  return {
-    id: 'REV_1',
-    commit: { oid: 'head-1' },
-    comments: { totalCount: comments.length, nodes: comments }
-  };
+function pendingReview() {
+  return { id: 'REV_1', commit: { oid: 'head-1' } };
 }
 
 /**
@@ -103,7 +108,8 @@ describe('IssueService.getPullReviewState', () => {
         repository: {
           pullRequest: pullRequest({
             author: { login: 'orbit-owner' },
-            reviews: { nodes: [pendingReview([PENDING_COMMENT])] }
+            reviews: { nodes: [pendingReview()] },
+            reviewThreads: pendingThreads([PENDING_COMMENT])
           })
         }
       })
@@ -142,7 +148,7 @@ describe('IssueService.addReviewComment', () => {
         }
         return {
           addPullRequestReviewThread: {
-            thread: { id: 'T_new', comments: { nodes: [PENDING_COMMENT] } }
+            thread: { id: 'T_new', diffSide: 'RIGHT', comments: { nodes: [PENDING_COMMENT] } }
           }
         };
       }
@@ -180,7 +186,9 @@ describe('IssueService.addReviewComment', () => {
           return { repository: { pullRequest: pullRequest({ reviews: { nodes: [pendingReview()] } }) } };
         }
         return {
-          addPullRequestReviewThread: { thread: { id: 'T_new', comments: { nodes: [PENDING_COMMENT] } } }
+          addPullRequestReviewThread: {
+            thread: { id: 'T_new', diffSide: 'RIGHT', comments: { nodes: [PENDING_COMMENT] } }
+          }
         };
       }
     });
@@ -236,7 +244,8 @@ describe('IssueService.addReviewComment', () => {
           return {
             repository: {
               pullRequest: pullRequest({
-                reviews: { nodes: [pendingReview(landed ? [PENDING_COMMENT] : [])] }
+                reviews: { nodes: [pendingReview()] },
+                reviewThreads: pendingThreads(landed ? [PENDING_COMMENT] : [])
               })
             }
           };
@@ -267,9 +276,10 @@ describe('IssueService.replyToReviewThread', () => {
         if (query.includes('headRefOid')) {
           return { repository: { pullRequest: pullRequest({ reviews: { nodes: [pendingReview()] } }) } };
         }
+        if (query.includes('PullRequestReviewThread { diffSide')) return { node: { diffSide: 'RIGHT' } };
         return {
           addPullRequestReviewThreadReply: {
-            comment: { databaseId: 902, path: 'src/a.ts', line: 1, diffSide: 'RIGHT', body: 'Reply' }
+            comment: { fullDatabaseId: '902', path: 'src/a.ts', line: 1, body: 'Reply' }
           }
         };
       }
@@ -295,14 +305,20 @@ describe('IssueService.replyToReviewThread', () => {
 
 describe('IssueService.replyToReviewThread reconcile', () => {
   it('does not report an identical comment that was already pending as this reply', async () => {
-    const earlier = { databaseId: 950, path: 'src/a.ts', line: 2, diffSide: 'RIGHT', body: 'LGTM' };
+    const earlier = { fullDatabaseId: '950', path: 'src/a.ts', line: 2, body: 'LGTM', state: 'PENDING' };
     const gh = fakeGitHub({
       graphql: (query) => {
         if (query.includes('headRefOid')) {
           return {
-            repository: { pullRequest: pullRequest({ reviews: { nodes: [pendingReview([earlier])] } }) }
+            repository: {
+              pullRequest: pullRequest({
+                reviews: { nodes: [pendingReview()] },
+                reviewThreads: pendingThreads([earlier])
+              })
+            }
           };
         }
+        if (query.includes('PullRequestReviewThread { diffSide')) return { node: { diffSide: 'RIGHT' } };
         return new Response('', { status: 503 });
       }
     });
@@ -414,6 +430,8 @@ describe('IssueService.submitReview', () => {
           };
         }
         if (query.includes('node(id')) return { node: { state: 'COMMENTED' } };
+        if (query.includes('reviews(last'))
+          return { repository: { pullRequest: { reviews: { nodes: [] } } } };
         submitted = true;
         return new Response('', { status: 503 });
       }
@@ -427,5 +445,177 @@ describe('IssueService.submitReview', () => {
 
     expect(result).toEqual({ kind: 'submitted' });
     expect(gh.mutations('submitPullRequestReview')).toHaveLength(1);
+  });
+});
+
+describe('IssueService.addReviewComment after uncertain or moved writes', () => {
+  it('checks the head again before writing, so a push during the file read is not written against', async () => {
+    const heads = ['head-1', 'head-2'];
+    const gh = fakeGitHub({
+      files: FILES,
+      graphql: (query) => {
+        if (query.includes('headRefOid')) {
+          const head = heads.shift() ?? 'head-2';
+          return { repository: { pullRequest: pullRequest({ headRefOid: head }) } };
+        }
+        return {};
+      }
+    });
+
+    const result = await makeService(gh.fetch).addReviewComment('orbit-owner/app', 7, {
+      anchor: { path: 'src/a.ts', side: 'RIGHT', line: 1 },
+      body: 'Nit',
+      reviewedHeadSha: 'head-1'
+    });
+
+    expect(result).toEqual({ kind: 'new-commits', headSha: 'head-2' });
+    expect(gh.mutations('addPullRequestReviewThread')).toHaveLength(0);
+    expect(gh.mutations('addPullRequestReview')).toHaveLength(0);
+  });
+
+  it('reconciles a lost response on retry instead of posting the comment again', async () => {
+    let landed = false;
+    let failReads = false;
+    const gh = fakeGitHub({
+      files: FILES,
+      graphql: (query) => {
+        if (query.includes('headRefOid')) {
+          if (failReads) return new Response('', { status: 503 });
+          return {
+            repository: {
+              pullRequest: pullRequest({
+                reviews: { nodes: [pendingReview()] },
+                reviewThreads: pendingThreads(landed ? [PENDING_COMMENT] : [])
+              })
+            }
+          };
+        }
+        landed = true;
+        failReads = true;
+        return new Response('', { status: 503 });
+      }
+    });
+    const service = makeService(gh.fetch);
+    const input = {
+      anchor: { path: 'src/a.ts', side: 'RIGHT' as const, line: 1 },
+      body: 'Nit',
+      reviewedHeadSha: 'head-1'
+    };
+
+    await expect(service.addReviewComment('orbit-owner/app', 7, input)).rejects.toThrow();
+    failReads = false;
+    const retried = await service.addReviewComment('orbit-owner/app', 7, input);
+
+    expect(retried).toEqual({
+      kind: 'saved',
+      comment: { id: 900, path: 'src/a.ts', side: 'RIGHT', line: 1, body: 'Nit' }
+    });
+    expect(gh.mutations('addPullRequestReviewThread')).toHaveLength(1);
+  });
+});
+
+describe('IssueService.addReviewComment reconcile and head rechecks (round 2)', () => {
+  it('keeps the uncertain state when reconciliation fails, so a retry does not post a second comment', async () => {
+    let landed = false;
+    let failReconcile = false;
+    const gh = fakeGitHub({
+      files: FILES,
+      graphql: (query) => {
+        if (query.includes('headRefOid')) {
+          if (failReconcile) return new Response('', { status: 429, headers: { 'retry-after': '1' } });
+          return {
+            repository: {
+              pullRequest: pullRequest({
+                reviews: { nodes: [pendingReview()] },
+                reviewThreads: pendingThreads(landed ? [PENDING_COMMENT] : [])
+              })
+            }
+          };
+        }
+        // The comment lands, but the response is lost and the reconciling read is refused.
+        landed = true;
+        failReconcile = true;
+        return new Response('', { status: 503 });
+      }
+    });
+    const service = makeService(gh.fetch);
+    const input = {
+      anchor: { path: 'src/a.ts', side: 'RIGHT' as const, line: 1 },
+      body: 'Nit',
+      reviewedHeadSha: 'head-1'
+    };
+
+    await expect(service.addReviewComment('orbit-owner/app', 7, input)).rejects.toThrow();
+    failReconcile = false;
+    const retried = await service.addReviewComment('orbit-owner/app', 7, input);
+
+    expect(retried).toEqual({
+      kind: 'saved',
+      comment: { id: 900, path: 'src/a.ts', side: 'RIGHT', line: 1, body: 'Nit' }
+    });
+    expect(gh.mutations('addPullRequestReviewThread')).toHaveLength(1);
+  });
+
+  it('rechecks the head after creating the pending review, and does not write the comment against a moved head', async () => {
+    const heads = ['head-1', 'head-1', 'head-2'];
+    const gh = fakeGitHub({
+      files: FILES,
+      graphql: (query) => {
+        if (query.includes('headRefOid')) {
+          const head = heads.shift() ?? 'head-2';
+          return { repository: { pullRequest: pullRequest({ headRefOid: head }) } };
+        }
+        return { addPullRequestReview: { pullRequestReview: { id: 'REV_1', commit: { oid: 'head-1' } } } };
+      }
+    });
+
+    const result = await makeService(gh.fetch).addReviewComment('orbit-owner/app', 7, {
+      anchor: { path: 'src/a.ts', side: 'RIGHT', line: 1 },
+      body: 'Nit',
+      reviewedHeadSha: 'head-1'
+    });
+
+    expect(gh.mutations('addPullRequestReview')).toHaveLength(1);
+    expect(result).toEqual({ kind: 'new-commits', headSha: 'head-2' });
+    expect(gh.mutations('addPullRequestReviewThread')).toHaveLength(0);
+  });
+});
+
+describe('IssueService.addReviewComment with an unreadable response (round 4)', () => {
+  it('keeps the uncertain state when the response cannot be read after the comment landed', async () => {
+    let landed = false;
+    const gh = fakeGitHub({
+      files: FILES,
+      graphql: (query) => {
+        if (query.includes('headRefOid')) {
+          return {
+            repository: {
+              pullRequest: pullRequest({
+                reviews: { nodes: [pendingReview()] },
+                reviewThreads: pendingThreads(landed ? [PENDING_COMMENT] : [])
+              })
+            }
+          };
+        }
+        // The comment lands, but the response body is not valid JSON.
+        landed = true;
+        return new Response('{"data": ', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+    });
+    const service = makeService(gh.fetch);
+    const input = {
+      anchor: { path: 'src/a.ts', side: 'RIGHT' as const, line: 1 },
+      body: 'Nit',
+      reviewedHeadSha: 'head-1'
+    };
+
+    await expect(service.addReviewComment('orbit-owner/app', 7, input)).rejects.toThrow();
+    const retried = await service.addReviewComment('orbit-owner/app', 7, input);
+
+    expect(retried).toEqual({
+      kind: 'saved',
+      comment: { id: 900, path: 'src/a.ts', side: 'RIGHT', line: 1, body: 'Nit' }
+    });
+    expect(gh.mutations('addPullRequestReviewThread')).toHaveLength(1);
   });
 });

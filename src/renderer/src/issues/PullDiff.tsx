@@ -21,6 +21,7 @@ import type {
 } from '../../../shared/issues';
 import { RichBody } from './RichBody';
 import { ReviewPanel, ReviewTextBox, describeAnchor } from './PullReview';
+import type { DraftKey } from '../comments/draft-store';
 import { anchorForChange, findChangeForAnchor, fileNote, isLargePatch, parseFileDiff } from './pull-diff';
 
 export interface PullDiffViewProps {
@@ -29,6 +30,8 @@ export interface PullDiffViewProps {
   /** Compact panel shows the unified diff. The expanded view can also show a split diff. */
   variant?: 'panel' | 'expanded';
   onLink: (href: string) => void;
+  /** The signed-in account, which keys unsent review text. */
+  signedInLogin: string;
 }
 
 const LOAD_ERROR = 'The changed files could not be loaded. Try again later.';
@@ -39,6 +42,8 @@ const REPLY_FAILURE = 'Your reply was not saved. Your text is kept; try again.';
 /** The review actions the file views need. Writes are off until the reviewed commit is current. */
 interface ReviewActions {
   enabled: boolean;
+  /** Draft key for unsent review text in one slot of this pull request. */
+  draftKey: (slot: string) => DraftKey;
   composing: ReviewAnchor | null;
   onStartComment: (anchor: ReviewAnchor) => void;
   onCancelComment: () => void;
@@ -52,7 +57,13 @@ interface ReviewActions {
 }
 
 /** Changed files with a file navigator, and each file's diff with its review threads and pending review. */
-export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }: PullDiffViewProps) {
+export function PullDiffView({
+  repoFullName,
+  number,
+  variant = 'panel',
+  onLink,
+  signedInLogin
+}: PullDiffViewProps) {
   const [filesPage, setFilesPage] = useState<PullFilesPage | null>(null);
   const [threadsPage, setThreadsPage] = useState<PullReviewThreadsPage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,57 +77,83 @@ export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }
   const [composing, setComposing] = useState<ReviewAnchor | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  /** The diff could not be reloaded after the last refresh, so the new head is not yet shown. */
+  const [filesStale, setFilesStale] = useState(false);
+  /** The head the loaded files were read after. Only that head can be acknowledged. */
+  const [filesHeadSha, setFilesHeadSha] = useState<string | null>(null);
 
   const loadThreads = useCallback(async () => {
     setThreadsPage(await window.orbit.pulls.threads(repoFullName, number));
   }, [repoFullName, number]);
 
-  const loadReview = useCallback(async () => {
+  /** Reloads the changed files. They are read after the review, and `headSha` records which head that was. */
+  const loadFiles = useCallback(
+    async (headSha: string) => {
+      try {
+        setFilesPage(await window.orbit.pulls.files(repoFullName, number));
+        setFilesHeadSha(headSha);
+        setFilesStale(false);
+      } catch {
+        setFilesStale(true);
+      }
+    },
+    [repoFullName, number]
+  );
+
+  const loadReview = useCallback(async (): Promise<PullReviewState | null> => {
     try {
       const state = await window.orbit.pulls.reviewState(repoFullName, number);
       setReview(state);
       setReviewError(null);
       // The first load reviews the commit the pending comments were written on, so new commits are noticed.
       setReviewedHeadSha((current) => current ?? state.pending?.commitSha ?? state.headSha);
+      return state;
     } catch {
       setReviewError(REVIEW_LOAD_ERROR);
+      return null;
     }
   }, [repoFullName, number]);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    Promise.all([
-      window.orbit.pulls.files(repoFullName, number),
-      window.orbit.pulls.threads(repoFullName, number)
-    ]).then(
-      ([files, threads]) => {
+    setReview(null);
+    setReviewedHeadSha(null);
+    setFilesHeadSha(null);
+    setComposing(null);
+    setReplyingTo(null);
+    void (async () => {
+      // The review is read before the files, so the files are never older than the head they are paired with.
+      const state = await loadReview();
+      try {
+        const [files, threads] = await Promise.all([
+          window.orbit.pulls.files(repoFullName, number),
+          window.orbit.pulls.threads(repoFullName, number)
+        ]);
         if (cancelled) return;
         setFilesPage(files);
         setThreadsPage(threads);
-      },
-      () => {
+        if (state) setFilesHeadSha(state.headSha);
+      } catch {
         if (!cancelled) setError(LOAD_ERROR);
       }
-    );
+    })();
     return () => {
       cancelled = true;
     };
-  }, [repoFullName, number]);
+  }, [repoFullName, number, loadReview]);
 
-  useEffect(() => {
-    setReview(null);
-    setReviewedHeadSha(null);
-    setComposing(null);
-    setReplyingTo(null);
-    void loadReview();
-  }, [loadReview]);
-
-  /** Reloads threads and the pending review, after a write or on request. */
+  /** Reloads the review, then the files for its head, then the threads. */
   const refreshReview = useCallback(() => {
-    void loadReview();
-    loadThreads().catch(() => setThreadError(THREAD_ERROR));
-  }, [loadReview, loadThreads]);
+    setRefreshing(true);
+    void (async () => {
+      const state = await loadReview();
+      if (state) await loadFiles(state.headSha);
+      setRefreshing(false);
+      await loadThreads().catch(() => setThreadError(THREAD_ERROR));
+    })();
+  }, [loadReview, loadFiles, loadThreads]);
 
   if (error) return <p role="alert">{error}</p>;
   if (!filesPage || !threadsPage) {
@@ -138,6 +175,13 @@ export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }
   };
   const actions: ReviewActions = {
     enabled,
+    draftKey: (slot) => ({
+      login: signedInLogin,
+      repoFullName,
+      kind: 'pull',
+      number,
+      target: { reviewSlot: slot }
+    }),
     composing,
     onStartComment: (anchor) => setComposing(anchor),
     onCancelComment: () => setComposing(null),
@@ -177,14 +221,21 @@ export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }
       {filesPage.partial && <p role="note">Some changed files may not be shown.</p>}
       {threadsPage.partial && <p role="note">Some review threads may not be shown.</p>}
       {threadError && <p role="alert">{threadError}</p>}
+      {filesStale && (
+        <p role="alert">
+          The changed files could not be reloaded. Refresh again before acknowledging new commits.
+        </p>
+      )}
       <ReviewPanel
         repoFullName={repoFullName}
+        signedInLogin={signedInLogin}
         number={number}
         review={review}
         reviewError={reviewError}
         partialComments={review?.pending?.commentsPartial ?? false}
         newCommits={newCommits}
         reviewedHeadSha={reviewedHeadSha}
+        acknowledgeDisabled={refreshing || filesStale || filesHeadSha !== (review?.headSha ?? null)}
         onAcknowledge={() => setReviewedHeadSha(review?.headSha ?? null)}
         onRefresh={refreshReview}
         onSubmitted={refreshReview}
@@ -358,6 +409,7 @@ function threadWidgets(
     const anchor = actions.composing;
     const composer = (
       <ReviewTextBox
+        draftKey={actions.draftKey(`comment:${anchor.path}:${anchor.side}:${anchor.line}`)}
         label={`Comment on ${describeAnchor(anchor.path, anchor.side, anchor.line)}`}
         submitLabel="Add comment"
         disabled={!actions.enabled}
@@ -460,6 +512,7 @@ function ThreadCard({
       </div>
       {actions.enabled && replying && (
         <ReviewTextBox
+          draftKey={actions.draftKey(`reply:${thread.id}`)}
           label={`Reply to thread on ${thread.path}`}
           submitLabel="Send reply"
           disabled={!actions.enabled}

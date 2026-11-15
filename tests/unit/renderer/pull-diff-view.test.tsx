@@ -61,7 +61,9 @@ describe('PullDiffView', () => {
 
   it('lists each changed file in a navigator and shows the selected file as a unified diff', async () => {
     mockPull([file(), file({ filename: 'src/b.ts', additions: 3, deletions: 0 })]);
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
 
     const navigator = await screen.findByRole('navigation', { name: 'File navigator' });
     expect(navigator.textContent).toContain('src/a.ts');
@@ -72,7 +74,15 @@ describe('PullDiffView', () => {
 
   it('shows a split toggle only in the expanded view', async () => {
     mockPull([file()]);
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} variant="expanded" onLink={vi.fn()} />);
+    render(
+      <PullDiffView
+        signedInLogin="orbit-owner"
+        repoFullName="orbit-owner/app"
+        number={7}
+        variant="expanded"
+        onLink={vi.fn()}
+      />
+    );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Split view' }));
     expect(screen.getByRole('button', { name: 'Unified view' })).toBeTruthy();
@@ -83,7 +93,9 @@ describe('PullDiffView', () => {
       file({ filename: 'src/new.ts', status: 'renamed', previousFilename: 'src/old.ts' }),
       file({ filename: 'huge.json', patch: null, noPatchReason: 'too-large', additions: 5000, deletions: 0 })
     ]);
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
 
     expect(await screen.findByText('Renamed from src/old.ts')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /huge\.json/ }));
@@ -94,7 +106,9 @@ describe('PullDiffView', () => {
   it('does not parse a large patch until the reader loads it', async () => {
     const lines = Array.from({ length: 450 }, (_, i) => `+row ${i}`).join('\n');
     mockPull([file({ patch: `@@ -0,0 +1,450 @@\n${lines}`, additions: 450, deletions: 0 })]);
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
 
     const load = await screen.findByRole('button', { name: /Load diff \(451 lines\)/ });
     expect(screen.queryByText('row 0')).toBeNull();
@@ -126,7 +140,9 @@ describe('PullDiffView', () => {
         })
       ]
     );
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
 
     const regions = await screen.findAllByRole('region', { name: 'Review thread on src/a.ts' });
     expect(regions).toHaveLength(2);
@@ -158,7 +174,9 @@ describe('PullDiffView partial notices', () => {
       },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     } as unknown as typeof window.orbit;
-    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
 
     expect(await screen.findByText('Some review threads may not be shown.')).toBeTruthy();
   });

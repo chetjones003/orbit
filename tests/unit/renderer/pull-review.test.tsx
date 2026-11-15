@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PullDiffView } from '../../../src/renderer/src/issues/PullDiff';
+import { drafts } from '../../../src/renderer/src/comments/draft-store';
 import type { PullFile, PullReviewState, PullReviewThread } from '../../../src/shared/issues';
 
 const PATCH = '@@ -1,2 +1,2 @@\n-old line\n+new line\n same';
@@ -77,7 +78,9 @@ function mockOrbit({ state = review(), threads = [] }: MockOptions = {}) {
 }
 
 function renderView() {
-  return render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+  return render(
+    <PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} signedInLogin="orbit-owner" />
+  );
 }
 
 /** The gutter cell for a new-side line, which opens the comment box when clicked. */
@@ -92,6 +95,26 @@ function clickNewLineGutter(container: HTMLElement, lineNumber: number) {
 describe('PullDiffView review', () => {
   afterEach(() => {
     cleanup();
+    drafts.clearAccount('orbit-owner');
+  });
+
+  it('keeps unsent review text when the pull request is left and reopened', async () => {
+    mockOrbit();
+    const first = renderView();
+    await screen.findByText('new line');
+    clickNewLineGutter(first.container, 1);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment on src/a.ts, new side, line 1' }), {
+      target: { value: 'Half written' }
+    });
+    first.unmount();
+
+    const second = renderView();
+    await screen.findByText('new line');
+    clickNewLineGutter(second.container, 1);
+    expect(
+      (screen.getByRole('textbox', { name: 'Comment on src/a.ts, new side, line 1' }) as HTMLTextAreaElement)
+        .value
+    ).toBe('Half written');
   });
 
   it('shows the pending review recovered from GitHub, with its count and comments', async () => {
@@ -252,6 +275,162 @@ describe('PullDiffView review', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: 'Review summary' }) as HTMLTextAreaElement).value).toBe(
       'Keep me'
+    );
+  });
+});
+
+describe('PullDiffView refresh and in-flight saves', () => {
+  afterEach(() => {
+    cleanup();
+    drafts.clearAccount('orbit-owner');
+  });
+
+  it('makes a comment box read-only while its save is in flight, so typed text is never cleared unsent', async () => {
+    const api = mockOrbit();
+    let finish: (value: unknown) => void = () => undefined;
+    api.pulls.addReviewComment.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never
+    );
+    const { container } = renderView();
+    await screen.findByText('new line');
+    clickNewLineGutter(container, 1);
+    const box = screen.getByRole('textbox', {
+      name: 'Comment on src/a.ts, new side, line 1'
+    }) as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'Nit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+
+    await waitFor(() => expect(box.disabled).toBe(true));
+    finish({ kind: 'saved', comment: { id: 900, path: 'src/a.ts', side: 'RIGHT', line: 1, body: 'Nit' } });
+  });
+
+  it('reloads the changed files on refresh', async () => {
+    const api = mockOrbit({
+      state: review({
+        headSha: 'head-2',
+        pending: { id: 'REV_1', commitSha: 'head-1', comments: [], commentsPartial: false }
+      })
+    });
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => expect(api.pulls.files.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('keeps acknowledgement off when the diff cannot be reloaded after new commits', async () => {
+    const api = mockOrbit({
+      state: review({
+        headSha: 'head-2',
+        pending: { id: 'REV_1', commitSha: 'head-1', comments: [], commentsPartial: false }
+      })
+    });
+    let calls = 0;
+    api.pulls.files.mockImplementation(async () => {
+      calls += 1;
+      if (calls > 1) throw new Error('offline');
+      return { files: [file()], partial: false };
+    });
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByText(/could not be reloaded/)).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Acknowledge new commits' }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+});
+
+describe('PullDiffView round 2 regressions', () => {
+  afterEach(() => {
+    cleanup();
+    drafts.clearAccount('orbit-owner');
+  });
+
+  it('does not close or clear a newer box for the same line when an older save finishes', async () => {
+    const api = mockOrbit();
+    let finish: (value: unknown) => void = () => undefined;
+    api.pulls.addReviewComment.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never
+    );
+    const { container } = renderView();
+    await screen.findByText('new line');
+    clickNewLineGutter(container, 1);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment on src/a.ts, new side, line 1' }), {
+      target: { value: 'Nit' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+    await waitFor(() => expect(api.pulls.addReviewComment).toHaveBeenCalled());
+
+    // Move the composer to another line, return to line 1, and type newer text there.
+    const lineTwo = [...container.querySelectorAll('td.diff-gutter-normal')].filter(
+      (td) => td.textContent?.trim() === '2'
+    );
+    fireEvent.click(lineTwo[lineTwo.length - 1]);
+    clickNewLineGutter(container, 1);
+    const newer = screen.getByRole('textbox', {
+      name: 'Comment on src/a.ts, new side, line 1'
+    }) as HTMLTextAreaElement;
+    fireEvent.change(newer, { target: { value: 'Nit, revised' } });
+
+    finish({ kind: 'saved', comment: { id: 900, path: 'src/a.ts', side: 'RIGHT', line: 1, body: 'Nit' } });
+
+    await waitFor(() => expect(api.pulls.reviewState.mock.calls.length).toBeGreaterThan(1));
+    const still = screen.getByRole('textbox', {
+      name: 'Comment on src/a.ts, new side, line 1'
+    }) as HTMLTextAreaElement;
+    expect(still.value).toBe('Nit, revised');
+  });
+
+  it('disables Cancel while a save is in flight', async () => {
+    const api = mockOrbit();
+    api.pulls.addReviewComment.mockImplementationOnce(() => new Promise(() => undefined) as never);
+    const { container } = renderView();
+    await screen.findByText('new line');
+    clickNewLineGutter(container, 1);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment on src/a.ts, new side, line 1' }), {
+      target: { value: 'Nit' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true)
+    );
+  });
+
+  it('keeps acknowledgement off until the files for the new head have loaded', async () => {
+    const api = mockOrbit({
+      state: review({
+        headSha: 'head-2',
+        pending: { id: 'REV_1', commitSha: 'head-1', comments: [], commentsPartial: false }
+      })
+    });
+    let release: (value: unknown) => void = () => undefined;
+    let calls = 0;
+    api.pulls.files.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) return { files: [file()], partial: false };
+      return new Promise((resolve) => {
+        release = resolve;
+      }) as never;
+    });
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(calls).toBe(2));
+
+    expect(
+      (screen.getByRole('button', { name: 'Acknowledge new commits' }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    release({ files: [file()], partial: false });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Acknowledge new commits' }) as HTMLButtonElement).disabled
+      ).toBe(false)
     );
   });
 });

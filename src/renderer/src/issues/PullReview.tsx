@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { drafts, type DraftKey } from '../comments/draft-store';
 import type { PullReviewState, ReviewCommentResult, ReviewEvent } from '../../../shared/issues';
 
 export const NEW_COMMITS_MESSAGE =
@@ -13,6 +14,7 @@ export function describeAnchor(path: string, side: 'LEFT' | 'RIGHT', line: numbe
 
 /** Text the user writes into a review: a comment on a line, or a reply to a thread. Text is kept on failure. */
 export function ReviewTextBox({
+  draftKey,
   label,
   submitLabel,
   disabled,
@@ -22,38 +24,57 @@ export function ReviewTextBox({
   onCancel,
   failureMessage = COMMENT_ERROR
 }: {
+  /** Where unsent text is kept, so it survives leaving the pull request and is dropped only when sent. */
+  draftKey: DraftKey;
   label: string;
   submitLabel: string;
   disabled: boolean;
   onSubmit: (text: string) => Promise<ReviewCommentResult>;
   onSaved: () => void;
-  /** GitHub's head moved since the review started; the caller reloads the review. */
+  /**
+   * Reloads the review. Called when GitHub's head moved, and when a save finishes after its box was closed.
+   */
   onStale: () => void;
   onCancel?: () => void;
   failureMessage?: string;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => drafts.get(draftKey) ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const blocked = disabled || busy || text.trim() === '';
+  // False once the box is unmounted, so a save that finishes later does not act on a newer box for the same slot.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   async function send() {
     if (blocked) return;
+    const sent = text;
     setBusy(true);
     setError(null);
     try {
-      const result = await onSubmit(text);
+      const result = await onSubmit(sent);
       if (result.kind === 'saved') {
-        setText('');
-        onSaved();
+        // The draft is cleared only while it still holds what was sent; newer text in it is kept.
+        if (drafts.get(draftKey) === sent) drafts.set(draftKey, '');
+        if (alive.current) {
+          setText('');
+          onSaved();
+        } else {
+          onStale();
+        }
       } else {
-        setError(NEW_COMMITS_MESSAGE);
+        if (alive.current) setError(NEW_COMMITS_MESSAGE);
         onStale();
       }
     } catch {
-      setError(failureMessage);
+      if (alive.current) setError(failureMessage);
     } finally {
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
   }
 
@@ -63,8 +84,12 @@ export function ReviewTextBox({
         aria-label={label}
         rows={3}
         value={text}
-        disabled={disabled}
-        onChange={(event) => setText(event.target.value)}
+        // Read-only while a save is in flight, so text typed then is never cleared unsent.
+        disabled={disabled || busy}
+        onChange={(event) => {
+          setText(event.target.value);
+          drafts.set(draftKey, event.target.value);
+        }}
       />
       {error && <p role="alert">{error}</p>}
       <div className="pull-review-actions">
@@ -72,7 +97,7 @@ export function ReviewTextBox({
           {submitLabel}
         </button>
         {onCancel && (
-          <button className="secondary-action" onClick={onCancel}>
+          <button className="secondary-action" disabled={busy} onClick={onCancel}>
             Cancel
           </button>
         )}
@@ -83,12 +108,15 @@ export function ReviewTextBox({
 
 export interface ReviewPanelProps {
   repoFullName: string;
+  signedInLogin: string;
   number: number;
   review: PullReviewState | null;
   reviewError: string | null;
   partialComments: boolean;
   /** True when the pull request's head moved since the user last acknowledged it. */
   newCommits: boolean;
+  /** True while the diff is reloading or could not be reloaded, so the new commits are not yet shown. */
+  acknowledgeDisabled: boolean;
   reviewedHeadSha: string | null;
   onAcknowledge: () => void;
   onRefresh: () => void;
@@ -98,11 +126,13 @@ export interface ReviewPanelProps {
 /** The user's pending review: its comments, the new-commits pause, and finishing the review. */
 export function ReviewPanel({
   repoFullName,
+  signedInLogin,
   number,
   review,
   reviewError,
   partialComments,
   newCommits,
+  acknowledgeDisabled,
   reviewedHeadSha,
   onAcknowledge,
   onRefresh,
@@ -110,7 +140,14 @@ export function ReviewPanel({
 }: ReviewPanelProps) {
   const [finishing, setFinishing] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>('COMMENT');
-  const [summary, setSummary] = useState('');
+  const summaryKey: DraftKey = {
+    login: signedInLogin,
+    repoFullName,
+    kind: 'pull',
+    number,
+    target: { reviewSlot: 'summary' }
+  };
+  const [summary, setSummary] = useState(() => drafts.get(summaryKey) ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,6 +166,7 @@ export function ReviewPanel({
       });
       if (result.kind === 'submitted') {
         setSummary('');
+        drafts.set(summaryKey, '');
         setFinishing(false);
         onSubmitted();
       } else {
@@ -169,7 +207,7 @@ export function ReviewPanel({
           <button className="secondary-action" onClick={onRefresh}>
             Refresh
           </button>{' '}
-          <button className="primary-action" onClick={onAcknowledge}>
+          <button className="primary-action" disabled={acknowledgeDisabled} onClick={onAcknowledge}>
             Acknowledge new commits
           </button>
         </div>
@@ -230,7 +268,11 @@ export function ReviewPanel({
             aria-label="Review summary"
             rows={3}
             value={summary}
-            onChange={(e) => setSummary(e.target.value)}
+            disabled={busy}
+            onChange={(e) => {
+              setSummary(e.target.value);
+              drafts.set(summaryKey, e.target.value);
+            }}
           />
           {error && <p role="alert">{error}</p>}
           <button className="primary-action" disabled={!canSubmit} onClick={() => void submit()}>
