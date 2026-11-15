@@ -1,57 +1,48 @@
-# Orbit
+<p align="center">
+  <img src="./build/icon.png" width="80" height="80" alt="Orbit logo" />
+</p>
 
-A cross-platform desktop client for GitHub issues and pull requests on your personal repos.
-Built with React, Tailwind CSS, DaisyUI, and Electron.
+<h1 align="center">Orbit</h1>
 
-![Orbit logo reference](docs/assets/orbit-logo-reference.png)
+<p align="center">A desktop client for GitHub issues, pull requests, projects, and CI.</p>
 
-Planning happens in this repo's Issues: start from the issue labelled `wayfinder:map`.
+<p align="center">
+  <a href="https://github.com/chetjones003/orbit/releases"><strong>Download</strong></a> ·
+  <a href="https://github.com/chetjones003/orbit/issues">Issues</a> ·
+  <a href="#development">Development</a> ·
+  <a href="./LICENSE">License</a>
+</p>
 
-## Setup
+<p align="center">
+  <img src="./docs/assets/social-preview.png" width="100%" alt="Orbit: issues, pull requests, project boards, and CI graphs in one desktop app" />
+</p>
 
-Requirements:
+Orbit puts your GitHub work in one fast window. Issues and pull requests from every repo you track sit in one list. Open an item full screen, or keep it in a side panel while you work through the next one. Project boards, Gantt charts and CI workflow graphs are built in.
 
-- Node.js **24.11.0** (see `.nvmrc`; `engine-strict` is on, so other versions are refused)
-- npm 11 (ships with Node 24)
+Orbit is built for your own repos. It signs in with GitHub, reads what you can already see, and writes only the changes you make.
 
-```sh
-nvm use            # or install Node 24.11.0 yourself
-npm ci             # installs exactly what package-lock.json pins
-npm run dev        # starts the app with hot reload
-```
+## What you get
 
-Dependencies are pinned to exact versions (`save-exact`): Electron 45, electron-vite 6, Vite 8,
-React 19, Tailwind CSS 4 with daisyUI 5.
+- **Every item in one list.** Issues and pull requests from all your tracked repositories, grouped by repo, with a state filter and refresh.
+- **Side panel that stays out of the way.** One item at a time, floating over the workspace. Drag its edge to resize. A second pick replaces it. Double-click any item for full screen.
+- **Projects.** Board, table, Gantt and calendar views over your GitHub Projects, with drag-and-drop on boards.
+- **CI at a glance.** Workflow runs as a graph: which job failed, what ran in parallel, and how long each step took.
+- **Pull requests you can finish.** Reviews, diffs, merge options and auto-merge without leaving Orbit.
+- **Themes.** Light, dark or follow Windows. Five built-in palettes, your own themes, and themes from [Open VSX](https://open-vsx.org). Orbit reads only colours from a theme's package and never runs it.
+- **Updates you control.** Orbit asks before it downloads a new version, and shows the release notes first.
+- **Open.** GPL-3.0 licensed. Fork it, change it, ship your version.
 
-## Scripts
+## Install
 
-| Script                     | What it does                                                           |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `npm run dev`              | Run the app with electron-vite dev server                              |
-| `npm run build`            | Build main, preload, and renderer into `out/`                          |
-| `npm run typecheck`        | Strict TypeScript for main/preload/shared and renderer                 |
-| `npm run lint`             | ESLint (flat config, typescript-eslint)                                |
-| `npm run format:check`     | Prettier check (`npm run format` to fix)                               |
-| `npm run test:unit`        | Vitest unit tests and React Testing Library component tests            |
-| `npm run test:integration` | Real-Electron launch against the built app (needs `npm run build`)     |
-| `npm run test:e2e`         | Playwright tests (packaged app; set `ORBIT_E2E_EXECUTABLE`)            |
-| `npm run package`          | Build and package with electron-builder for the current OS             |
-| `npm run smoke -- <exe>`   | Smoke-test one packaged executable signed out with an isolated profile |
+### Download
 
-Routine tests do not use real GitHub credentials. The controlled
-fake GitHub server in `tests/fakes/` is the harness for the GitHub-facing slices.
+Grab the installer for your system from the [latest release](https://github.com/chetjones003/orbit/releases/latest):
 
-## Packaging
+- **Windows:** the NSIS installer (x64)
+- **macOS:** the DMG for Apple silicon (arm64) or Intel (x64)
+- **Linux:** the AppImage or the `.deb` (x64)
 
-`electron-builder.yml` defines the targets:
-
-- **Windows:** per-user NSIS installer (x64) and an unpacked app
-- **macOS:** DMG for arm64 and x64
-- **Linux:** AppImage and `.deb` (x64)
-
-Builds are unsigned. Security fuses are flipped on the packaged app by `scripts/after-pack.cjs`.
-They are never relaxed for tests. Icons are generated from `docs/assets/orbit-logo-reference.png`
-by `node scripts/generate-icons.mjs`.
+Sign in with your GitHub account when Orbit opens. Orbit asks only for the access it needs to read and update your repos.
 
 ## First launch of unsigned builds
 
@@ -62,6 +53,31 @@ Orbit v1 is not code-signed or notarized, so each OS asks for confirmation the f
   again. If macOS still refuses, run `xattr -dr com.apple.quarantine /Applications/Orbit.app` once.
 - **Linux (AppImage):** `chmod +x Orbit-*.AppImage`, then run it.
 - **Linux (deb):** `sudo apt install ./Orbit-*-linux-x64.deb`.
+
+## Development
+
+Requirements: Node.js 24.11.0 (see `.nvmrc`; `engine-strict` refuses other versions) and npm 11.
+
+```sh
+nvm use            # or install Node 24.11.0 yourself
+npm ci             # installs exactly what package-lock.json pins
+npm run dev        # starts the app with hot reload
+```
+
+Dependencies are pinned to exact versions. The stack is Electron, electron-vite, React 19, TypeScript and Tailwind CSS with daisyUI.
+
+| Script                           | What it does                                                               |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| `npm run dev`                    | Run the app with the electron-vite dev server                              |
+| `npm run build`                  | Build main, preload and renderer into `out/`                               |
+| `npm run typecheck`              | Strict TypeScript for main, preload, shared and renderer                   |
+| `npm run lint`                   | ESLint (flat config, typescript-eslint)                                    |
+| `npm run format:check`           | Prettier check                                                             |
+| `npm run test:unit`              | Unit tests (Vitest, jsdom for the renderer)                                |
+| `npm run fake-app -- --cdp 9333` | Run the app against the controlled fake GitHub, with DevTools on port 9333 |
+| `npm run icons`                  | Regenerate `build/icon.png` from `build/icon.svg`                          |
+
+Routine tests do not use real GitHub credentials. The fake GitHub server in `tests/fakes/` is the harness for the GitHub-facing code.
 
 ## CI
 
@@ -96,3 +112,11 @@ or tray). Updates are never offered for prereleases or older versions.
   administrator credentials.
 - **macOS:** the DMG for your CPU architecture is downloaded, checked against its sha512, and opened.
   Drag Orbit into Applications to finish.
+
+## Contributing
+
+Open an issue before a large change so we can agree on the approach. Small, focused fixes are the easiest to review. Run `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm run test:unit` before you open a pull request.
+
+## License
+
+Orbit is free software under the [GNU General Public License v3.0](./LICENSE). You may use, study, change and share it. Anything you distribute must also be GPL-3.0, with its source.
