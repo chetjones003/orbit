@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Parallel test runs can slow the first render; allow more time than the 1s default before failing.
 configure({ asyncUtilTimeout: 3000 });
 
+vi.mock('../../../src/renderer/src/comments/CodeEditor', async () => {
+  const { FakeCodeEditor } = await import('./fakes/fake-code-editor');
+  return { CodeEditor: FakeCodeEditor };
+});
+
 import { App } from '../../../src/renderer/src/App';
 import type { AuthStatus } from '../../../src/shared/auth';
 import type { OrbitApi } from '../../../src/shared/ipc';
@@ -401,6 +406,8 @@ describe('issues in the workspace', () => {
       title: 'Crash on save',
       state: 'open' as const,
       stateReason: null,
+      assignees: [],
+      milestone: null,
       authorLogin: 'someone',
       labels: [],
       commentCount: 0,
@@ -430,6 +437,67 @@ describe('issues in the workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
     expect(await screen.findByRole('button', { name: '← Back to issues' })).toBeInTheDocument();
+  });
+
+  it('creates an issue from the repo issue list and opens the new issue', async () => {
+    const repo: PersonalRepo = {
+      id: 1,
+      name: 'app',
+      fullName: 'chetjones003/app',
+      description: null,
+      isPrivate: false,
+      isFork: false,
+      isArchived: false,
+      defaultBranch: 'main',
+      updatedAt: '2026-01-01T00:00:00Z',
+      htmlUrl: 'https://github.com/chetjones003/app'
+    };
+    const created = {
+      id: 220,
+      number: 12,
+      title: 'Fresh bug',
+      state: 'open' as const,
+      stateReason: null,
+      assignees: [],
+      milestone: null,
+      authorLogin: 'chetjones003',
+      labels: [],
+      commentCount: 0,
+      createdAt: '2026-01-04T00:00:00Z',
+      updatedAt: '2026-01-04T00:00:00Z',
+      htmlUrl: 'https://github.com/chetjones003/app/issues/12'
+    };
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true },
+      repos: [repo]
+    });
+    api.issues.list = vi.fn(async () => ({ items: [], page: 1, hasNextPage: false, partial: false }));
+    api.issues.create = vi.fn(async () => ({
+      summary: created,
+      body: 'Details',
+      bodyHtml: '<p>Details</p>'
+    }));
+    api.issues.detail = vi.fn(async () => ({
+      summary: created,
+      body: 'Details',
+      bodyHtml: '<p>Details</p>',
+      comments: [],
+      commentsPartial: false
+    }));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chetjones003/app' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View issues' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New issue' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'Fresh bug' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), { target: { value: 'Details' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create issue' }));
+
+    await waitFor(() => expect(api.issues.detail).toHaveBeenCalledWith('chetjones003/app', 12));
+    expect(api.issues.create).toHaveBeenCalledWith('chetjones003/app', {
+      title: 'Fresh bug',
+      body: 'Details'
+    });
   });
 });
 

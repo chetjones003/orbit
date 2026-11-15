@@ -1,16 +1,25 @@
-import { COMMENT_MAX_CHARS } from '../../shared/issues';
+import { COMMENT_MAX_CHARS, ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS } from '../../shared/issues';
 import type {
   CommentUpdateResult,
+  IssueCloseReason,
   IssueComment,
+  IssueContentInput,
   IssueDetail,
+  IssueEditResult,
+  IssueFieldsInput,
   IssueLabel,
   IssueListPage,
   IssueListQuery,
+  IssueMilestone,
+  IssueRepoOptions,
+  IssueSnapshot,
   IssueStateFilter,
-  IssueSummary
+  IssueSummary,
+  TaskToggleResult
 } from '../../shared/issues';
 import type { AuthService } from './auth-service';
 import { GitHubClient, GitHubRequestError } from './github-client';
+import { setTaskItemChecked } from './task-list';
 import { runWrite, WriteBlockedError } from './write-reconcile';
 
 /** Page size requested from GitHub. A full page means another page may exist. */
@@ -32,10 +41,13 @@ interface GitHubIssueResponse {
   state_reason?: string | null;
   user: { login: string } | null;
   labels: Array<{ name: string; color: string } | string>;
+  assignees?: Array<{ login: string } | null>;
+  milestone?: { number: number; title: string } | null;
   comments: number;
   created_at: string;
   updated_at: string;
   html_url: string;
+  body?: string | null;
   body_html?: string | null;
   pull_request?: unknown;
 }
@@ -191,6 +203,227 @@ export class IssueService {
     });
   }
 
+  /**
+   * Opens a new issue in one of the signed-in user's repos. An uncertain failure is reconciled by looking
+   * for the issue this request would have created, so it is never created twice.
+   */
+  async createIssue(repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    const content = validateIssueContent(input);
+    const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`;
+    const startedAt = Date.now();
+    const { token, scope } = await this.session();
+    const login = this.signedInLogin();
+
+    return runWrite<IssueSnapshot>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toSnapshotOrThrow(
+          await this.client.send<unknown>('POST', path, {
+            token,
+            scope,
+            body: content,
+            accept: HTML_ACCEPT
+          })
+        ),
+      reconcile: async () => {
+        const since = new Date(startedAt - RECONCILE_SKEW_MS).toISOString();
+        const recent = await this.client.get<unknown>(
+          `${path}?creator=${encodeURIComponent(login)}&state=all&sort=created&direction=desc&since=${since}&per_page=${ISSUES_PER_PAGE}`,
+          { token, scope, accept: HTML_ACCEPT }
+        );
+        const match = (Array.isArray(recent) ? (recent as unknown[]) : [])
+          .map(toSnapshot)
+          .find(
+            (s): s is IssueSnapshot =>
+              s !== null && s.summary.title === content.title && s.body === content.body
+          );
+        return match ? { applied: true, value: match } : { applied: false };
+      }
+    });
+  }
+
+  /**
+   * Edits the title and body of one of the signed-in user's issues. `baseUpdatedAt` is the version the
+   * user started from; a newer one on GitHub is returned as a conflict and nothing is written.
+   */
+  async updateIssue(
+    repoFullName: string,
+    number: number,
+    input: IssueContentInput,
+    baseUpdatedAt: string
+  ): Promise<IssueEditResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const content = validateIssueContent(input);
+    this.assertCanWrite();
+    const path = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+    const current = await this.readIssueSnapshot(path, token, scope);
+    if (current.summary.updatedAt !== baseUpdatedAt) return { kind: 'conflict', current };
+
+    const saved = await runWrite<IssueSnapshot>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toSnapshotOrThrow(
+          await this.client.send<unknown>('PATCH', path, { token, scope, body: content, accept: HTML_ACCEPT })
+        ),
+      reconcile: async () => {
+        const now = await this.readIssueSnapshot(path, token, scope);
+        return now.summary.title === content.title && now.body === content.body
+          ? { applied: true, value: now }
+          : { applied: false };
+      }
+    });
+    return { kind: 'saved', issue: saved };
+  }
+
+  /** Replaces an issue's labels, assignees, and milestone with the given choices. Returns GitHub's reconciled summary. */
+  async updateIssueFields(
+    repoFullName: string,
+    number: number,
+    fields: IssueFieldsInput
+  ): Promise<IssueSummary> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const input = validateFields(fields);
+    this.assertCanWrite();
+    const path = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+
+    return runWrite<IssueSummary>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toSummary(
+          await this.client.send<unknown>('PATCH', path, {
+            token,
+            scope,
+            body: {
+              labels: input.labels,
+              assignees: input.assignees,
+              milestone: input.milestoneNumber
+            }
+          })
+        ) ?? throwInvalid('GitHub returned an invalid issue.'),
+      reconcile: async () => {
+        const now = (await this.readIssueSnapshot(path, token, scope)).summary;
+        const sameLabels = sameMembers(
+          now.labels.map((l) => l.name),
+          input.labels
+        );
+        const sameAssignees = sameMembers(now.assignees, input.assignees);
+        const sameMilestone = (now.milestone?.number ?? null) === input.milestoneNumber;
+        return sameLabels && sameAssignees && sameMilestone
+          ? { applied: true, value: now }
+          : { applied: false };
+      }
+    });
+  }
+
+  /** Closes an issue as completed or not planned, or reopens it. */
+  async setIssueState(
+    repoFullName: string,
+    number: number,
+    state: 'open' | 'closed',
+    reason?: IssueCloseReason
+  ): Promise<IssueSummary> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    if (state !== 'open' && state !== 'closed') throw new Error('An issue can only be open or closed.');
+    const stateReason = state === 'closed' ? (reason ?? 'completed') : null;
+    if (stateReason !== null && stateReason !== 'completed' && stateReason !== 'not_planned') {
+      throw new Error('Close an issue as completed or not planned.');
+    }
+    this.assertCanWrite();
+    const path = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+    const body = stateReason === null ? { state } : { state, state_reason: stateReason };
+
+    return runWrite<IssueSummary>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toSummary(await this.client.send<unknown>('PATCH', path, { token, scope, body })) ??
+        throwInvalid('GitHub returned an invalid issue.'),
+      reconcile: async () => {
+        const now = (await this.readIssueSnapshot(path, token, scope)).summary;
+        return now.state === state && (stateReason === null || now.stateReason === stateReason)
+          ? { applied: true, value: now }
+          : { applied: false };
+      }
+    });
+  }
+
+  /** The labels, assignees, and open milestones the repo offers. The first page of each. */
+  async getRepoOptions(repoFullName: string): Promise<IssueRepoOptions> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    const { token, scope } = await this.session();
+    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const [labels, assignees, milestones] = await Promise.all([
+      this.client.get<unknown>(`${base}/labels?per_page=${COMMENTS_PER_PAGE}`, { token, scope }),
+      this.client.get<unknown>(`${base}/assignees?per_page=${COMMENTS_PER_PAGE}`, { token, scope }),
+      this.client.get<unknown>(`${base}/milestones?state=open&per_page=${COMMENTS_PER_PAGE}`, {
+        token,
+        scope
+      })
+    ]);
+    if (!Array.isArray(labels) || !Array.isArray(assignees) || !Array.isArray(milestones)) {
+      throw new Error('GitHub returned invalid repo options.');
+    }
+    return {
+      labels: (labels as unknown[]).flatMap(toLabel),
+      assignees: (assignees as unknown[]).flatMap((raw) => {
+        const login = (raw as { login?: unknown } | null)?.login;
+        return typeof login === 'string' ? [login] : [];
+      }),
+      milestones: (milestones as unknown[]).flatMap(toMilestone)
+    };
+  }
+
+  /**
+   * Ticks or unticks one task checkbox in an issue body. The checkbox is changed only if the body on GitHub
+   * is still `expectedBody`, the text the user saw. Otherwise nothing is written and the current body is returned.
+   */
+  async setTaskItem(
+    repoFullName: string,
+    number: number,
+    input: { index: number; checked: boolean; expectedBody: string }
+  ): Promise<TaskToggleResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    if (!Number.isInteger(input.index) || input.index < 0) throw new Error('Task items are numbered from 0.');
+    this.assertCanWrite();
+    const path = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+    const current = await this.readIssueSnapshot(path, token, scope);
+    if (current.body !== input.expectedBody) return { kind: 'stale', current };
+
+    const nextBody = setTaskItemChecked(current.body, input.index, input.checked);
+    if (nextBody === current.body) return { kind: 'saved', issue: current };
+    const saved = await runWrite<IssueSnapshot>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toSnapshotOrThrow(
+          await this.client.send<unknown>('PATCH', path, {
+            token,
+            scope,
+            body: { body: nextBody },
+            accept: HTML_ACCEPT
+          })
+        ),
+      reconcile: async () => {
+        const now = await this.readIssueSnapshot(path, token, scope);
+        return now.body === nextBody ? { applied: true, value: now } : { applied: false };
+      }
+    });
+    return { kind: 'saved', issue: saved };
+  }
+
+  /** Reads one issue with its raw body, the version writes are checked against. */
+  private async readIssueSnapshot(path: string, token: string, scope: string): Promise<IssueSnapshot> {
+    const raw = await this.client.get<unknown>(path, { token, scope, accept: HTML_ACCEPT });
+    return toSnapshotOrThrow(raw);
+  }
+
   async listIssues(query: IssueListQuery): Promise<IssueListPage> {
     const { owner, repo } = this.validateRepo(query.repoFullName);
     const state = validateState(query.state);
@@ -233,7 +466,7 @@ export class IssueService {
     if (!summary) throw new Error('GitHub returned an invalid issue.');
     const bodyHtml = (issueBody as GitHubIssueResponse).body_html ?? '';
     const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
-    return { summary, bodyHtml, comments, commentsPartial };
+    return { summary, body: rawBody(issueBody), bodyHtml, comments, commentsPartial };
   }
 
   /** A pull request conversation, read with the same shape as an issue. */
@@ -253,7 +486,7 @@ export class IssueService {
     if (!summary) throw new Error('GitHub returned an invalid pull request.');
     const bodyHtml = (pullBody as GitHubIssueResponse).body_html ?? '';
     const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
-    return { summary, bodyHtml, comments, commentsPartial };
+    return { summary, body: rawBody(pullBody), bodyHtml, comments, commentsPartial };
   }
 
   /**
@@ -396,6 +629,8 @@ function toSummary(raw: unknown): IssueSummary | null {
     stateReason: item.state_reason ?? null,
     authorLogin: item.user?.login ?? 'ghost',
     labels: item.labels.flatMap(toLabel),
+    assignees: (item.assignees ?? []).flatMap((a) => (typeof a?.login === 'string' ? [a.login] : [])),
+    milestone: toMilestone(item.milestone ?? null)[0] ?? null,
     commentCount: item.comments,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
@@ -459,6 +694,73 @@ function commentPath(owner: string, repo: string, commentId: number): string {
 
 function throwInvalid(message: string): never {
   throw new Error(message);
+}
+
+/** An issue's summary plus its raw body and rendered body, as GitHub returns it with the HTML media type. */
+function toSnapshot(raw: unknown): IssueSnapshot | null {
+  const summary = toSummary(raw);
+  if (!summary) return null;
+  return { summary, body: rawBody(raw), bodyHtml: (raw as GitHubIssueResponse).body_html ?? '' };
+}
+
+function toSnapshotOrThrow(raw: unknown): IssueSnapshot {
+  return toSnapshot(raw) ?? throwInvalid('GitHub returned an invalid issue.');
+}
+
+function rawBody(raw: unknown): string {
+  return (raw as GitHubIssueResponse | null)?.body ?? '';
+}
+
+function toMilestone(raw: unknown): IssueMilestone[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const milestone = raw as { number?: unknown; title?: unknown };
+  if (typeof milestone.number !== 'number' || typeof milestone.title !== 'string') return [];
+  return [{ number: milestone.number, title: milestone.title }];
+}
+
+/** GitHub's limit for a label name. */
+const LABEL_NAME_MAX_CHARS = 50;
+
+function validateIssueContent(input: unknown): { title: string; body: string } {
+  const { title, body } = (input ?? {}) as Partial<IssueContentInput>;
+  if (typeof title !== 'string' || title.trim() === '') throw new Error('An issue needs a title.');
+  if ([...title.trim()].length > ISSUE_TITLE_MAX_CHARS) {
+    throw new Error(`Titles can be at most ${ISSUE_TITLE_MAX_CHARS} characters.`);
+  }
+  if (typeof body !== 'string') throw new Error('The issue body must be text.');
+  if ([...body].length > ISSUE_BODY_MAX_CHARS) {
+    throw new Error(
+      `Issue descriptions can be at most ${ISSUE_BODY_MAX_CHARS.toLocaleString('en-US')} characters.`
+    );
+  }
+  return { title: title.trim(), body };
+}
+
+function validateFields(input: unknown): IssueFieldsInput {
+  const { labels, assignees, milestoneNumber } = (input ?? {}) as Partial<IssueFieldsInput>;
+  if (
+    !Array.isArray(labels) ||
+    !labels.every((l) => typeof l === 'string' && l !== '' && l.length <= LABEL_NAME_MAX_CHARS)
+  ) {
+    throw new Error('Labels must be names of up to 50 characters.');
+  }
+  if (!Array.isArray(assignees) || !assignees.every((a) => typeof a === 'string' && OWNER_PATTERN.test(a))) {
+    throw new Error('Assignees must be GitHub logins.');
+  }
+  if (
+    milestoneNumber !== null &&
+    (typeof milestoneNumber !== 'number' || !Number.isInteger(milestoneNumber) || milestoneNumber < 1)
+  ) {
+    throw new Error('A milestone must be a positive whole number, or none.');
+  }
+  return { labels, assignees, milestoneNumber };
+}
+
+/** True when both lists hold the same names, ignoring order. */
+function sameMembers(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((x) => right.has(x));
 }
 
 function toLabel(raw: unknown): IssueLabel[] {

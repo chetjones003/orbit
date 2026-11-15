@@ -7,8 +7,8 @@ export interface DraftKey {
   repoFullName: string;
   kind: 'issue' | 'pull';
   number: number;
-  /** A new comment, or an edit of one existing comment. */
-  target: 'new' | { commentId: number };
+  /** A new comment, an edit of one comment, the description of an issue, or a new issue. */
+  target: 'new' | 'issue-body' | 'new-issue' | { commentId: number };
 }
 
 /** Unsent comment text, held for the length of the session. */
@@ -39,7 +39,7 @@ export class DraftStore {
 }
 
 function encode(key: DraftKey): string {
-  const target = key.target === 'new' ? 'new' : `comment:${key.target.commentId}`;
+  const target = typeof key.target === 'string' ? key.target : `comment:${key.target.commentId}`;
   return [key.login, key.repoFullName, key.kind, key.number, target].join('\u0000');
 }
 

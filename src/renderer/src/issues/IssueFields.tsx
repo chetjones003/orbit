@@ -1,0 +1,133 @@
+import { useEffect, useState } from 'react';
+import type { IssueLabel, IssueRepoOptions, IssueSummary } from '../../../shared/issues';
+
+export interface IssueFieldsProps {
+  repoFullName: string;
+  number: number;
+  summary: IssueSummary;
+  /** Shows the change at once, then GitHub's version once it is saved, or the previous one if it is refused. */
+  onChange: (summary: IssueSummary) => void;
+  onError: (message: string) => void;
+}
+
+/**
+ * Labels, assignees, and milestone of one issue. A change shows at once; it is reversed if GitHub refuses it,
+ * and GitHub's reconciled summary replaces the optimistic one when it is accepted.
+ */
+export function IssueFields({ repoFullName, number, summary, onChange, onError }: IssueFieldsProps) {
+  const [options, setOptions] = useState<IssueRepoOptions | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Wrapped so a synchronous failure is handled the same way as a rejected request.
+    Promise.resolve()
+      .then(() => window.orbit.issues.repoOptions(repoFullName))
+      .then(
+        (next) => {
+          if (!cancelled) setOptions(next);
+        },
+        () => {
+          if (!cancelled) setLoadFailed(true);
+        }
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [repoFullName]);
+
+  const send = (optimistic: IssueSummary): void => {
+    const previous = summary;
+    onChange(optimistic);
+    window.orbit.issues
+      .updateFields(repoFullName, number, {
+        labels: optimistic.labels.map((label) => label.name),
+        assignees: optimistic.assignees,
+        milestoneNumber: optimistic.milestone?.number ?? null
+      })
+      .then(
+        (saved) => onChange(saved),
+        () => {
+          onChange(previous);
+          onError('Could not save that change. It has been undone.');
+        }
+      );
+  };
+
+  const toggleLabel = (label: IssueLabel): void => {
+    const on = summary.labels.some((l) => l.name === label.name);
+    send({
+      ...summary,
+      labels: on ? summary.labels.filter((l) => l.name !== label.name) : [...summary.labels, label]
+    });
+  };
+
+  const toggleAssignee = (login: string): void => {
+    const on = summary.assignees.includes(login);
+    send({
+      ...summary,
+      assignees: on ? summary.assignees.filter((a) => a !== login) : [...summary.assignees, login]
+    });
+  };
+
+  const chooseMilestone = (value: string): void => {
+    const number = value === '' ? null : Number(value);
+    const milestone = number === null ? null : (options?.milestones.find((m) => m.number === number) ?? null);
+    send({ ...summary, milestone });
+  };
+
+  return (
+    <section className="issue-fields" aria-label="Issue fields">
+      {loadFailed && (
+        <p className="session-notice" role="status">
+          Could not load the labels, assignees, and milestones for this repo.
+        </p>
+      )}
+      {options && (
+        <>
+          <fieldset>
+            <legend>Labels</legend>
+            {options.labels.map((label) => (
+              <label className="check-option" key={label.name}>
+                <input
+                  type="checkbox"
+                  checked={summary.labels.some((l) => l.name === label.name)}
+                  onChange={() => toggleLabel(label)}
+                />
+                <span>{label.name}</span>
+              </label>
+            ))}
+          </fieldset>
+          <fieldset>
+            <legend>Assignees</legend>
+            {options.assignees.map((login) => (
+              <label className="check-option" key={login}>
+                <input
+                  type="checkbox"
+                  checked={summary.assignees.includes(login)}
+                  onChange={() => toggleAssignee(login)}
+                />
+                <span>{login}</span>
+              </label>
+            ))}
+          </fieldset>
+          <label className="field">
+            <span>Milestone</span>
+            <select
+              aria-label="Milestone"
+              value={summary.milestone ? String(summary.milestone.number) : ''}
+              onChange={(event) => chooseMilestone(event.target.value)}
+            >
+              <option value="">No milestone</option>
+              {options.milestones.map((milestone) => (
+                <option key={milestone.number} value={String(milestone.number)}>
+                  {milestone.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+    </section>
+  );
+}

@@ -11,6 +11,8 @@ function issue(number: number): IssueSummary {
     title: `Issue title ${number}`,
     state: 'open',
     stateReason: null,
+    assignees: [],
+    milestone: null,
     authorLogin: 'someone',
     labels: [{ name: 'bug', color: 'd73a4a' }],
     commentCount: 1,

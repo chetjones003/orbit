@@ -13,6 +13,7 @@ import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
 import { IssueList } from './issues/IssueList';
+import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
 import { drafts } from './comments/draft-store';
 
@@ -40,6 +41,8 @@ export function App() {
   const [issuesRepo, setIssuesRepo] = useState<PersonalRepo | null>(null);
   const [issueRef, setIssueRef] = useState<IssueRef | null>(null);
   const [issueExpanded, setIssueExpanded] = useState(false);
+  /** Whether the new-issue form replaces the issue list for the open repo. */
+  const [creatingIssue, setCreatingIssue] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
@@ -422,6 +425,7 @@ export function App() {
                 onClick={() => {
                   setIssuesRepo(null);
                   setIssueRef(null);
+                  setCreatingIssue(false);
                 }}
               >
                 ← Repositories
@@ -430,15 +434,32 @@ export function App() {
                 <h2>{issuesRepo.fullName}</h2>
                 <p>Issues in this personal repo</p>
               </div>
+              {!creatingIssue && (
+                <button className="secondary-action" onClick={() => setCreatingIssue(true)}>
+                  New issue
+                </button>
+              )}
             </div>
-            <IssueList
-              key={issuesRepo.fullName}
-              repoFullName={issuesRepo.fullName}
-              selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
-              onOpenIssue={(number) =>
-                setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
-              }
-            />
+            {creatingIssue ? (
+              <NewIssueForm
+                repoFullName={issuesRepo.fullName}
+                signedInLogin={status.login}
+                onCreated={(number) => {
+                  setCreatingIssue(false);
+                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
+                }}
+                onCancel={() => setCreatingIssue(false)}
+              />
+            ) : (
+              <IssueList
+                key={issuesRepo.fullName}
+                repoFullName={issuesRepo.fullName}
+                selectedNumber={issueRef?.repoFullName === issuesRepo.fullName ? issueRef.number : null}
+                onOpenIssue={(number) =>
+                  setIssueRef({ repoFullName: issuesRepo.fullName, number, kind: 'issue' })
+                }
+              />
+            )}
           </div>
         ) : (
           <>
