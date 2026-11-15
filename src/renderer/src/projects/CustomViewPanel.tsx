@@ -18,6 +18,7 @@ export interface CustomViewPanelProps {
     field: ProjectField,
     value: ProjectFieldInput | null
   ) => Promise<ProjectItem | null>;
+  onReorder: (item: ProjectItem, afterId: string | null) => Promise<unknown>;
   onRemove: (item: ProjectItem) => void;
   onOpen: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
 }
@@ -34,6 +35,7 @@ export function CustomViewPanel({
   onChange,
   onDelete,
   onEdit,
+  onReorder,
   onRemove,
   onOpen
 }: CustomViewPanelProps) {
@@ -51,7 +53,7 @@ export function CustomViewPanel({
       </details>
       {needsColumn && (
         <p className="project-note">
-          Choose a column field to show this board. Each of its values becomes a column.
+          Choose a column field to show this Kanban. Each of its values becomes a column.
         </p>
       )}
       {view.layout === 'kanban' && column && (
@@ -62,6 +64,9 @@ export function CustomViewPanel({
           laneGroups={swimlane ? groupItems(shown, swimlane) : null}
           pendingIds={pendingIds}
           onEdit={onEdit}
+          order={shown}
+          manualOrder={view.sort === null}
+          onReorder={onReorder}
           onOpen={onOpen}
         />
       )}

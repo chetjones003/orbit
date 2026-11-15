@@ -160,6 +160,85 @@ describe('KanbanView', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
+  it('moves a card after the card above it in an unsorted column, through GitHub’s manual order', async () => {
+    const onReorder = vi.fn(async () => true);
+    const items = [
+      item('a', 'First', { FLD_status: at('todo', 'Todo') }),
+      item('b', 'Second', { FLD_status: at('todo', 'Todo') }),
+      item('c', 'Third', { FLD_status: at('todo', 'Todo') })
+    ];
+    render(
+      <KanbanView
+        columnField={STATUS}
+        swimlaneField={null}
+        groups={groupItems(items, STATUS) ?? []}
+        laneGroups={null}
+        order={items}
+        manualOrder
+        pendingIds={new Set()}
+        onEdit={vi.fn()}
+        onReorder={onReorder}
+        onOpen={vi.fn()}
+      />
+    );
+    dragCard(screen.getByText('Third'));
+    fireEvent.dragOver(screen.getByText('Second'));
+    fireEvent.drop(screen.getByText('Second'));
+    await vi.waitFor(() => expect(onReorder).toHaveBeenCalledTimes(1));
+    expect(onReorder).toHaveBeenCalledWith(items[2], 'a');
+  });
+
+  it('moves a card to the top when it is dropped on the first card', async () => {
+    const onReorder = vi.fn(async () => true);
+    const items = [
+      item('a', 'First', { FLD_status: at('todo', 'Todo') }),
+      item('b', 'Second', { FLD_status: at('todo', 'Todo') })
+    ];
+    render(
+      <KanbanView
+        columnField={STATUS}
+        swimlaneField={null}
+        groups={groupItems(items, STATUS) ?? []}
+        laneGroups={null}
+        order={items}
+        manualOrder
+        pendingIds={new Set()}
+        onEdit={vi.fn()}
+        onReorder={onReorder}
+        onOpen={vi.fn()}
+      />
+    );
+    dragCard(screen.getByText('Second'));
+    fireEvent.drop(screen.getByText('First'));
+    await vi.waitFor(() => expect(onReorder).toHaveBeenCalledTimes(1));
+    expect(onReorder).toHaveBeenCalledWith(items[1], null);
+  });
+
+  it('does not reorder a sorted view when a card is dropped on another card', () => {
+    const onReorder = vi.fn();
+    const items = [
+      item('a', 'First', { FLD_status: at('todo', 'Todo') }),
+      item('b', 'Second', { FLD_status: at('todo', 'Todo') })
+    ];
+    render(
+      <KanbanView
+        columnField={STATUS}
+        swimlaneField={null}
+        groups={groupItems(items, STATUS) ?? []}
+        laneGroups={null}
+        order={items}
+        manualOrder={false}
+        pendingIds={new Set()}
+        onEdit={vi.fn()}
+        onReorder={onReorder}
+        onOpen={vi.fn()}
+      />
+    );
+    dragCard(screen.getByText('Second'));
+    fireEvent.drop(screen.getByText('First'));
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
   it('writes the swimlane field after the column when a card changes both', async () => {
     const onEdit = vi.fn(async (changed: ProjectItem) => changed);
     const items = [item('a', 'Write docs', { FLD_status: at('todo', 'Todo'), FLD_prio: at('p0', 'P0') })];

@@ -29,7 +29,7 @@ _Avoid_: Card (a card is how a board shows an item), row (a row is how a table s
 **Project field**: A custom field of a Project whose value an item can set: single-select, iteration, text, number, or date. Built-in fields such as Title, Labels, and Milestone are read-only and are not offered for editing.
 _Avoid_: Column (a column is one option of a board's grouping field), property
 
-**Custom view**: An Orbit-defined way to show one Project's items: Kanban, Gantt, Calendar, or Table. It exists only in Orbit, not on GitHub.
+**Custom view**: An Orbit-defined way to show one Project's items as a Kanban or a Table. Gantt and Calendar are planned but not built yet. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view
 
 **Custom view definition**: The settings of one custom view (its name, layout, filters, sort, and field mapping), saved locally. A definition never holds item data.
@@ -53,7 +53,7 @@ _Avoid_: Auto-fix, migration
 **Swimlane**: A row band on a custom Kanban view, one for each value of its swimlane field.
 _Avoid_: Row (a row is one item in a table)
 
-**Manual order**: The item order GitHub stores for the project, shared by every view. A custom view shows it only when the view has no sort.
+**Manual order**: The item order GitHub stores for the project, shared by every view. A custom Kanban view shows it only when the view has no sort, and dropping a card on another card in the same column moves it in that order on GitHub.
 _Avoid_: Position (the stored value), custom order
 
 **No value group**: The group in a custom Kanban or grouped Table view for items without a value in the field used to group them.

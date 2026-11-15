@@ -131,6 +131,7 @@ export interface IpcOptions {
     | 'getItemMemberships'
     | 'addItem'
     | 'removeItem'
+    | 'moveItem'
     | 'setFieldValue'
   >;
 }
@@ -640,6 +641,14 @@ function registerProjectHandlers(
     (event, projectId: unknown, itemId: unknown): Promise<void> => {
       assertTrustedSender(event, devServerOrigin);
       return projects.removeItem(String(projectId), String(itemId));
+    }
+  );
+  ipcMain.handle(
+    IpcChannels.projectsMoveItem,
+    (event, projectId: unknown, itemId: unknown, afterId: unknown): Promise<void> => {
+      assertTrustedSender(event, devServerOrigin);
+      const after = afterId === null ? null : String(afterId);
+      return projects.moveItem(String(projectId), String(itemId), after);
     }
   );
   ipcMain.handle(

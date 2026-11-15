@@ -182,9 +182,9 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         />
       )}
 
-      {repairs.map((repair) => (
+      {repairs.map((repair, index) => (
         <RepairNote
-          key={`${repair.slot}-${repair.fieldId}`}
+          key={`${index}-${repair.slot}-${repair.fieldId}`}
           repair={repair}
           groupable={groupable}
           current={view}

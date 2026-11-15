@@ -238,6 +238,21 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     setViewId(null);
   };
 
+  /** Moves an item after another in GitHub's manual order, then reloads so the view shows GitHub's order. */
+  const reorderItem = async (item: ProjectItem, afterId: string | null) => {
+    if (!projectId || pendingRef.current.has(item.id)) return;
+    setMessage(null);
+    setPending(item.id, true);
+    try {
+      await window.orbit.projects.moveItem(projectId, item.id, afterId);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setMessage(messageOf(error, 'The item could not be moved.'));
+    } finally {
+      setPending(item.id, false);
+    }
+  };
+
   const deleteCustomView = (id: string) => {
     saveCustomViews(customViews.filter((v) => v.id !== id));
     setCustomId(null);
@@ -345,6 +360,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                   onChange={(next) => saveCustomViews(customViews.map((v) => (v.id === next.id ? next : v)))}
                   onDelete={() => deleteCustomView(customView.id)}
                   onEdit={editField}
+                  onReorder={reorderItem}
                   onRemove={(item) => void removeItem(item)}
                   onOpen={onOpenItem}
                 />

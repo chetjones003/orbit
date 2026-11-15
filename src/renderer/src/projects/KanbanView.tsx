@@ -22,10 +22,17 @@ export interface KanbanViewProps {
     field: ProjectField,
     value: ProjectFieldInput | null
   ) => Promise<ProjectItem | null>;
+  /** Every item the view shows, in GitHub's manual order when the view is unsorted. */
+  order: ProjectItem[];
+  /** True when the view has no sort, so dropping a card on a card reorders it on GitHub. */
+  manualOrder: boolean;
+  /** Places an item after another item in the manual order, or at the top when `afterId` is null. */
+  onReorder: (item: ProjectItem, afterId: string | null) => Promise<unknown>;
   onOpen: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
 }
 
-const ALL_LANE = 'ALL';
+/** The one row used when there are no swimlanes. */
+const NO_LANE: ItemGroup = { key: 'ALL', label: '', target: null, items: [] };
 
 /**
  * Columns from one field and optional swimlanes from another. Dropping a card writes the field values
@@ -38,11 +45,14 @@ export function KanbanView({
   laneGroups,
   pendingIds,
   onEdit,
+  order,
+  manualOrder,
+  onReorder,
   onOpen
 }: KanbanViewProps) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const lanes: ItemGroup[] = laneGroups ?? [{ key: ALL_LANE, label: '', target: null, items: [] }];
+  const lanes: ItemGroup[] = laneGroups ?? [NO_LANE];
   const itemsById = new Map<string, ProjectItem>();
   for (const group of [...groups, ...lanes]) for (const item of group.items) itemsById.set(item.id, item);
   const columnOf = groupOfItem(groups);
@@ -63,6 +73,31 @@ export function KanbanView({
     if (swimlaneField && laneOf && laneOf.get(item.id) !== lane.key) {
       await onEdit(current, swimlaneField, lane.target);
     }
+  };
+
+  /**
+   * A card dropped on a card in the same cell of an unsorted view moves to just before it, which GitHub
+   * stores as the item after the one above it. Anywhere else the drop is a normal cell drop.
+   */
+  const dropOnCard = async (target: ProjectItem, column: ItemGroup, lane: ItemGroup) => {
+    const id = dragging;
+    const dragged = id ? itemsById.get(id) : undefined;
+    const sameCell =
+      dragged !== undefined &&
+      columnOf.get(dragged.id) === column.key &&
+      (!laneOf || laneOf.get(dragged.id) === lane.key);
+    if (!manualOrder || !sameCell || !dragged || dragged.id === target.id) {
+      await drop(column, lane);
+      return;
+    }
+    setDropTarget(null);
+    setDragging(null);
+    if (pendingIds.has(dragged.id)) return;
+    const index = order.findIndex((item) => item.id === target.id);
+    const above = index > 0 ? order[index - 1] : undefined;
+    // Already directly above the target: nothing to change.
+    if (above?.id === dragged.id) return;
+    await onReorder(dragged, above?.id ?? null);
   };
 
   const cell = (lane: ItemGroup, column: ItemGroup) => {
@@ -102,6 +137,18 @@ export function KanbanView({
                 setDragging(item.id);
               }}
               onDragEnd={() => setDragging(null)}
+              onDragOver={(event) => {
+                if (!dragging) return;
+                // The card takes the drop, so the cell does not also see it.
+                event.preventDefault();
+                event.stopPropagation();
+                setDropTarget(key);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void dropOnCard(item, column, lane);
+              }}
             >
               <p className="project-card-title">
                 {kind && item.repoFullName && item.number !== null ? (
@@ -129,7 +176,7 @@ export function KanbanView({
   };
 
   return (
-    <div className="project-board kanban" aria-label={`Board grouped by ${columnField.name}`}>
+    <div className="project-board kanban" aria-label={`Kanban grouped by ${columnField.name}`}>
       {laneGroups ? (
         lanes.map((lane) => (
           <div key={lane.key} role="region" aria-label={`${lane.label} swimlane`} className="kanban-lane">
@@ -141,7 +188,7 @@ export function KanbanView({
         ))
       ) : (
         <div className="kanban-lane-columns" role="list">
-          {groups.map((column) => cell(lanes[0] as ItemGroup, column))}
+          {groups.map((column) => cell(NO_LANE, column))}
         </div>
       )}
     </div>
