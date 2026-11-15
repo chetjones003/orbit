@@ -31,6 +31,14 @@ import type {
   PullFilesPage,
   PullReviewThreadsPage,
   PullReviewState,
+  MergeMethod,
+  PullActions,
+  PullCreateInput,
+  PullMergeResult,
+  PullSummary,
+  PullWriteResult,
+  RerunMode,
+  WorkflowRun,
   ReviewAnchor,
   ReviewCommentResult,
   ReviewEvent,
@@ -83,6 +91,14 @@ export interface IpcOptions {
         | 'replyToReviewThread'
         | 'setReviewThreadResolved'
         | 'submitReview'
+        | 'getPullActions'
+        | 'mergePull'
+        | 'setPullAutoMerge'
+        | 'setPullDraft'
+        | 'getPullWorkflowRuns'
+        | 'rerunPullWorkflow'
+        | 'createPull'
+        | 'listBranches'
       >
     > & {
       getPullDetail(repoFullName: string, number: number): Promise<IssueDetail | PullDetail>;
@@ -231,6 +247,77 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
         return issues.submitReview(repoFullName, number, input);
       }
     );
+    ipcMain.handle(
+      IpcChannels.pullsActions,
+      (event, repoFullName: string, number: number): Promise<PullActions> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getPullActions) throw new Error('Pull request actions are unavailable.');
+        return issues.getPullActions(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsMerge,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { method: MergeMethod; deleteBranch: boolean; expectedHeadSha: string }
+      ): Promise<PullMergeResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.mergePull) throw new Error('Merging is unavailable.');
+        return issues.mergePull(repoFullName, number, input);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsAutoMerge,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { enabled: boolean; method?: MergeMethod; expectedHeadSha: string }
+      ): Promise<PullWriteResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.setPullAutoMerge) throw new Error('Auto-merge is unavailable.');
+        return issues.setPullAutoMerge(repoFullName, number, input);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsDraft,
+      (event, repoFullName: string, number: number, draft: boolean): Promise<void> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.setPullDraft) throw new Error('Draft changes are unavailable.');
+        return issues.setPullDraft(repoFullName, number, draft === true);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsRuns,
+      (event, repoFullName: string, number: number): Promise<WorkflowRun[]> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getPullWorkflowRuns) throw new Error('Workflow runs are unavailable.');
+        return issues.getPullWorkflowRuns(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsRerun,
+      (event, repoFullName: string, runId: number, mode: RerunMode): Promise<void> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.rerunPullWorkflow) throw new Error('Re-running workflows is unavailable.');
+        return issues.rerunPullWorkflow(repoFullName, runId, mode);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsCreate,
+      (event, repoFullName: string, input: PullCreateInput): Promise<PullSummary> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.createPull) throw new Error('Creating pull requests is unavailable.');
+        return issues.createPull(repoFullName, input);
+      }
+    );
+    ipcMain.handle(IpcChannels.pullsBranches, (event, repoFullName: string): Promise<string[]> => {
+      assertTrustedSender(event, devServerOrigin);
+      if (!issues.listBranches) throw new Error('Branches are unavailable.');
+      return issues.listBranches(repoFullName);
+    });
     ipcMain.handle(
       IpcChannels.issuesCreate,
       (event, repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot> => {

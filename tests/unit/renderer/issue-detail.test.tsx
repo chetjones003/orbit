@@ -220,7 +220,20 @@ describe('IssueDetailView pull requests', () => {
       pulls: {
         detail: vi.fn(),
         files: vi.fn(async () => ({ files: [], partial: false })),
-        threads: vi.fn(async () => ({ threads: [], partial: false }))
+        threads: vi.fn(async () => ({ threads: [], partial: false })),
+        actions: vi.fn(async () => ({
+          headSha: 'head-1',
+          headRef: 'feature',
+          headInRepo: true,
+          draft: false,
+          merged: false,
+          state: 'open',
+          allowedMergeMethods: ['merge'],
+          allowAutoMerge: false,
+          autoMergeMethod: null,
+          deleteBranchOnMerge: false
+        })),
+        runs: vi.fn(async () => [])
       },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     } as unknown as typeof window.orbit;
@@ -253,7 +266,20 @@ describe('IssueDetailView pull requests', () => {
       pulls: {
         detail: pullDetail,
         files: vi.fn(async () => ({ files: [], partial: false })),
-        threads: vi.fn(async () => ({ threads: [], partial: false }))
+        threads: vi.fn(async () => ({ threads: [], partial: false })),
+        actions: vi.fn(async () => ({
+          headSha: 'head-1',
+          headRef: 'feature',
+          headInRepo: true,
+          draft: false,
+          merged: false,
+          state: 'open',
+          allowedMergeMethods: ['merge'],
+          allowAutoMerge: false,
+          autoMergeMethod: null,
+          deleteBranchOnMerge: false
+        })),
+        runs: vi.fn(async () => [])
       },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     } as unknown as typeof window.orbit;

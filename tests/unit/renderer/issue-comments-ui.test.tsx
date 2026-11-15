@@ -84,7 +84,20 @@ describe('IssueDetailView comments', () => {
       pulls: {
         detail: vi.fn(async () => detail()),
         files: vi.fn(async () => ({ files: [], partial: false })),
-        threads: vi.fn(async () => ({ threads: [], partial: false }))
+        threads: vi.fn(async () => ({ threads: [], partial: false })),
+        actions: vi.fn(async () => ({
+          headSha: 'head-1',
+          headRef: 'feature',
+          headInRepo: true,
+          draft: false,
+          merged: false,
+          state: 'open',
+          allowedMergeMethods: ['merge'],
+          allowAutoMerge: false,
+          autoMergeMethod: null,
+          deleteBranchOnMerge: false
+        })),
+        runs: vi.fn(async () => [])
       },
       markdown: { preview: vi.fn(async (_repo: string, text: string) => `<p>${text}</p>`) },
       comments: {

@@ -101,7 +101,11 @@ export class GitHubClient {
    * failure means the request may have reached GitHub, so callers must reconcile
    * before retrying. `text` returns the raw body, for media types such as rendered HTML.
    */
-  async send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, options: GitHubWriteOptions): Promise<T> {
+  async send<T>(
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    path: string,
+    options: GitHubWriteOptions
+  ): Promise<T> {
     const root = options.base === 'uploads' ? this.uploadsBaseUrl : this.apiBaseUrl;
     const url = `${root}${path}`;
     const accept = options.accept ?? 'application/vnd.github+json';

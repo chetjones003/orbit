@@ -10,6 +10,7 @@ import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
 import { IssueEditor } from './IssueEditor';
 import { IssueFields } from './IssueFields';
+import { PullActionsPanel } from './PullActions';
 import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 
@@ -50,9 +51,15 @@ export function IssueDetailView({
   const [loadVersion, setLoadVersion] = useState(0);
   const editable = kind === 'issue';
 
+  // A different item starts empty. A reload keeps what is shown, so an action's status is not lost.
+  useEffect(() => {
+    setDetail(null);
+    setPullDetail(null);
+    setError(null);
+  }, [repoFullName, number, kind]);
+
   useEffect(() => {
     let cancelled = false;
-    setDetail(null);
     setError(null);
     const load = kind === 'pull' ? window.orbit.pulls.detail : window.orbit.issues.detail;
     load(repoFullName, number).then(
@@ -202,6 +209,7 @@ export function IssueDetailView({
           ))}
         </section>
       )}
+      {kind === 'pull' && <PullActionsPanel repoFullName={repoFullName} number={number} onChanged={reload} />}
       <p className="issue-meta">
         <span className={`issue-state-pill ${summary.state}`}>
           {summary.state === 'open' ? 'Open' : 'Closed'}

@@ -74,7 +74,21 @@ const api: OrbitApi = {
     setReviewThreadResolved: (repoFullName: string, number: number, threadId: string, resolved: boolean) =>
       ipcRenderer.invoke(IpcChannels.pullsReviewResolve, repoFullName, number, threadId, resolved),
     submitReview: (repoFullName: string, number: number, input) =>
-      ipcRenderer.invoke(IpcChannels.pullsReviewSubmit, repoFullName, number, input)
+      ipcRenderer.invoke(IpcChannels.pullsReviewSubmit, repoFullName, number, input),
+    actions: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.pullsActions, repoFullName, number),
+    merge: (repoFullName: string, number: number, input) =>
+      ipcRenderer.invoke(IpcChannels.pullsMerge, repoFullName, number, input),
+    setAutoMerge: (repoFullName: string, number: number, input) =>
+      ipcRenderer.invoke(IpcChannels.pullsAutoMerge, repoFullName, number, input),
+    setDraft: (repoFullName: string, number: number, draft: boolean) =>
+      ipcRenderer.invoke(IpcChannels.pullsDraft, repoFullName, number, draft),
+    runs: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.pullsRuns, repoFullName, number),
+    rerun: (repoFullName: string, runId: number, mode) =>
+      ipcRenderer.invoke(IpcChannels.pullsRerun, repoFullName, runId, mode),
+    create: (repoFullName: string, input) => ipcRenderer.invoke(IpcChannels.pullsCreate, repoFullName, input),
+    branches: (repoFullName: string) => ipcRenderer.invoke(IpcChannels.pullsBranches, repoFullName)
   },
   markdown: {
     preview: (repoFullName: string, text: string) =>

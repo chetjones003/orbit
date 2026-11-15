@@ -70,6 +70,20 @@ _Avoid_: Head (the head is the latest commit; the reviewed commit is the one the
 **Review outcome**: Comment, Approve, or Request changes. Approve and Request changes are unavailable on the user's own pull request.
 _Avoid_: Verdict, review state
 
+**Pull request actions**: The writes Orbit makes on one pull request from its actions panel: merge, auto-merge, draft or ready for review, and re-running workflow runs. Merge and auto-merge are pinned to the reviewed commit, so a head that moved since the user looked is reported as stale and nothing is merged.
+_Avoid_: Controls, buttons
+
+**Merge method**: How a pull request is merged: a merge commit, squash, or rebase. Only the methods the repo allows are offered. A merge can also delete the head branch, but only when that branch is in the same repo, never a fork's.
+_Avoid_: Strategy, merge type
+
+**Auto-merge**: GitHub merges the pull request by itself once its required checks and reviews pass. Orbit can turn it on or off, with a merge method, where the repo allows it. Orbit does not merge on the user's behalf after that.
+_Avoid_: Merge queue (a separate GitHub feature), scheduled merge
+
+**Workflow re-run**: Running a GitHub Actions workflow run again, either all of it or only its failed jobs. It is not retried after an uncertain outcome: GitHub cannot show whether a re-run was already queued, so the user checks again.
+_Avoid_: Retry (a re-run is a new run, not a retry of the same request)
+
+**New pull request**: A pull request the user opens from one branch into another in one of their personal repos. Both branches are in that repo, so it is never opened from a fork. An uncertain failure is checked against GitHub before retrying.
+
 **Partial list**: An issue or comment list that Orbit could not fully load or read. It is shown with a notice that it may be incomplete, never as the full result.
 _Avoid_: Partial page (a list can be partial without being paged)
 
