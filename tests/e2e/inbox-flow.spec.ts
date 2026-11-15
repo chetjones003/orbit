@@ -130,8 +130,8 @@ test.describe('inbox flow (unpacked build)', () => {
       await expect(row).toContainText('Pull request');
 
       await row.click();
-      await expect(row).toHaveClass(/selected/);
-      await expect(window.locator('aside.details-panel .issue-panel')).toBeVisible();
+      // Inbox rows open in the side panel by default, like any other pick.
+      await expect(window.locator('.item-side-slot .item-side-panel')).toBeVisible();
 
       await window.getByRole('tab', { name: 'Assigned to me' }).click();
       const inbox = window.getByRole('region', { name: 'Inbox' });
