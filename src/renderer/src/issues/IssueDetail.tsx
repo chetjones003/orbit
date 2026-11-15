@@ -287,7 +287,13 @@ export function IssueDetailView({
       />
 
       {kind === 'pull' && (
-        <PullDiffView repoFullName={repoFullName} number={number} variant={variant} onLink={routeLink} />
+        <PullDiffView
+          repoFullName={repoFullName}
+          number={number}
+          variant={variant}
+          onLink={routeLink}
+          signedInLogin={signedInLogin}
+        />
       )}
 
       <CommentThread

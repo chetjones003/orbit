@@ -1,4 +1,14 @@
 import { COMMENT_MAX_CHARS, ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS } from '../../shared/issues';
+import type {
+  PendingReview,
+  PendingReviewComment,
+  PullReviewState,
+  ReviewAnchor,
+  ReviewCommentResult,
+  ReviewEvent,
+  ReviewSubmitResult
+} from '../../shared/issues';
+import { anchorInPatch } from './review-anchor';
 import {
   checkAttachment,
   isSafeAttachmentUrl,
@@ -40,7 +50,7 @@ import type {
 import type { AuthService } from './auth-service';
 import { GitHubClient, GitHubRequestError } from './github-client';
 import { setTaskItemChecked } from './task-list';
-import { runWrite, WriteBlockedError } from './write-reconcile';
+import { runWrite, WriteBlockedError, type ReconcileResult } from './write-reconcile';
 
 /** Page size requested from GitHub. A full page means another page may exist. */
 export const ISSUES_PER_PAGE = 30;
@@ -72,7 +82,7 @@ const REVIEW_THREADS_QUERY = `query ($owner: String!, $name: String!, $number: I
           comments(first: 100) {
             totalCount
             nodes {
-              databaseId
+              fullDatabaseId
               author { login }
               body
               bodyHTML
@@ -86,6 +96,81 @@ const REVIEW_THREADS_QUERY = `query ($owner: String!, $name: String!, $number: I
     }
   }
 }`;
+
+const REVIEW_STATE_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      id
+      headRefOid
+      author { login }
+      reviews(first: 5, states: [PENDING]) {
+        nodes {
+          id
+          commit { oid }
+        }
+      }
+      reviewThreads(first: 100) {
+        totalCount
+        nodes {
+          diffSide
+          comments(first: 100) {
+            nodes { fullDatabaseId path line body state }
+          }
+        }
+      }
+    }
+  }
+}`;
+const RECENT_REVIEWS_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviews(last: 10) {
+        nodes { id state body author { login } }
+      }
+    }
+  }
+}`;
+const ADD_REVIEW = `mutation ($input: AddPullRequestReviewInput!) {
+  addPullRequestReview(input: $input) { pullRequestReview { id commit { oid } } }
+}`;
+const ADD_REVIEW_THREAD = `mutation ($input: AddPullRequestReviewThreadInput!) {
+  addPullRequestReviewThread(input: $input) {
+    thread { id diffSide comments(first: 1) { nodes { fullDatabaseId path line body } } }
+  }
+}`;
+const ADD_REVIEW_THREAD_REPLY = `mutation ($input: AddPullRequestReviewThreadReplyInput!) {
+  addPullRequestReviewThreadReply(input: $input) { comment { fullDatabaseId path line body } }
+}`;
+const RESOLVE_THREAD = `mutation ($input: ResolveReviewThreadInput!) {
+  resolveReviewThread(input: $input) { thread { id isResolved } }
+}`;
+const UNRESOLVE_THREAD = `mutation ($input: UnresolveReviewThreadInput!) {
+  unresolveReviewThread(input: $input) { thread { id isResolved } }
+}`;
+const SUBMIT_REVIEW = `mutation ($input: SubmitPullRequestReviewInput!) {
+  submitPullRequestReview(input: $input) { pullRequestReview { id state } }
+}`;
+const THREAD_SIDE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequestReviewThread { diffSide } } }`;
+const THREAD_STATE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequestReviewThread { isResolved } } }`;
+const REVIEW_STATE_NODE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequestReview { state } } }`;
+const REVIEW_EVENTS: readonly ReviewEvent[] = ['COMMENT', 'APPROVE', 'REQUEST_CHANGES'];
+
+/** A pull request's head, author, and the user's pending review, as one read. */
+/** What a submit attempt has learned, kept while its outcome is unknown. */
+interface SubmitState {
+  /** Reviews the user had before the first attempt. */
+  baselineIds: ReadonlySet<string>;
+  /** The pending review the submit was sent for, when there was one. */
+  pendingId: string | null;
+}
+
+interface ReviewPullRequest {
+  /** GitHub's node id, needed to start a review. */
+  id: string;
+  headSha: string;
+  authorLogin: string;
+  pending: PendingReview | null;
+}
 
 interface GitHubIssueResponse {
   id: number;
@@ -145,6 +230,8 @@ export class IssueService {
   private readonly client: GitHubClient;
   private readonly canWrite: () => boolean;
   private readonly notice: AttachmentNoticeStore;
+  /** Writes whose last attempt ended in an unknown outcome, keyed by what they do. */
+  private readonly uncertain = new Map<string, unknown>();
 
   constructor(options: IssueServiceOptions) {
     this.auth = options.auth;
@@ -808,6 +895,430 @@ export class IssueService {
     return { threads, partial: invalid > 0 || total > connection.nodes.length };
   }
 
+  /** The signed-in user's pending review and the pull request's head, read from GitHub. Nothing is stored locally. */
+  async getPullReviewState(repoFullName: string, number: number): Promise<PullReviewState> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const { token, scope } = await this.session();
+    const login = this.signedInLogin();
+    const pr = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    return {
+      headSha: pr.headSha,
+      isOwnPull: pr.authorLogin.toLowerCase() === login.toLowerCase(),
+      pending: pr.pending
+    };
+  }
+
+  /**
+   * Saves a comment on a changed line into the user's pending review, starting the review if there is none.
+   * The line must be part of the diff. Nothing is written when the reviewed commit is no longer the head.
+   */
+  async addReviewComment(
+    repoFullName: string,
+    number: number,
+    input: { anchor: ReviewAnchor; body: string; reviewedHeadSha: string }
+  ): Promise<ReviewCommentResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const anchor = validateAnchor(input?.anchor);
+    validateCommentBody(input?.body);
+    validateSha(input?.reviewedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const pr = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    if (pr.headSha !== input.reviewedHeadSha) return { kind: 'new-commits', headSha: pr.headSha };
+
+    const files = await this.getPullFiles(repoFullName, number);
+    const file = files.files.find((candidate) => candidate.filename === anchor.path);
+    if (!file || file.patch === null || !anchorInPatch(file.patch, anchor)) {
+      throw new Error('That line is not part of the diff, so it cannot take a comment.');
+    }
+    const body = input.body;
+    const key = ['comment', owner, repo, number, anchor.path, anchor.side, anchor.line, body].join('\u0000');
+    return this.keyedWrite<ReviewCommentResult, { existingIds: ReadonlySet<number> }>(
+      key,
+      async () => ({ existingIds: new Set((pr.pending?.comments ?? []).map((c) => c.id)) }),
+      ({ existingIds }) => ({
+        attempt: async () => {
+          const ensured = await this.ensurePendingReview(owner, repo, number, pr.headSha, token, scope);
+          if ('headSha' in ensured) return { kind: 'new-commits', headSha: ensured.headSha };
+          const data = await this.graphql<{
+            addPullRequestReviewThread?: { thread?: { diffSide?: unknown; comments?: { nodes?: unknown } } };
+          }>(
+            ADD_REVIEW_THREAD,
+            {
+              input: {
+                pullRequestId: pr.id,
+                pullRequestReviewId: ensured.reviewId,
+                path: anchor.path,
+                line: anchor.line,
+                side: anchor.side,
+                body
+              }
+            },
+            token,
+            scope
+          );
+          const thread = data?.addPullRequestReviewThread?.thread;
+          const nodes = Array.isArray(thread?.comments?.nodes) ? (thread.comments.nodes as unknown[]) : [];
+          const comment =
+            nodes.map((node) => toPendingComment(node, thread?.diffSide)).find((c) => c !== null) ??
+            throwInvalid('GitHub returned an invalid review comment.');
+          return { kind: 'saved', comment };
+        },
+        reconcile: async () => {
+          const now = await this.readReviewPullRequest(owner, repo, number, token, scope);
+          const match = now.pending?.comments.find(
+            (c) =>
+              !existingIds.has(c.id) &&
+              c.path === anchor.path &&
+              c.side === anchor.side &&
+              c.line === anchor.line &&
+              c.body === body
+          );
+          return match ? { applied: true, value: { kind: 'saved', comment: match } } : { applied: false };
+        }
+      })
+    );
+  }
+
+  /** Replies to a review thread inside the user's pending review. Refused when the reviewed commit is no longer the head. */
+  async replyToReviewThread(
+    repoFullName: string,
+    number: number,
+    input: { threadId: string; body: string; reviewedHeadSha: string }
+  ): Promise<ReviewCommentResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    validateNodeId(input?.threadId);
+    validateCommentBody(input?.body);
+    validateSha(input?.reviewedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const pr = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    if (pr.headSha !== input.reviewedHeadSha) return { kind: 'new-commits', headSha: pr.headSha };
+    const { threadId, body } = input;
+
+    const side = await this.threadSide(threadId, token, scope);
+    const key = ['reply', owner, repo, number, threadId, body].join('\u0000');
+    return this.keyedWrite<ReviewCommentResult, { existingIds: ReadonlySet<number> }>(
+      key,
+      async () => ({ existingIds: new Set((pr.pending?.comments ?? []).map((c) => c.id)) }),
+      ({ existingIds }) => ({
+        attempt: async () => {
+          const ensured = await this.ensurePendingReview(owner, repo, number, pr.headSha, token, scope);
+          if ('headSha' in ensured) return { kind: 'new-commits', headSha: ensured.headSha };
+          const data = await this.graphql<{ addPullRequestReviewThreadReply?: { comment?: unknown } }>(
+            ADD_REVIEW_THREAD_REPLY,
+            { input: { pullRequestReviewId: ensured.reviewId, pullRequestReviewThreadId: threadId, body } },
+            token,
+            scope
+          );
+          const comment =
+            toPendingComment(data?.addPullRequestReviewThreadReply?.comment, side) ??
+            throwInvalid('GitHub returned an invalid reply.');
+          return { kind: 'saved', comment };
+        },
+        reconcile: async () => {
+          const now = await this.readReviewPullRequest(owner, repo, number, token, scope);
+          const match = now.pending?.comments.find((c) => !existingIds.has(c.id) && c.body === body);
+          return match ? { applied: true, value: { kind: 'saved', comment: match } } : { applied: false };
+        }
+      })
+    );
+  }
+
+  /** Resolves or reopens a review thread. Resolves with the thread's state as GitHub now holds it. */
+  async setReviewThreadResolved(
+    repoFullName: string,
+    number: number,
+    threadId: string,
+    resolved: boolean
+  ): Promise<boolean> {
+    this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    validateNodeId(threadId);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    return runWrite<boolean>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        const data = await this.graphql<Record<string, { thread?: { isResolved?: unknown } } | undefined>>(
+          resolved ? RESOLVE_THREAD : UNRESOLVE_THREAD,
+          { input: { threadId } },
+          token,
+          scope
+        );
+        const field = resolved ? 'resolveReviewThread' : 'unresolveReviewThread';
+        const isResolved = data?.[field]?.thread?.isResolved;
+        if (typeof isResolved !== 'boolean') throw new Error('GitHub returned an invalid review thread.');
+        return isResolved;
+      },
+      reconcile: async () => {
+        const now = await this.readNode(threadId, THREAD_STATE_QUERY, token, scope);
+        return now && now.isResolved === resolved ? { applied: true, value: resolved } : { applied: false };
+      }
+    });
+  }
+
+  /**
+   * Submits the user's review as Comment, Approve, or Request changes. With no pending review, the review
+   * is created with the event. The head is checked before each attempt, and nothing is sent when it has moved.
+   */
+  async submitReview(
+    repoFullName: string,
+    number: number,
+    input: { event: ReviewEvent; body: string; reviewedHeadSha: string }
+  ): Promise<ReviewSubmitResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    if (!REVIEW_EVENTS.includes(input?.event))
+      throw new Error('Choose Comment, Approve, or Request changes.');
+    const body = typeof input.body === 'string' ? input.body : '';
+    if ([...body].length > COMMENT_MAX_CHARS) {
+      throw new Error(`Reviews can be at most ${COMMENT_MAX_CHARS.toLocaleString('en-US')} characters.`);
+    }
+    validateSha(input.reviewedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const login = this.signedInLogin();
+    const pr = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    if (input.event !== 'COMMENT' && pr.authorLogin.toLowerCase() === login.toLowerCase()) {
+      throw new Error("You can't approve or request changes on your own pull request.");
+    }
+    if (pr.headSha !== input.reviewedHeadSha) return { kind: 'new-commits', headSha: pr.headSha };
+
+    const key = ['submit', owner, repo, number, input.event, body].join('\u0000');
+    return this.keyedWrite<ReviewSubmitResult, SubmitState>(
+      key,
+      async () => ({
+        baselineIds: new Set(
+          (await this.readRecentOwnReviews(owner, repo, number, token, scope, login)).map((r) => r.id)
+        ),
+        pendingId: null
+      }),
+      (state) => ({
+        attempt: async () => {
+          const current = await this.readReviewPullRequest(owner, repo, number, token, scope);
+          if (current.headSha !== input.reviewedHeadSha)
+            return { kind: 'new-commits', headSha: current.headSha };
+          if (current.pending) {
+            state.pendingId = current.pending.id;
+            await this.graphql(
+              SUBMIT_REVIEW,
+              { input: { pullRequestReviewId: state.pendingId, event: input.event, body } },
+              token,
+              scope
+            );
+          } else {
+            await this.graphql(
+              ADD_REVIEW,
+              { input: { pullRequestId: current.id, commitOID: current.headSha, event: input.event, body } },
+              token,
+              scope
+            );
+          }
+          return { kind: 'submitted' };
+        },
+        reconcile: async () => {
+          if (state.pendingId !== null) {
+            const node = await this.readNode(state.pendingId, REVIEW_STATE_NODE_QUERY, token, scope);
+            return node && node.state !== 'PENDING'
+              ? { applied: true, value: { kind: 'submitted' } }
+              : { applied: false };
+          }
+          // A review created by the failed request is one the user did not have before the first attempt.
+          const now = await this.readRecentOwnReviews(owner, repo, number, token, scope, login);
+          return now.some((r) => !state.baselineIds.has(r.id) && r.body === body && r.state !== 'PENDING')
+            ? { applied: true, value: { kind: 'submitted' } }
+            : { applied: false };
+        }
+      })
+    );
+  }
+
+  /** A pull request's head and author, plus the user's pending review, in one read. */
+  private async readReviewPullRequest(
+    owner: string,
+    repo: string,
+    number: number,
+    token: string,
+    scope: string
+  ): Promise<ReviewPullRequest> {
+    const data = await this.graphql<{ repository?: { pullRequest?: unknown } | null }>(
+      REVIEW_STATE_QUERY,
+      { owner, name: repo, number },
+      token,
+      scope
+    );
+    const pr = data?.repository?.pullRequest as
+      | {
+          id?: unknown;
+          headRefOid?: unknown;
+          author?: { login?: unknown } | null;
+          reviews?: { nodes?: unknown };
+          reviewThreads?: unknown;
+        }
+      | null
+      | undefined;
+    if (!pr || typeof pr.id !== 'string' || typeof pr.headRefOid !== 'string') {
+      throw new Error('GitHub returned an invalid pull request.');
+    }
+    const nodes = Array.isArray(pr.reviews?.nodes) ? (pr.reviews.nodes as unknown[]) : [];
+    const first = nodes[0] as { id?: unknown; commit?: { oid?: unknown } } | undefined;
+    const threads = pr.reviewThreads as { totalCount?: unknown; nodes?: unknown } | undefined;
+    const threadNodes = Array.isArray(threads?.nodes) ? (threads.nodes as unknown[]) : [];
+    const pendingComments = threadNodes.flatMap((thread) => pendingCommentsOf(thread));
+    const threadsPartial = typeof threads?.totalCount === 'number' && threads.totalCount > threadNodes.length;
+    return {
+      id: pr.id,
+      headSha: pr.headRefOid,
+      authorLogin: typeof pr.author?.login === 'string' ? pr.author.login : '',
+      pending: first ? toPendingReview(first, pendingComments, threadsPartial) : null
+    };
+  }
+
+  /**
+   * Runs a write keyed by what it does. When an earlier attempt of the same write ended in an uncertain
+   * outcome, its state is kept, and the next call reconciles against GitHub before any new attempt, so the
+   * write is never repeated because a response was lost.
+   */
+  private async keyedWrite<T, S>(
+    key: string,
+    snapshot: () => Promise<S>,
+    build: (state: S) => { attempt: () => Promise<T>; reconcile: () => Promise<ReconcileResult<T>> }
+  ): Promise<T> {
+    const retrying = this.uncertain.has(key);
+    const state = retrying ? (this.uncertain.get(key) as S) : await snapshot();
+    this.uncertain.set(key, state);
+    const ops = build(state);
+    // Set when GitHub definitively refused an attempt, so no write landed and the baseline can go.
+    let rejected = false;
+    const attempt = async (): Promise<T> => {
+      try {
+        return await ops.attempt();
+      } catch (error) {
+        // Only an explicit refusal (HTTP error or rate limit) proves nothing was written. Anything else, such as a
+        // response that cannot be read after a landed write, leaves the outcome unknown.
+        if (error instanceof GitHubRequestError && (error.kind === 'http' || error.kind === 'rate-limited')) {
+          rejected = true;
+        }
+        throw error;
+      }
+    };
+    try {
+      if (retrying) {
+        const done = await ops.reconcile();
+        if (done.applied) {
+          this.uncertain.delete(key);
+          return done.value;
+        }
+      }
+      const value = await runWrite<T>({ canWrite: this.canWrite, attempt, reconcile: ops.reconcile });
+      this.uncertain.delete(key);
+      return value;
+    } catch (error) {
+      // Keep the baseline unless the write was definitely not sent. A failed reconcile read leaves the outcome
+      // unknown, so the baseline stays and the next call reconciles again instead of writing a second copy.
+      if (rejected || error instanceof WriteBlockedError) this.uncertain.delete(key);
+      throw error;
+    }
+  }
+
+  /**
+   * The id of the user's pending review, starting one on `expectedHead` when none exists. Reads fresh state
+   * each time, so a head that has moved since the caller's check is reported instead of written against.
+   */
+  private async ensurePendingReview(
+    owner: string,
+    repo: string,
+    number: number,
+    expectedHead: string,
+    token: string,
+    scope: string
+  ): Promise<{ reviewId: string } | { headSha: string }> {
+    const current = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    if (current.headSha !== expectedHead) return { headSha: current.headSha };
+    if (current.pending) return { reviewId: current.pending.id };
+    const data = await this.graphql<{ addPullRequestReview?: { pullRequestReview?: { id?: unknown } } }>(
+      ADD_REVIEW,
+      { input: { pullRequestId: current.id, commitOID: expectedHead } },
+      token,
+      scope
+    );
+    const id = data?.addPullRequestReview?.pullRequestReview?.id;
+    if (typeof id !== 'string') throw new Error('GitHub returned an invalid review.');
+    // The head may have moved while the review was being created. The caller must not write against it.
+    const after = await this.readReviewPullRequest(owner, repo, number, token, scope);
+    if (after.headSha !== expectedHead) return { headSha: after.headSha };
+    return { reviewId: id };
+  }
+
+  /** The user's most recent reviews on a pull request, for finding a review whose request had an uncertain outcome. */
+  private async readRecentOwnReviews(
+    owner: string,
+    repo: string,
+    number: number,
+    token: string,
+    scope: string,
+    login: string
+  ): Promise<Array<{ id: string; body: string; state: string }>> {
+    const data = await this.graphql<{
+      repository?: { pullRequest?: { reviews?: { nodes?: unknown } } | null } | null;
+    }>(RECENT_REVIEWS_QUERY, { owner, name: repo, number }, token, scope);
+    const nodes = data?.repository?.pullRequest?.reviews?.nodes;
+    if (!Array.isArray(nodes)) return [];
+    return (
+      nodes as Array<{ id?: unknown; body?: unknown; state?: unknown; author?: { login?: unknown } | null }>
+    )
+      .filter(
+        (node) =>
+          typeof node.author?.login === 'string' &&
+          node.author.login.toLowerCase() === login.toLowerCase() &&
+          typeof node.body === 'string' &&
+          typeof node.id === 'string'
+      )
+      .map((node) => ({ id: node.id as string, body: node.body as string, state: String(node.state ?? '') }));
+  }
+
+  /** The side of the diff a review thread sits on. Replies inherit it. */
+  private async threadSide(threadId: string, token: string, scope: string): Promise<'LEFT' | 'RIGHT'> {
+    const node = await this.readNode(threadId, THREAD_SIDE_QUERY, token, scope);
+    const side = node?.diffSide;
+    if (side !== 'LEFT' && side !== 'RIGHT')
+      throw new Error('That review thread is not on this pull request.');
+    return side;
+  }
+
+  /** A GraphQL node's fields, or null when GitHub no longer has the node. */
+  private async readNode(
+    id: string,
+    query: string,
+    token: string,
+    scope: string
+  ): Promise<Record<string, unknown> | null> {
+    const data = await this.graphql<{ node?: Record<string, unknown> | null }>(query, { id }, token, scope);
+    return data?.node ?? null;
+  }
+
+  /** GraphQL sends errors in a 200 response; any error means the request was refused, not retried. */
+  private async graphql<T = unknown>(
+    query: string,
+    variables: Record<string, unknown>,
+    token: string,
+    scope: string
+  ): Promise<T> {
+    const response = await this.client.send<{ data?: T; errors?: unknown } | null>('POST', '/graphql', {
+      token,
+      scope,
+      body: { query, variables }
+    });
+    if (Array.isArray(response?.errors) && response.errors.length > 0) {
+      throw new Error('GitHub refused the review request.');
+    }
+    return (response?.data ?? {}) as T;
+  }
+
   /**
    * Follows comment pages until GitHub returns a short page. Stops at COMMENT_PAGE_LIMIT pages;
    * a thread longer than that is reported as partial, never as complete.
@@ -983,7 +1494,7 @@ function toPullFile(raw: unknown): PullFile | null {
 }
 
 interface GraphQLReviewComment {
-  databaseId?: unknown;
+  fullDatabaseId?: unknown;
   author?: { login?: unknown } | null;
   body?: unknown;
   bodyHTML?: unknown;
@@ -1012,16 +1523,13 @@ function toReviewThread(raw: unknown): PullReviewThread | null {
   }
   const nodes = thread.comments.nodes as GraphQLReviewComment[];
   const comments: PullReviewComment[] = nodes.flatMap((node) => {
-    if (
-      typeof node.databaseId !== 'number' ||
-      typeof node.createdAt !== 'string' ||
-      typeof node.url !== 'string'
-    ) {
+    const id = databaseIdOf(node.fullDatabaseId);
+    if (id === null || typeof node.createdAt !== 'string' || typeof node.url !== 'string') {
       return [];
     }
     return [
       {
-        id: node.databaseId,
+        id,
         authorLogin: typeof node.author?.login === 'string' ? node.author.login : 'ghost',
         createdAt: node.createdAt,
         htmlUrl: node.url,
@@ -1234,4 +1742,68 @@ function toLabel(raw: unknown): IssueLabel[] {
   const label = raw as { name?: unknown; color?: unknown };
   if (typeof label.name !== 'string' || typeof label.color !== 'string') return [];
   return [{ name: label.name, color: label.color }];
+}
+
+function validateSha(sha: unknown): void {
+  if (typeof sha !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(sha))
+    throw new Error('The reviewed commit is missing.');
+}
+
+function validateNodeId(id: unknown): void {
+  if (typeof id !== 'string' || id.length === 0 || id.length > 200)
+    throw new Error('That review thread is invalid.');
+}
+
+function validateAnchor(input: unknown): ReviewAnchor {
+  const anchor = input as Partial<ReviewAnchor> | null | undefined;
+  if (typeof anchor?.path !== 'string' || anchor.path.length === 0 || anchor.path.length > 1024) {
+    throw new Error('Choose a line in a changed file.');
+  }
+  if (anchor.side !== 'LEFT' && anchor.side !== 'RIGHT')
+    throw new Error('Choose the old or new side of the diff.');
+  if (typeof anchor.line !== 'number' || !Number.isInteger(anchor.line) || anchor.line < 1) {
+    throw new Error('Choose a line in a changed file.');
+  }
+  return { path: anchor.path, side: anchor.side, line: anchor.line };
+}
+
+/** GitHub's BigInt database ids arrive as strings in JSON. Anything that is not a positive safe integer is rejected. */
+function databaseIdOf(raw: unknown): number | null {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** A pending comment. The side belongs to its thread, not to the comment, so the thread's side is passed in. */
+function toPendingComment(raw: unknown, side: unknown): PendingReviewComment | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const node = raw as { fullDatabaseId?: unknown; path?: unknown; line?: unknown; body?: unknown };
+  const id = databaseIdOf(node.fullDatabaseId);
+  if (id === null || typeof node.path !== 'string') return null;
+  if (side !== 'LEFT' && side !== 'RIGHT') return null;
+  return {
+    id,
+    path: node.path,
+    side,
+    line: typeof node.line === 'number' ? node.line : null,
+    body: typeof node.body === 'string' ? node.body : ''
+  };
+}
+
+/** The viewer's pending comments in one thread. Only the viewer can see their own pending comments. */
+function pendingCommentsOf(thread: unknown): PendingReviewComment[] {
+  const t = thread as { diffSide?: unknown; comments?: { nodes?: unknown } } | null;
+  if (typeof t !== 'object' || t === null || !Array.isArray(t.comments?.nodes)) return [];
+  return (t.comments.nodes as Array<{ state?: unknown }>).flatMap((node) =>
+    node?.state === 'PENDING' ? (toPendingComment(node, t.diffSide) ?? []) : []
+  );
+}
+
+function toPendingReview(
+  raw: { id?: unknown; commit?: { oid?: unknown } },
+  comments: PendingReviewComment[],
+  commentsPartial: boolean
+): PendingReview | null {
+  if (typeof raw.id !== 'string' || typeof raw.commit?.oid !== 'string') return null;
+  return { id: raw.id, commitSha: raw.commit.oid, comments, commentsPartial };
 }

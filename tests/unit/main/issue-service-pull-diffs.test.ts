@@ -123,7 +123,7 @@ describe('IssueService.getPullReviewThreads', () => {
                       totalCount: 2,
                       nodes: [
                         {
-                          databaseId: 501,
+                          fullDatabaseId: '501',
                           author: { login: 'reviewer' },
                           body: 'Rename this',
                           bodyHTML: '<p>Rename this</p>',
@@ -132,7 +132,7 @@ describe('IssueService.getPullReviewThreads', () => {
                           diffHunk: '@@ -10,3 +10,3 @@'
                         },
                         {
-                          databaseId: 502,
+                          fullDatabaseId: '502',
                           author: null,
                           body: 'Done',
                           bodyHTML: '<p>Done</p>',
@@ -153,7 +153,7 @@ describe('IssueService.getPullReviewThreads', () => {
                       totalCount: 1,
                       nodes: [
                         {
-                          databaseId: 600,
+                          fullDatabaseId: '600',
                           author: { login: 'reviewer' },
                           body: 'Old note',
                           bodyHTML: '<p>Old note</p>',

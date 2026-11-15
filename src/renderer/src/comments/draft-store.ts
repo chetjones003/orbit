@@ -8,7 +8,7 @@ export interface DraftKey {
   kind: 'issue' | 'pull';
   number: number;
   /** A new comment, an edit of one comment, the description of an issue, or a new issue. */
-  target: 'new' | 'issue-body' | 'issue-title' | 'new-issue' | { commentId: number };
+  target: 'new' | 'issue-body' | 'issue-title' | 'new-issue' | { commentId: number } | { reviewSlot: string };
 }
 
 /** Unsent comment text, held for the length of the session. */
@@ -39,7 +39,12 @@ export class DraftStore {
 }
 
 function encode(key: DraftKey): string {
-  const target = typeof key.target === 'string' ? key.target : `comment:${key.target.commentId}`;
+  const target =
+    typeof key.target === 'string'
+      ? key.target
+      : 'commentId' in key.target
+        ? `comment:${key.target.commentId}`
+        : `review:${key.target.reviewSlot}`;
   return [key.login, key.repoFullName, key.kind, key.number, target].join('\u0000');
 }
 

@@ -19,7 +19,12 @@ import type {
   PullListPage,
   PullDetail,
   PullFilesPage,
-  PullReviewThreadsPage
+  PullReviewThreadsPage,
+  PullReviewState,
+  ReviewAnchor,
+  ReviewCommentResult,
+  ReviewEvent,
+  ReviewSubmitResult
 } from './issues';
 
 /**
@@ -49,6 +54,11 @@ export const IpcChannels = {
   pullsList: 'pulls:list',
   pullsFiles: 'pulls:files',
   pullsThreads: 'pulls:threads',
+  pullsReviewState: 'pulls:review-state',
+  pullsReviewComment: 'pulls:review-comment',
+  pullsReviewReply: 'pulls:review-reply',
+  pullsReviewResolve: 'pulls:review-resolve',
+  pullsReviewSubmit: 'pulls:review-submit',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
@@ -175,6 +185,30 @@ export interface OrbitApi {
     files(repoFullName: string, number: number): Promise<PullFilesPage>;
     /** Review threads with resolved and outdated state. */
     threads(repoFullName: string, number: number): Promise<PullReviewThreadsPage>;
+    /** The user's pending review and the pull request's head. */
+    reviewState(repoFullName: string, number: number): Promise<PullReviewState>;
+    /** Saves a comment on a diff line into the pending review. `reviewedHeadSha` is the head the user reviewed. */
+    addReviewComment(
+      repoFullName: string,
+      number: number,
+      input: { anchor: ReviewAnchor; body: string; reviewedHeadSha: string }
+    ): Promise<ReviewCommentResult>;
+    replyToReviewThread(
+      repoFullName: string,
+      number: number,
+      input: { threadId: string; body: string; reviewedHeadSha: string }
+    ): Promise<ReviewCommentResult>;
+    setReviewThreadResolved(
+      repoFullName: string,
+      number: number,
+      threadId: string,
+      resolved: boolean
+    ): Promise<boolean>;
+    submitReview(
+      repoFullName: string,
+      number: number,
+      input: { event: ReviewEvent; body: string; reviewedHeadSha: string }
+    ): Promise<ReviewSubmitResult>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */

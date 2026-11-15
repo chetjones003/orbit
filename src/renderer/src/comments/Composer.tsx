@@ -449,6 +449,11 @@ async function readBytes(file: File): Promise<Uint8Array> {
 
 /** A stable id prefix for ARIA relationships, derived from the draft target. */
 function draftKeyId(key: DraftKey): string {
-  const target = typeof key.target === 'string' ? key.target : `comment-${key.target.commentId}`;
+  const target =
+    typeof key.target === 'string'
+      ? key.target
+      : 'commentId' in key.target
+        ? `comment-${key.target.commentId}`
+        : `review-${key.target.reviewSlot}`;
   return `composer-${key.kind}-${key.number}-${target}`.replace(/[^A-Za-z0-9-]/g, '-');
 }

@@ -1,5 +1,13 @@
-import { parseDiff, type FileData } from 'react-diff-view';
-import type { PullFile } from '../../../shared/issues';
+import {
+  isDelete,
+  isInsert,
+  isNormal,
+  parseDiff,
+  type ChangeData,
+  type FileData,
+  type HunkData
+} from 'react-diff-view';
+import type { PullFile, ReviewAnchor } from '../../../shared/issues';
 
 /** Patches longer than this many lines are not parsed until the reader asks for them. */
 export const LARGE_PATCH_LINES = 400;
@@ -33,5 +41,36 @@ export function fileNote(file: PullFile): string | null {
   }
   if (file.status === 'added') return 'New file';
   if (file.status === 'removed') return 'Deleted file';
+  return null;
+}
+
+/**
+ * The diff line a click on a gutter cell refers to, for a review comment. The old side is used only in
+ * split view; a removed line is always on the old side, an added line on the new side.
+ */
+export function anchorForChange(path: string, change: ChangeData, side?: string): ReviewAnchor | null {
+  if (isNormal(change)) {
+    return side === 'old'
+      ? { path, side: 'LEFT', line: change.oldLineNumber }
+      : { path, side: 'RIGHT', line: change.newLineNumber };
+  }
+  if (isInsert(change)) return { path, side: 'RIGHT', line: change.lineNumber };
+  if (isDelete(change)) return { path, side: 'LEFT', line: change.lineNumber };
+  return null;
+}
+
+/** The change a review anchor sits on, so a comment box can be pinned under it. */
+export function findChangeForAnchor(hunks: HunkData[], anchor: ReviewAnchor): ChangeData | null {
+  for (const hunk of hunks) {
+    for (const change of hunk.changes) {
+      if (anchor.side === 'RIGHT') {
+        if (isInsert(change) && change.lineNumber === anchor.line) return change;
+        if (isNormal(change) && change.newLineNumber === anchor.line) return change;
+      } else {
+        if (isDelete(change) && change.lineNumber === anchor.line) return change;
+        if (isNormal(change) && change.oldLineNumber === anchor.line) return change;
+      }
+    }
+  }
   return null;
 }
