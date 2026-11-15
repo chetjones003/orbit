@@ -6,6 +6,7 @@ directories:
   buildResources: build
 files:
   - out/**/*
+  - build/icon.png
   - package.json
 asar: true
 # Unsigned builds for v1: no code signing or notarization.

@@ -50,6 +50,11 @@ function installBridge(
         return () => listeners.delete(listener);
       }
     },
+    notifications: {
+      open: vi.fn(async () => ({ target: null, markReadError: null })),
+      onDelivered: () => () => undefined,
+      onNavigate: () => () => undefined
+    },
     refresh: {
       wake: vi.fn(async () => ({ started: true }) as RefreshStart),
       getStatus: vi.fn(

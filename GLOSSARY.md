@@ -116,3 +116,16 @@ _Avoid_: Upload (the act, not the thing), file, asset (GitHub's word for the hos
 **Public-upload notice**: The one-time warning shown before the first attachment to a public repo, because an attachment becomes public on GitHub as soon as it uploads. Once the user accepts it, it is not shown again.
 
 **GitHub fallback**: When an attachment cannot be uploaded (refused, rejected, or failed), Orbit offers Retry, Open on GitHub, and Remove. Open on GitHub opens the item on GitHub and copies the draft, so the file can be attached there.
+
+**Notification**: An unread GitHub notification on one of the user's personal repos, polled in the background while Orbit runs. Orbit reads it to tell the user, not as a source of truth for item data. Read state is set on GitHub when the user opens it.
+_Avoid_: Alert, inbox item (the Inbox is a separate cross-repo view)
+
+**Notification summary**: One message that stands for several notifications. The quiet startup baseline is a summary of what was already unread. A catch-up summary replaces more than three new notifications that arrive in one poll, for example after sleep or an outage.
+
+**Toast**: An animated in-app message at the bottom-left of the window, shown only while Orbit is focused, for a new notification or a failure. At most three show at once, the rest are counted, and errors stay until dismissed.
+_Avoid_: Notification (the word for the GitHub item itself)
+
+**Desktop notification**: A native Windows notification shown only while Orbit is not focused, in place of a toast. Clicking it brings Orbit forward and opens the item.
+
+**Tray**: Orbit's system tray icon. Closing the window hides it to the tray instead of quitting, and the tray menu offers Show Orbit and Quit Orbit.
+_Avoid_: Background mode, minimise

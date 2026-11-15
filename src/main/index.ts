@@ -1,7 +1,8 @@
-import { app, BrowserWindow, powerMonitor, safeStorage } from 'electron';
+import { app, BrowserWindow, Notification, powerMonitor, safeStorage, type Tray } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { registerIpcHandlers } from './ipc';
+import { broadcast, registerIpcHandlers } from './ipc';
+import { IpcChannels } from '../shared/ipc';
 import { createMainWindow } from './window';
 import { runSmokeTest } from './smoke';
 import { registerAppProtocol, registerAppScheme } from './protocol';
@@ -13,6 +14,12 @@ import { IssueService } from './github/issue-service';
 import { InboxService } from './github/inbox-service';
 import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
+import { NotificationService } from './github/notification-service';
+import { NotificationCenter } from './notification-center';
+import type { DesktopNotice } from './notification-policy';
+import { shouldHideOnClose } from './tray-policy';
+import type { NotificationOpenResult } from '../shared/notifications';
+import { createTray } from './tray';
 import { Diagnostics } from './diagnostics';
 import { SettingsStore } from './settings';
 import { writesAllowed } from '../shared/connection';
@@ -30,6 +37,24 @@ const isolatedProfile = process.env['ORBIT_USER_DATA'];
 if (isolatedProfile) {
   mkdirSync(isolatedProfile, { recursive: true });
   app.setPath('userData', isolatedProfile);
+}
+
+// Windows groups and attributes native notifications by this id. It must match the installer's id.
+app.setAppUserModelId('dev.orbit.app');
+
+// Set on the real quit path (tray menu, app menu, OS shutdown). Closing the window alone only hides it.
+let quitting = false;
+app.on('before-quit', () => {
+  quitting = true;
+});
+
+/** Shows the main window and brings it to the front, from the tray or a notification click. */
+function focusMainWindow(): void {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
 
 // Single instance: a second launch focuses the existing window.
@@ -84,8 +109,28 @@ if (!app.requestSingleInstanceLock()) {
       refresh: () => repos.listPersonalRepos().then(() => undefined),
       canRefresh: () => auth.getStatus().kind === 'signed-in'
     });
+    // Notifications poll on their own schedule: they are a signal, not the visible data. Their dedupe
+    // state lives in memory for one session. Desktop notices show only when Orbit is not focused.
+    const notificationService = new NotificationService({
+      auth,
+      apiBaseUrl: endpoints.apiBaseUrl,
+      client
+    });
+    const notificationCenter = new NotificationCenter({
+      service: notificationService,
+      isFocused: () => BrowserWindow.getAllWindows().some((win) => win.isFocused()),
+      deliver: (delivery) => broadcast(IpcChannels.notificationsDelivered, delivery),
+      notify: (notice) => showDesktopNotice(notice, (threadId) => notificationCenter.open(threadId))
+    });
+    const notificationEngine = new RefreshEngine({
+      refresh: () => notificationCenter.pollOnce(),
+      canRefresh: () => auth.getStatus().kind === 'signed-in'
+    });
     // After sleep the network may be back before the backoff timer fires; retry at once.
-    powerMonitor.on('resume', () => void engine.wake());
+    powerMonitor.on('resume', () => {
+      void engine.wake();
+      void notificationEngine.wake();
+    });
     let lastState = engine.getStatus().state;
     engine.onChange((status) => {
       if (status.state === lastState) return;
@@ -101,7 +146,11 @@ if (!app.requestSingleInstanceLock()) {
     });
     const runWhileSignedIn = (signedIn: boolean): void => {
       engine.stop();
-      if (signedIn) engine.start();
+      notificationEngine.stop();
+      if (signedIn) {
+        engine.start();
+        notificationEngine.start();
+      }
     };
     auth.onStatusChange((status) => runWhileSignedIn(status.kind === 'signed-in'));
     runWhileSignedIn(auth.getStatus().kind === 'signed-in');
@@ -114,14 +163,24 @@ if (!app.requestSingleInstanceLock()) {
       comments: issues,
       settings,
       refresh: engine,
+      notifications: notificationCenter,
       diagnostics
     });
+    // The tray keeps Orbit running after the window is closed. Smoke runs have no user to return to it.
+    let tray: Tray | null = null;
     const win = createMainWindow({
       devServerOrigin,
       show: !smokeReportPath,
       windowState: (await settings.load()).windowState,
-      saveWindowState: (state) => void settings.saveWindowState(state)
+      saveWindowState: (state) => void settings.saveWindowState(state),
+      hideOnClose: () => shouldHideOnClose({ quitting, trayAvailable: tray !== null })
     });
+    if (!smokeReportPath) {
+      tray = createTray({
+        show: focusMainWindow,
+        quit: () => app.quit()
+      });
+    }
     if (smokeReportPath) {
       void runSmokeTest(win, smokeReportPath);
     }
@@ -130,4 +189,25 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => {
     app.quit();
   });
+}
+
+/** Native notifications that are still on screen. Held so they are not garbage-collected before a click. */
+const liveNotices = new Set<Notification>();
+
+/** Shows one desktop notice. A click focuses Orbit and, for an item, marks it read and opens it. */
+function showDesktopNotice(
+  notice: DesktopNotice,
+  open: (threadId: string) => Promise<NotificationOpenResult>
+): void {
+  if (!Notification.isSupported()) return;
+  const native = new Notification({ title: notice.title, body: notice.body });
+  liveNotices.add(native);
+  native.on('click', () => {
+    focusMainWindow();
+    if (notice.threadId) {
+      void open(notice.threadId).then((result) => broadcast(IpcChannels.notificationsNavigate, result));
+    }
+  });
+  native.on('close', () => liveNotices.delete(native));
+  native.show();
 }

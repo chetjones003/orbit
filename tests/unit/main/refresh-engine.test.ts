@@ -26,6 +26,25 @@ describe('RefreshEngine', () => {
     engine.stop();
   });
 
+  it('keeps polling when stopped and restarted while a refresh is still in flight', async () => {
+    let finish!: () => void;
+    const refresh = vi
+      .fn<() => Promise<undefined>>()
+      .mockImplementationOnce(() => new Promise<undefined>((resolve) => (finish = () => resolve(undefined))))
+      .mockResolvedValue(undefined);
+    const engine = new RefreshEngine({ refresh });
+
+    engine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    engine.stop();
+    engine.start();
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+    engine.stop();
+  });
+
   it('honours a longer X-Poll-Interval returned by a refresh', async () => {
     const refresh = vi.fn(async () => ({ pollIntervalMs: 5 * MINUTE }));
     const engine = new RefreshEngine({ refresh });

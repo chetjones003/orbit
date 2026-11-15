@@ -9,6 +9,8 @@ import type { RepoService } from './github/repo-service';
 import type { SettingsStore } from './settings';
 import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
+import type { NotificationCenter } from './notification-center';
+import type { NotificationOpenResult } from '../shared/notifications';
 import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
 import type { InboxService } from './github/inbox-service';
@@ -53,6 +55,9 @@ export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
   onChange(listener: (status: ConnectionStatus) => void): () => void;
 };
 
+/** The part of the notification center that IPC needs. */
+export type NotificationsPort = Pick<NotificationCenter, 'open'>;
+
 /** The part of the auth service that IPC needs. Tests can supply a plain object. */
 export type AuthPort = Pick<
   AuthService,
@@ -65,6 +70,7 @@ export interface IpcOptions {
   repos?: Pick<RepoService, 'current'>;
   settings?: SettingsStore;
   refresh?: RefreshPort;
+  notifications?: NotificationsPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
   issues?: Omit<
     Pick<
@@ -118,7 +124,18 @@ export function assertTrustedSender(event: IpcMainInvokeEvent, devServerOrigin?:
 }
 
 export function registerIpcHandlers(options: IpcOptions = {}): void {
-  const { devServerOrigin, auth, repos, settings, refresh, diagnostics, issues, comments, inbox } = options;
+  const {
+    devServerOrigin,
+    auth,
+    repos,
+    settings,
+    refresh,
+    notifications,
+    diagnostics,
+    issues,
+    comments,
+    inbox
+  } = options;
 
   ipcMain.handle(IpcChannels.appGetInfo, (event): AppInfo => {
     assertTrustedSender(event, devServerOrigin);
@@ -132,6 +149,15 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
   if (refresh) registerRefreshHandlers(refresh, devServerOrigin);
+  if (notifications) {
+    ipcMain.handle(
+      IpcChannels.notificationsOpen,
+      (event, threadId: unknown): Promise<NotificationOpenResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        return notifications.open(parseThreadId(threadId));
+      }
+    );
+  }
   if (diagnostics) {
     ipcMain.handle(IpcChannels.diagnosticsRecord, (event, entry: unknown): void => {
       assertTrustedSender(event, devServerOrigin);
@@ -489,6 +515,21 @@ function registerAuthHandlers(auth: AuthPort, devServerOrigin?: string): void {
       win.webContents.send(IpcChannels.authStatusChanged, status);
     }
   });
+}
+
+/** Thread ids come from GitHub and are short numeric strings. Anything else is rejected before it reaches GitHub. */
+export function parseThreadId(input: unknown): string {
+  if (typeof input !== 'string' || input.length < 1 || input.length > 64) {
+    throw new Error('Invalid notification thread.');
+  }
+  return input;
+}
+
+/** Sends a push to every open window. Used for notification deliveries and navigation. */
+export function broadcast(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, payload);
+  }
 }
 
 function registerRefreshHandlers(refresh: RefreshPort, devServerOrigin?: string): void {

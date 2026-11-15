@@ -52,7 +52,7 @@ export async function startFakeGitHub(routes: FakeRoute[] = []): Promise<FakeGit
       res.writeHead(status, { 'content-type': 'application/json', ...headers });
       // A 304 or 204 carries no body. A string sent as text/html is raw markup, as the Markdown preview returns it.
       const rawHtml = typeof body === 'string' && headers['content-type']?.includes('text/html');
-      if (status === 304 || status === 204) res.end();
+      if (status === 304 || status === 204 || status === 205) res.end();
       else res.end(rawHtml ? (body as string) : JSON.stringify(body ?? {}));
     });
   });
