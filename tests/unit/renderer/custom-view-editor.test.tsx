@@ -180,3 +180,136 @@ describe('CustomViewEditor', () => {
     expect(within(screen.getByLabelText('Group by')).getByRole('option', { name: 'Priority' })).toBeDefined();
   });
 });
+
+describe('CustomViewEditor, Gantt and Calendar', () => {
+  const DUE: ProjectField = { id: 'FLD_due', name: 'Due', kind: 'date' };
+  const START: ProjectField = { id: 'FLD_start', name: 'Start', kind: 'date' };
+  const SCHEDULE_FIELDS = [STATUS, SPRINT, START, DUE];
+
+  function view(overrides: Partial<CustomViewDefinition> = {}): CustomViewDefinition {
+    return kanban({
+      layout: 'gantt',
+      columnFieldId: null,
+      ganttSource: 'dates',
+      startFieldId: null,
+      targetFieldId: null,
+      iterationFieldId: null,
+      calendarFieldId: null,
+      calendarScale: 'month',
+      ...overrides
+    });
+  }
+
+  it('offers Gantt and Calendar in the layout list', () => {
+    render(
+      <CustomViewEditor view={kanban()} fields={SCHEDULE_FIELDS} onChange={vi.fn()} onDelete={vi.fn()} />
+    );
+    const options = within(screen.getByLabelText('Layout'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual(['Kanban', 'Table', 'Gantt', 'Calendar']);
+  });
+
+  it('switches to a Calendar, and to a Gantt, keeping the other settings', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <CustomViewEditor view={kanban()} fields={SCHEDULE_FIELDS} onChange={onChange} onDelete={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'calendar' } });
+    expect(onChange).toHaveBeenLastCalledWith(kanban({ layout: 'calendar' }));
+    rerender(
+      <CustomViewEditor
+        view={kanban({ layout: 'gantt' })}
+        fields={SCHEDULE_FIELDS}
+        onChange={onChange}
+        onDelete={vi.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'gantt' } });
+    expect(onChange).toHaveBeenLastCalledWith(kanban({ layout: 'gantt' }));
+  });
+
+  it('asks a Gantt by dates for a start and a target date field, and lists only date fields', () => {
+    render(<CustomViewEditor view={view()} fields={SCHEDULE_FIELDS} onChange={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByLabelText('Bars from')).toHaveValue('dates');
+    const start = within(screen.getByLabelText('Start field'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(start).toEqual(['Choose a field', 'Start', 'Due']);
+    expect(
+      within(screen.getByLabelText('Target field'))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['Choose a field', 'Start', 'Due']);
+  });
+
+  it('sets the start and target dates of a Gantt', () => {
+    const onChange = vi.fn();
+    render(
+      <CustomViewEditor view={view()} fields={SCHEDULE_FIELDS} onChange={onChange} onDelete={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText('Start field'), { target: { value: 'FLD_start' } });
+    expect(onChange).toHaveBeenLastCalledWith(view({ startFieldId: 'FLD_start' }));
+    fireEvent.change(screen.getByLabelText('Target field'), { target: { value: 'FLD_due' } });
+    expect(onChange).toHaveBeenLastCalledWith(view({ targetFieldId: 'FLD_due' }));
+  });
+
+  it('bars from an iteration field, which lists only iteration fields', () => {
+    const onChange = vi.fn();
+    render(
+      <CustomViewEditor
+        view={view({ ganttSource: 'iteration' })}
+        fields={SCHEDULE_FIELDS}
+        onChange={onChange}
+        onDelete={vi.fn()}
+      />
+    );
+    expect(
+      within(screen.getByLabelText('Iteration field'))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['Choose a field', 'Sprint']);
+    fireEvent.change(screen.getByLabelText('Iteration field'), { target: { value: 'FLD_sprint' } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      view({ ganttSource: 'iteration', iterationFieldId: 'FLD_sprint' })
+    );
+    fireEvent.change(screen.getByLabelText('Bars from'), { target: { value: 'dates' } });
+    expect(onChange).toHaveBeenLastCalledWith(view({ ganttSource: 'dates' }));
+  });
+
+  it('asks a Calendar for one date field and a scale of month or week', () => {
+    const onChange = vi.fn();
+    render(
+      <CustomViewEditor
+        view={kanban({ layout: 'calendar', columnFieldId: null, calendarFieldId: 'FLD_due' })}
+        fields={SCHEDULE_FIELDS}
+        onChange={onChange}
+        onDelete={vi.fn()}
+      />
+    );
+    expect(
+      within(screen.getByLabelText('Date field'))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['Choose a field', 'Start', 'Due']);
+    fireEvent.change(screen.getByLabelText('Calendar scale'), { target: { value: 'week' } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      kanban({ layout: 'calendar', columnFieldId: null, calendarFieldId: 'FLD_due', calendarScale: 'week' })
+    );
+  });
+
+  it('asks for a repair when a Gantt start field was deleted, and changes only that field', () => {
+    const onChange = vi.fn();
+    render(
+      <CustomViewEditor
+        view={view({ startFieldId: 'FLD_gone', targetFieldId: 'FLD_due' })}
+        fields={SCHEDULE_FIELDS}
+        onChange={onChange}
+        onDelete={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('alert').textContent).toContain('Start field was removed from this project');
+    fireEvent.change(screen.getByLabelText('Repair start field'), { target: { value: 'FLD_start' } });
+    expect(onChange).toHaveBeenCalledWith(view({ startFieldId: 'FLD_start', targetFieldId: 'FLD_due' }));
+  });
+});

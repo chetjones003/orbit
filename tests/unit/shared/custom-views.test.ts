@@ -11,7 +11,13 @@ const VALID = {
   sort: { fieldId: 'FLD_est', direction: 'asc' },
   groupFieldId: null,
   columnFieldId: 'FLD_status',
-  swimlaneFieldId: 'FLD_prio'
+  swimlaneFieldId: 'FLD_prio',
+  ganttSource: 'dates',
+  startFieldId: null,
+  targetFieldId: null,
+  iterationFieldId: null,
+  calendarFieldId: null,
+  calendarScale: 'month'
 };
 
 describe('parseCustomView', () => {
@@ -33,7 +39,7 @@ describe('parseCustomView', () => {
   });
 
   it('rejects a definition with an unknown layout, an empty name, or a malformed id', () => {
-    expect(parseCustomView({ ...VALID, layout: 'gantt' })).toBeNull();
+    expect(parseCustomView({ ...VALID, layout: 'board' })).toBeNull();
     expect(parseCustomView({ ...VALID, name: '   ' })).toBeNull();
     expect(parseCustomView({ ...VALID, id: 'has spaces' })).toBeNull();
     expect(parseCustomView({ ...VALID, projectId: '' })).toBeNull();
@@ -64,8 +70,50 @@ describe('parseCustomView', () => {
       sort: null,
       groupFieldId: null,
       columnFieldId: null,
-      swimlaneFieldId: null
+      swimlaneFieldId: null,
+      ganttSource: 'dates',
+      startFieldId: null,
+      targetFieldId: null,
+      iterationFieldId: null,
+      calendarFieldId: null,
+      calendarScale: 'month'
     });
+  });
+
+  it('keeps Gantt and Calendar layouts with their schedule fields', () => {
+    const gantt = parseCustomView({
+      ...VALID,
+      layout: 'gantt',
+      ganttSource: 'iteration',
+      iterationFieldId: 'FLD_sprint',
+      startFieldId: 'FLD_start',
+      targetFieldId: 'FLD_end'
+    });
+    expect(gantt).toMatchObject({
+      layout: 'gantt',
+      ganttSource: 'iteration',
+      iterationFieldId: 'FLD_sprint',
+      startFieldId: 'FLD_start',
+      targetFieldId: 'FLD_end'
+    });
+    const calendar = parseCustomView({
+      ...VALID,
+      layout: 'calendar',
+      calendarFieldId: 'FLD_due',
+      calendarScale: 'week'
+    });
+    expect(calendar).toMatchObject({ layout: 'calendar', calendarFieldId: 'FLD_due', calendarScale: 'week' });
+  });
+
+  it('falls back to date pairs and a month calendar for values it cannot read', () => {
+    const parsed = parseCustomView({
+      ...VALID,
+      layout: 'gantt',
+      ganttSource: 'sideways',
+      calendarScale: 'year'
+    });
+    expect(parsed?.ganttSource).toBe('dates');
+    expect(parsed?.calendarScale).toBe('month');
   });
 });
 

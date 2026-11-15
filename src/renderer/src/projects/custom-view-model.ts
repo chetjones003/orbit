@@ -18,7 +18,16 @@ export interface ItemGroup {
   items: ProjectItem[];
 }
 
-export type MappingSlot = 'columnFieldId' | 'swimlaneFieldId' | 'groupFieldId' | 'sort' | 'condition';
+export type MappingSlot =
+  | 'columnFieldId'
+  | 'swimlaneFieldId'
+  | 'groupFieldId'
+  | 'startFieldId'
+  | 'targetFieldId'
+  | 'iterationFieldId'
+  | 'calendarFieldId'
+  | 'sort'
+  | 'condition';
 
 export interface MappingRepair {
   slot: MappingSlot;
@@ -51,10 +60,19 @@ export function findMappingRepairs(view: CustomViewDefinition, fields: ProjectFi
     if (!field) repairs.push({ slot, fieldId, reason: 'missing' });
     else if (!accept(field)) repairs.push({ slot, fieldId, reason: 'wrong-kind' });
   };
-  const groupable = (f: ProjectField) => f.kind === 'single-select' || f.kind === 'iteration';
+  const groupable = isGroupableField;
   check('columnFieldId', view.columnFieldId, groupable);
   check('swimlaneFieldId', view.swimlaneFieldId, groupable);
   check('groupFieldId', view.groupFieldId, groupable);
+  // Only the schedule fields the layout reads are checked, so a stale one on another layout raises nothing.
+  if (view.layout === 'gantt' && view.ganttSource === 'dates') {
+    check('startFieldId', view.startFieldId, isDateField);
+    check('targetFieldId', view.targetFieldId, isDateField);
+  }
+  if (view.layout === 'gantt' && view.ganttSource === 'iteration') {
+    check('iterationFieldId', view.iterationFieldId, isIterationField);
+  }
+  if (view.layout === 'calendar') check('calendarFieldId', view.calendarFieldId, isDateField);
   if (view.sort) check('sort', view.sort.fieldId, () => true);
   for (const condition of view.conditions) {
     const accept = conditionAccepts(condition);
@@ -62,6 +80,12 @@ export function findMappingRepairs(view: CustomViewDefinition, fields: ProjectFi
   }
   return repairs;
 }
+
+/** Fields a Kanban column, swimlane, table group, or Gantt iteration can take: each value is one group. */
+export const isGroupableField = (field: ProjectField) =>
+  field.kind === 'single-select' || field.kind === 'iteration';
+export const isDateField = (field: ProjectField) => field.kind === 'date';
+export const isIterationField = (field: ProjectField) => field.kind === 'iteration';
 
 function conditionAccepts(condition: CustomViewCondition): (field: ProjectField) => boolean {
   switch (condition.kind) {

@@ -1,9 +1,19 @@
 import type { CustomViewDefinition } from '../../../shared/custom-views';
 import type { ProjectField, ProjectFieldInput, ProjectItem } from '../../../shared/projects';
+import { CalendarView } from './CalendarView';
 import { CustomViewEditor } from './CustomViewEditor';
+import { GanttView } from './GanttView';
 import { KanbanView } from './KanbanView';
 import { ProjectTable } from './ProjectTable';
-import { findMappingRepairs, groupItems, viewItems } from './custom-view-model';
+import {
+  findMappingRepairs,
+  groupItems,
+  isDateField,
+  isGroupableField,
+  isIterationField,
+  viewItems
+} from './custom-view-model';
+import { todayIso } from './schedule-model';
 
 export interface CustomViewPanelProps {
   view: CustomViewDefinition;
@@ -21,6 +31,8 @@ export interface CustomViewPanelProps {
   onReorder: (item: ProjectItem, afterId: string | null) => Promise<unknown>;
   onRemove: (item: ProjectItem) => void;
   onOpen: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
+  /** Today, `YYYY-MM-DD`. Defaults to the local date; the Gantt and Calendar open on it. */
+  today?: string;
 }
 
 /**
@@ -37,12 +49,17 @@ export function CustomViewPanel({
   onEdit,
   onReorder,
   onRemove,
-  onOpen
+  onOpen,
+  today = todayIso()
 }: CustomViewPanelProps) {
   const shown = viewItems(items, view, fields);
-  const column = usable(fields, view.columnFieldId);
-  const swimlane = usable(fields, view.swimlaneFieldId);
-  const group = usable(fields, view.groupFieldId);
+  const column = usable(fields, view.columnFieldId, isGroupableField);
+  const swimlane = usable(fields, view.swimlaneFieldId, isGroupableField);
+  const group = usable(fields, view.groupFieldId, isGroupableField);
+  const startField = usable(fields, view.startFieldId, isDateField);
+  const targetField = usable(fields, view.targetFieldId, isDateField);
+  const iterationField = usable(fields, view.iterationFieldId, isIterationField);
+  const calendarField = usable(fields, view.calendarFieldId, isDateField);
   const needsColumn = view.layout === 'kanban' && !column;
   // A broken reference opens the settings, so the repair it needs is visible.
   const repairs = findMappingRepairs(view, fields);
@@ -72,6 +89,30 @@ export function CustomViewPanel({
           onOpen={onOpen}
         />
       )}
+      {view.layout === 'gantt' && (
+        <GanttView
+          source={view.ganttSource}
+          startField={startField}
+          targetField={targetField}
+          iterationField={iterationField}
+          items={shown}
+          today={today}
+          pendingIds={pendingIds}
+          onEdit={onEdit}
+          onOpen={onOpen}
+        />
+      )}
+      {view.layout === 'calendar' && (
+        <CalendarView
+          field={calendarField}
+          scale={view.calendarScale}
+          items={shown}
+          today={today}
+          pendingIds={pendingIds}
+          onEdit={onEdit}
+          onOpen={onOpen}
+        />
+      )}
       {view.layout === 'table' && (
         <ProjectTable
           fields={fields}
@@ -90,10 +131,14 @@ export function CustomViewPanel({
 }
 
 /** The field a mapping points at, when it still exists and can take that role. */
-function usable(fields: ProjectField[], fieldId: string | null): ProjectField | null {
+function usable(
+  fields: ProjectField[],
+  fieldId: string | null,
+  accept: (field: ProjectField) => boolean
+): ProjectField | null {
   if (fieldId === null) return null;
   const field = fields.find((f) => f.id === fieldId);
-  return field && (field.kind === 'single-select' || field.kind === 'iteration') ? field : null;
+  return field && accept(field) ? field : null;
 }
 
 /** Pressing a header sorts ascending, then descending on the second press, and then clears the sort. */

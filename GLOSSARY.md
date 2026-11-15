@@ -29,7 +29,7 @@ _Avoid_: Card (a card is how a board shows an item), row (a row is how a table s
 **Project field**: A custom field of a Project whose value an item can set: single-select, iteration, text, number, or date. Built-in fields such as Title, Labels, and Milestone are read-only and are not offered for editing.
 _Avoid_: Column (a column is one option of a board's grouping field), property
 
-**Custom view**: An Orbit-defined way to show one Project's items as a Kanban or a Table. Gantt and Calendar are planned but not built yet. It exists only in Orbit, not on GitHub.
+**Custom view**: An Orbit-defined way to show one Project's items as a Kanban, a Table, a Gantt, or a Calendar. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view
 
 **Custom view definition**: The settings of one custom view (its name, layout, filters, sort, and field mapping), saved locally. A definition never holds item data.
@@ -41,7 +41,7 @@ _Avoid_: Query, search
 **Visual filter**: A condition a custom view applies to the loaded items, built from a field: is one of chosen options, has no value, or contains text. A condition with no value chosen yet filters nothing.
 _Avoid_: Filter (on its own is ambiguous with the advanced filter)
 
-**Field mapping**: The field a custom view uses for its Kanban columns, its Kanban swimlanes, or its table grouping.
+**Field mapping**: A field a custom view reads for its role: Kanban columns or swimlanes, table grouping, a Gantt's start and target dates or its iteration, or a Calendar's date.
 _Avoid_: Binding, connection
 
 **Mapping suggestion**: A field Orbit proposes for an unset field mapping, such as Status for columns. It takes effect only when the user accepts it.
@@ -52,6 +52,18 @@ _Avoid_: Auto-fix, migration
 
 **Swimlane**: A row band on a custom Kanban view, one for each value of its swimlane field.
 _Avoid_: Row (a row is one item in a table)
+
+**Gantt**: A custom view that draws each scheduled item as a bar across days. Its bars come from a start and target date field pair, or from an iteration field. Dragging a bar moves it, and dragging an end resizes it, and each change is written back to GitHub.
+_Avoid_: Timeline (the axis the bars sit on), Roadmap (GitHub's roadmap layout, which Orbit does not show)
+
+**Bar**: One item's span on a Gantt (the days from its start to its target, or the days of its iteration), or its single day on a Calendar.
+_Avoid_: Card (a Kanban card), event
+
+**Calendar**: A custom view that places each item on the day of its date field, shown by month or by week. Dragging an item to another day reschedules it.
+_Avoid_: Agenda
+
+**Unscheduled**: The items a Gantt or Calendar cannot place because they lack the dates or iteration it needs. They stay visible, and dropping one on a day schedules it.
+_Avoid_: No value group (the group in Kanban and table grouping, which is not tied to dates)
 
 **Manual order**: The item order GitHub stores for the project, shared by every view. A custom Kanban view shows it only when the view has no sort, and dropping a card on another card in the same column moves it in that order on GitHub.
 _Avoid_: Position (the stored value), custom order

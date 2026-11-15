@@ -15,7 +15,13 @@ const CUSTOM_VIEW: CustomViewDefinition = {
   sort: null,
   groupFieldId: null,
   columnFieldId: 'FLD_status',
-  swimlaneFieldId: null
+  swimlaneFieldId: null,
+  ganttSource: 'dates',
+  startFieldId: null,
+  targetFieldId: null,
+  iterationFieldId: null,
+  calendarFieldId: null,
+  calendarScale: 'month'
 };
 
 const dirs: string[] = [];

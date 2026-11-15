@@ -40,7 +40,9 @@ const SPRINT: ProjectField = {
 };
 const ESTIMATE: ProjectField = { id: 'FLD_est', name: 'Estimate', kind: 'number' };
 const NOTES: ProjectField = { id: 'FLD_notes', name: 'Notes', kind: 'text' };
-const FIELDS = [PRIORITY, STATUS, SPRINT, ESTIMATE, NOTES];
+const DUE: ProjectField = { id: 'FLD_due', name: 'Due', kind: 'date' };
+const START: ProjectField = { id: 'FLD_start', name: 'Start', kind: 'date' };
+const FIELDS = [PRIORITY, STATUS, SPRINT, ESTIMATE, NOTES, DUE, START];
 
 function item(id: string, fieldValues: ProjectItem['fieldValues'] = {}): ProjectItem {
   return {
@@ -72,6 +74,12 @@ function definition(overrides: Partial<CustomViewDefinition> = {}): CustomViewDe
     groupFieldId: null,
     columnFieldId: null,
     swimlaneFieldId: null,
+    ganttSource: 'dates',
+    startFieldId: null,
+    targetFieldId: null,
+    iterationFieldId: null,
+    calendarFieldId: null,
+    calendarScale: 'month',
     ...overrides
   };
 }
@@ -119,6 +127,47 @@ describe('findMappingRepairs', () => {
 
   it('reports nothing for a mapping that still matches', () => {
     expect(findMappingRepairs(definition({ columnFieldId: 'FLD_status' }), FIELDS)).toEqual([]);
+  });
+
+  it('checks the schedule fields a Gantt by dates uses: each must be a date field', () => {
+    const repairs = findMappingRepairs(
+      definition({
+        layout: 'gantt',
+        ganttSource: 'dates',
+        startFieldId: 'FLD_status',
+        targetFieldId: 'FLD_gone',
+        iterationFieldId: 'FLD_sprint'
+      }),
+      FIELDS
+    );
+    expect(repairs.map((r) => [r.slot, r.reason])).toEqual([
+      ['startFieldId', 'wrong-kind'],
+      ['targetFieldId', 'missing']
+    ]);
+  });
+
+  it('checks the iteration field a Gantt by iteration uses, and the dates it does not use are ignored', () => {
+    const repairs = findMappingRepairs(
+      definition({
+        layout: 'gantt',
+        ganttSource: 'iteration',
+        iterationFieldId: 'FLD_due',
+        startFieldId: 'FLD_gone'
+      }),
+      FIELDS
+    );
+    expect(repairs.map((r) => [r.slot, r.reason])).toEqual([['iterationFieldId', 'wrong-kind']]);
+  });
+
+  it('checks the calendar date field only on a Calendar view', () => {
+    expect(
+      findMappingRepairs(definition({ layout: 'calendar', calendarFieldId: 'FLD_status' }), FIELDS).map(
+        (r) => [r.slot, r.reason]
+      )
+    ).toEqual([['calendarFieldId', 'wrong-kind']]);
+    expect(findMappingRepairs(definition({ layout: 'kanban', calendarFieldId: 'FLD_gone' }), FIELDS)).toEqual(
+      []
+    );
   });
 });
 
