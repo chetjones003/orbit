@@ -13,6 +13,7 @@ import type {
 } from './projects';
 import type { CustomViewDefinition } from './custom-views';
 import type { NotificationDelivery, NotificationOpenResult } from './notifications';
+import type { UpdateStatus } from './updates';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -110,6 +111,11 @@ export const IpcChannels = {
   notificationsDelivered: 'notifications:delivered',
   /** Main-to-renderer push. Payload is a NotificationOpenResult from a desktop notification click. */
   notificationsNavigate: 'notifications:navigate',
+  updatesGetStatus: 'updates:get-status',
+  updatesCheck: 'updates:check',
+  updatesInstall: 'updates:install',
+  /** Main-to-renderer push. Payload is an UpdateStatus. */
+  updatesStatusChanged: 'updates:status-changed',
   diagnosticsGetReport: 'diagnostics:get-report',
   diagnosticsRecord: 'diagnostics:record',
   settingsGet: 'settings:get',
@@ -183,6 +189,15 @@ export interface OrbitApi {
     onDelivered(listener: (delivery: NotificationDelivery) => void): () => void;
     /** Subscribes to navigation requested by a desktop notification. Returns an unsubscribe function. */
     onNavigate(listener: (result: NotificationOpenResult) => void): () => void;
+  };
+  updates: {
+    getStatus(): Promise<UpdateStatus>;
+    /** Checks GitHub now. Never rejects; failures come back as an error status. */
+    check(): Promise<UpdateStatus>;
+    /** Restarts into or opens the prepared update. Only call after the user confirmed. */
+    install(): Promise<void>;
+    /** Subscribes to status changes. Returns an unsubscribe function. */
+    onStatusChanged(listener: (status: UpdateStatus) => void): () => void;
   };
   refresh: {
     getStatus(): Promise<ConnectionStatus>;

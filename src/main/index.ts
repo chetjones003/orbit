@@ -22,6 +22,8 @@ import { shouldHideOnClose } from './tray-policy';
 import type { NotificationOpenResult } from '../shared/notifications';
 import { createTray } from './tray';
 import { Diagnostics } from './diagnostics';
+import { UpdateService } from './updates/update-service';
+import { createUpdateDriver } from './updates/updater';
 import { SettingsStore } from './settings';
 import { writesAllowed } from '../shared/connection';
 
@@ -161,8 +163,13 @@ if (!app.requestSingleInstanceLock()) {
       client,
       canWrite: () => writesAllowed(engine.getStatus())
     });
+    // Smoke runs skip updates: they must never reach GitHub or install anything.
+    const updateService = smokeReportPath
+      ? null
+      : new UpdateService({ currentVersion: app.getVersion(), ...createUpdateDriver() });
     registerIpcHandlers({
       devServerOrigin,
+      updates: updateService ?? undefined,
       auth,
       repos,
       issues,
@@ -186,9 +193,12 @@ if (!app.requestSingleInstanceLock()) {
     if (!smokeReportPath) {
       tray = createTray({
         show: focusMainWindow,
+        checkForUpdates: () => void updateService?.checkNow(),
         quit: () => app.quit()
       });
     }
+    // Checks at startup and every four hours; the service does nothing for unpackaged builds.
+    updateService?.start();
     if (smokeReportPath) {
       void runSmokeTest(win, smokeReportPath);
     }

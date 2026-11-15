@@ -6,7 +6,11 @@ import { trayMenuItems } from './tray-policy';
  * Creates the system tray icon. Its menu and click behaviour come from trayMenuItems,
  * so the menu is tested without Electron. The icon ships with the app as build/icon.png.
  */
-export function createTray(handlers: { show: () => void; quit: () => void }): Tray {
+export function createTray(handlers: {
+  show: () => void;
+  checkForUpdates: () => void;
+  quit: () => void;
+}): Tray {
   const tray = new Tray(nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png')));
   tray.setToolTip('Orbit');
   const template: MenuItemConstructorOptions[] = trayMenuItems(handlers).map((entry) =>

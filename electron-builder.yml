@@ -9,6 +9,12 @@ files:
   - build/icon.png
   - package.json
 asar: true
+# Public GitHub Releases feed for electron-updater (latest*.yml). CI publishes; local builds never upload.
+publish:
+  provider: github
+  owner: chetjones003
+  repo: orbit
+  releaseType: release
 # Unsigned builds for v1: no code signing or notarization.
 forceCodeSigning: false
 afterPack: scripts/after-pack.cjs

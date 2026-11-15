@@ -3,6 +3,7 @@ import { IpcChannels, type OrbitApi } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
 import type { ConnectionStatus } from '../shared/connection';
 import type { NotificationDelivery, NotificationOpenResult } from '../shared/notifications';
+import type { UpdateStatus } from '../shared/updates';
 
 /**
  * The only bridge between the sandboxed renderer and main. Each operation maps
@@ -41,6 +42,18 @@ const api: OrbitApi = {
       ipcRenderer.on(IpcChannels.notificationsNavigate, handler);
       return () => {
         ipcRenderer.removeListener(IpcChannels.notificationsNavigate, handler);
+      };
+    }
+  },
+  updates: {
+    getStatus: () => ipcRenderer.invoke(IpcChannels.updatesGetStatus),
+    check: () => ipcRenderer.invoke(IpcChannels.updatesCheck),
+    install: () => ipcRenderer.invoke(IpcChannels.updatesInstall),
+    onStatusChanged: (listener: (status: UpdateStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: UpdateStatus): void => listener(status);
+      ipcRenderer.on(IpcChannels.updatesStatusChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.updatesStatusChanged, handler);
       };
     }
   },

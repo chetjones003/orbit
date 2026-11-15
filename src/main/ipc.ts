@@ -9,6 +9,7 @@ import type { RepoService } from './github/repo-service';
 import type { SettingsStore } from './settings';
 import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
+import type { UpdateStatus } from '../shared/updates';
 import type { NotificationCenter } from './notification-center';
 import type { NotificationOpenResult } from '../shared/notifications';
 import type { Diagnostics } from './diagnostics';
@@ -65,6 +66,14 @@ export type RefreshPort = Pick<RefreshEngine, 'refreshNow' | 'wake'> & {
   onChange(listener: (status: ConnectionStatus) => void): () => void;
 };
 
+/** The part of the update service that IPC needs. */
+export type UpdatePort = {
+  getStatus(): UpdateStatus;
+  checkNow(): Promise<UpdateStatus>;
+  install(): Promise<void>;
+  onChange(listener: (status: UpdateStatus) => void): () => void;
+};
+
 /** The part of the notification center that IPC needs. */
 export type NotificationsPort = Pick<NotificationCenter, 'open'>;
 
@@ -80,6 +89,7 @@ export interface IpcOptions {
   repos?: Pick<RepoService, 'current'>;
   settings?: SettingsStore;
   refresh?: RefreshPort;
+  updates?: UpdatePort;
   notifications?: NotificationsPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
   issues?: Omit<
@@ -151,6 +161,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     repos,
     settings,
     refresh,
+    updates,
     notifications,
     diagnostics,
     issues,
@@ -171,6 +182,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
 
   if (auth) registerAuthHandlers(auth, devServerOrigin);
   if (refresh) registerRefreshHandlers(refresh, devServerOrigin);
+  if (updates) registerUpdateHandlers(updates, devServerOrigin);
   if (notifications) {
     ipcMain.handle(
       IpcChannels.notificationsOpen,
@@ -553,6 +565,23 @@ export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload);
   }
+}
+
+function registerUpdateHandlers(updates: UpdatePort, devServerOrigin?: string): void {
+  ipcMain.handle(IpcChannels.updatesGetStatus, (event): UpdateStatus => {
+    assertTrustedSender(event, devServerOrigin);
+    return updates.getStatus();
+  });
+  ipcMain.handle(IpcChannels.updatesCheck, (event): Promise<UpdateStatus> => {
+    assertTrustedSender(event, devServerOrigin);
+    return updates.checkNow();
+  });
+  // Installing happens only on an explicit renderer request, after the user confirmed a restart.
+  ipcMain.handle(IpcChannels.updatesInstall, (event): Promise<void> => {
+    assertTrustedSender(event, devServerOrigin);
+    return updates.install();
+  });
+  updates.onChange((status) => broadcast(IpcChannels.updatesStatusChanged, status));
 }
 
 function registerRefreshHandlers(refresh: RefreshPort, devServerOrigin?: string): void {

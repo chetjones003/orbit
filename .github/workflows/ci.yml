@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
   workflow_dispatch:
+  # The release workflow reuses these checks before it publishes a tag.
+  workflow_call:
 
 permissions:
   contents: read
@@ -141,5 +143,7 @@ jobs:
             release/*.dmg
             release/*.AppImage
             release/*.deb
+            release/*.blockmap
+            release/latest*.yml
           if-no-files-found: error
           retention-days: 7
