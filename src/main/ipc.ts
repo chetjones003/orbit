@@ -29,7 +29,12 @@ import type {
   PullListPage,
   PullDetail,
   PullFilesPage,
-  PullReviewThreadsPage
+  PullReviewThreadsPage,
+  PullReviewState,
+  ReviewAnchor,
+  ReviewCommentResult,
+  ReviewEvent,
+  ReviewSubmitResult
 } from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
@@ -67,7 +72,19 @@ export interface IpcOptions {
     >,
     'getPullDetail'
   > &
-    Partial<Pick<IssueService, 'listPulls' | 'getPullFiles' | 'getPullReviewThreads'>> & {
+    Partial<
+      Pick<
+        IssueService,
+        | 'listPulls'
+        | 'getPullFiles'
+        | 'getPullReviewThreads'
+        | 'getPullReviewState'
+        | 'addReviewComment'
+        | 'replyToReviewThread'
+        | 'setReviewThreadResolved'
+        | 'submitReview'
+      >
+    > & {
       getPullDetail(repoFullName: string, number: number): Promise<IssueDetail | PullDetail>;
     };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
@@ -151,6 +168,67 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
         assertTrustedSender(event, devServerOrigin);
         if (!issues.getPullReviewThreads) throw new Error('Review threads are unavailable.');
         return issues.getPullReviewThreads(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsReviewState,
+      (event, repoFullName: string, number: number): Promise<PullReviewState> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getPullReviewState) throw new Error('Pending reviews are unavailable.');
+        return issues.getPullReviewState(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsReviewComment,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { anchor: ReviewAnchor; body: string; reviewedHeadSha: string }
+      ): Promise<ReviewCommentResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.addReviewComment) throw new Error('Pending reviews are unavailable.');
+        return issues.addReviewComment(repoFullName, number, input);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsReviewReply,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { threadId: string; body: string; reviewedHeadSha: string }
+      ): Promise<ReviewCommentResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.replyToReviewThread) throw new Error('Pending reviews are unavailable.');
+        return issues.replyToReviewThread(repoFullName, number, input);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsReviewResolve,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        threadId: string,
+        resolved: boolean
+      ): Promise<boolean> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.setReviewThreadResolved) throw new Error('Review threads are unavailable.');
+        return issues.setReviewThreadResolved(repoFullName, number, threadId, resolved === true);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsReviewSubmit,
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        input: { event: ReviewEvent; body: string; reviewedHeadSha: string }
+      ): Promise<ReviewSubmitResult> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.submitReview) throw new Error('Review submission is unavailable.');
+        return issues.submitReview(repoFullName, number, input);
       }
     );
     ipcMain.handle(

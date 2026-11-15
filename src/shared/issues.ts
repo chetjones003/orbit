@@ -239,3 +239,53 @@ export interface IssueRepoOptions {
   /** True when a list was full, so the repo may offer choices that are not shown. */
   partial: boolean;
 }
+
+/** Which side of the diff a review comment is anchored to: LEFT is the old file, RIGHT is the new one. */
+export type ReviewSide = 'LEFT' | 'RIGHT';
+
+/** What the user can submit a review as. Approve and request changes are refused on the user's own pull request. */
+export type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+
+/** A line of a changed file that a review comment is written against. */
+export interface ReviewAnchor {
+  path: string;
+  side: ReviewSide;
+  line: number;
+}
+
+/** A comment in the user's pending review: saved on GitHub, not yet visible to others. */
+export interface PendingReviewComment {
+  id: number;
+  path: string;
+  side: ReviewSide;
+  line: number | null;
+  body: string;
+}
+
+export interface PendingReview {
+  /** GitHub's node id for the review, used to attach replies and to submit it. */
+  id: string;
+  /** The commit the review was started on. Its comments stay at their anchors on that commit. */
+  commitSha: string;
+  comments: PendingReviewComment[];
+  /** True when the review has more comments than were read. */
+  commentsPartial: boolean;
+}
+
+export interface PullReviewState {
+  /** The pull request's current head commit. */
+  headSha: string;
+  /** True when the signed-in account wrote the pull request. */
+  isOwnPull: boolean;
+  /** The user's pending review, recovered from GitHub. Null when they have none. */
+  pending: PendingReview | null;
+}
+
+/**
+ * Saved, or the pull request's head moved after the commit the user reviewed. Nothing is written
+ * in the second case; the user must refresh and acknowledge the new commits.
+ */
+export type ReviewCommentResult =
+  { kind: 'saved'; comment: PendingReviewComment } | { kind: 'new-commits'; headSha: string };
+
+export type ReviewSubmitResult = { kind: 'submitted' } | { kind: 'new-commits'; headSha: string };

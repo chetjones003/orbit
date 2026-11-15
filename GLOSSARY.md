@@ -60,6 +60,16 @@ _Avoid_: Patch view, changes tab
 
 **Review thread**: A line-anchored discussion on a pull request's diff, with its replies. It can be resolved, and it is outdated once the code it was written against has changed. An outdated thread keeps its original diff context.
 _Avoid_: Review comment (a single comment within a thread), inline comment
+
+**Pending review**: The signed-in user's unsubmitted review, held on GitHub. Orbit keeps no copy: it finds the pending review on GitHub when the pull request's review is opened. Comments and replies go into it until the user submits it.
+_Avoid_: Draft review (drafts are never stored locally), saved review
+
+**Reviewed commit**: The head commit the user has acknowledged while reviewing. When the pull request gets new commits, Orbit pauses comments and submission until the user refreshes and acknowledges them, and it refuses to submit against a head that has moved. Pending comments stay at the anchors they were written on.
+_Avoid_: Head (the head is the latest commit; the reviewed commit is the one the user saw)
+
+**Review outcome**: Comment, Approve, or Request changes. Approve and Request changes are unavailable on the user's own pull request.
+_Avoid_: Verdict, review state
+
 **Partial list**: An issue or comment list that Orbit could not fully load or read. It is shown with a notice that it may be incomplete, never as the full result.
 _Avoid_: Partial page (a list can be partial without being paged)
 

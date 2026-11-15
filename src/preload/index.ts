@@ -64,7 +64,17 @@ const api: OrbitApi = {
     files: (repoFullName: string, number: number) =>
       ipcRenderer.invoke(IpcChannels.pullsFiles, repoFullName, number),
     threads: (repoFullName: string, number: number) =>
-      ipcRenderer.invoke(IpcChannels.pullsThreads, repoFullName, number)
+      ipcRenderer.invoke(IpcChannels.pullsThreads, repoFullName, number),
+    reviewState: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.pullsReviewState, repoFullName, number),
+    addReviewComment: (repoFullName: string, number: number, input) =>
+      ipcRenderer.invoke(IpcChannels.pullsReviewComment, repoFullName, number, input),
+    replyToReviewThread: (repoFullName: string, number: number, input) =>
+      ipcRenderer.invoke(IpcChannels.pullsReviewReply, repoFullName, number, input),
+    setReviewThreadResolved: (repoFullName: string, number: number, threadId: string, resolved: boolean) =>
+      ipcRenderer.invoke(IpcChannels.pullsReviewResolve, repoFullName, number, threadId, resolved),
+    submitReview: (repoFullName: string, number: number, input) =>
+      ipcRenderer.invoke(IpcChannels.pullsReviewSubmit, repoFullName, number, input)
   },
   markdown: {
     preview: (repoFullName: string, text: string) =>
