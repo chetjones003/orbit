@@ -110,13 +110,13 @@ test.describe('notifications flow (unpacked build)', () => {
 
       await toast.click();
 
-      // Opening marks the thread read on GitHub and navigates to its repo.
+      // Opening marks the thread read on GitHub and opens the item it is about, full screen.
       await expect
         .poll(() =>
           github.requests.some((r) => r.method === 'PATCH' && r.path === '/notifications/threads/42')
         )
         .toBe(true);
-      await expect(window.getByRole('heading', { name: 'orbit-owner/app', level: 2 })).toBeVisible();
+      await expect(window.locator('.issues-expanded')).toBeVisible();
       await expect(toast).toHaveCount(0);
     } finally {
       await app.close();
