@@ -49,3 +49,17 @@ describe('downloadVerified', () => {
     expect(existsSync(dest)).toBe(false);
   });
 });
+
+describe('downloadVerified destination', () => {
+  it('creates a missing destination folder before writing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orbit-dl-'));
+    const dest = join(dir, 'orbit-updates', 'Orbit.dmg');
+    await downloadVerified({
+      url: 'https://example.test/a.dmg',
+      sha512: SHA512,
+      dest,
+      fetch: fakeFetch(CONTENT)
+    });
+    expect(readFileSync(dest, 'utf8')).toBe(CONTENT);
+  });
+});

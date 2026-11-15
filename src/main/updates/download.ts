@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { dirname } from 'node:path';
 
 export interface VerifiedDownloadOptions {
   url: string;
@@ -22,6 +23,7 @@ export async function downloadVerified(options: VerifiedDownloadOptions): Promis
   if (!response.ok || !response.body) {
     throw new Error(`Download failed with HTTP ${response.status}`);
   }
+  await mkdir(dirname(options.dest), { recursive: true });
   const hash = createHash('sha512');
   const body = Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]);
   body.on('data', (chunk: Buffer) => hash.update(chunk));

@@ -16,7 +16,7 @@ describe('shouldHideOnClose', () => {
 });
 
 describe('trayMenuItems', () => {
-  it('offers Show Orbit, Check for Updates, and Quit Orbit, wired to the given handlers', () => {
+  it('offers Show Orbit, Check for updates, and Quit Orbit, wired to the given handlers', () => {
     const show = vi.fn();
     const checkForUpdates = vi.fn();
     const quit = vi.fn();
@@ -24,7 +24,7 @@ describe('trayMenuItems', () => {
 
     expect(items.map((entry) => entry.label)).toEqual([
       'Show Orbit',
-      'Check for Updates',
+      'Check for updates',
       undefined,
       'Quit Orbit'
     ]);

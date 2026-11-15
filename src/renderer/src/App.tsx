@@ -70,6 +70,9 @@ export function App() {
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' });
+  const checkForUpdates = useCallback(() => {
+    void window.orbit.updates.check().then(setUpdateStatus, () => undefined);
+  }, []);
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<string | null>(null);
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
@@ -525,9 +528,7 @@ export function App() {
             )}
             <button
               className="secondary-action"
-              onClick={() => {
-                void window.orbit.updates.check().then(setUpdateStatus, () => undefined);
-              }}
+              onClick={checkForUpdates}
               disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'downloading'}
             >
               Check for updates
@@ -731,9 +732,7 @@ export function App() {
             )}
             <UpdateBanner
               status={updateStatus}
-              onCheck={() => {
-                void window.orbit.updates.check().then(setUpdateStatus, () => undefined);
-              }}
+              onCheck={checkForUpdates}
               onInstall={() => window.orbit.updates.install()}
               hasUnsavedDrafts={() => drafts.hasDrafts()}
             />

@@ -198,7 +198,7 @@ if (!app.requestSingleInstanceLock()) {
       });
     }
     // Checks at startup and every four hours; the service does nothing for unpackaged builds.
-    updateService?.start();
+    if (app.isPackaged) updateService?.start();
     if (smokeReportPath) {
       void runSmokeTest(win, smokeReportPath);
     }

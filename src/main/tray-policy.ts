@@ -22,7 +22,7 @@ export function trayMenuItems(handlers: {
 }): TrayMenuEntry[] {
   return [
     { label: 'Show Orbit', onSelect: handlers.show },
-    { label: 'Check for Updates', onSelect: handlers.checkForUpdates },
+    { label: 'Check for updates', onSelect: handlers.checkForUpdates },
     { separator: true },
     { label: 'Quit Orbit', onSelect: handlers.quit }
   ];

@@ -172,7 +172,7 @@ _Avoid_: Notification (the word for the GitHub item itself)
 
 **Desktop notification**: A native Windows notification shown only while Orbit is not focused, in place of a toast. Clicking it brings Orbit forward and opens the item.
 
-**Tray**: Orbit's system tray icon. Closing the window hides it to the tray instead of quitting, and the tray menu offers Show Orbit, Check for Updates, and Quit Orbit.
+**Tray**: Orbit's system tray icon. Closing the window hides it to the tray instead of quitting, and the tray menu offers Show Orbit, Check for updates, and Quit Orbit.
 _Avoid_: Background mode, minimise
 
 **Release**: A published version of Orbit: a GitHub Release created from a `vX.Y.Z` tag on main whose version matches package.json. It carries the installers and the `latest*.yml` metadata that installed copies read.

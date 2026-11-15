@@ -65,9 +65,7 @@ export function createUpdateDriver(): Pick<UpdateServiceOptions, 'check' | 'prep
         const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
         const file = pickMacAsset(release.files, arch);
         if (!file) throw new Error(`No ${arch} DMG in release ${release.version}`);
-        const dest = join(downloadDir, basename(file.url));
-        await downloadVerified({ url: assetUrl(release.version, file.url), sha512: file.sha512, dest });
-        onProgress(100);
+        const dest = await fetchAsset(file, release.version, downloadDir, onProgress);
         const failure = await shell.openPath(dest);
         if (failure) throw new Error('The downloaded DMG could not be opened');
         return {
@@ -79,9 +77,7 @@ export function createUpdateDriver(): Pick<UpdateServiceOptions, 'check' | 'prep
       if (mode === 'linux-deb') {
         const file = release.files.find((entry) => entry.url.endsWith('.deb'));
         if (!file) throw new Error(`No .deb in release ${release.version}`);
-        const dest = join(downloadDir, basename(file.url));
-        await downloadVerified({ url: assetUrl(release.version, file.url), sha512: file.sha512, dest });
-        onProgress(100);
+        const dest = await fetchAsset(file, release.version, downloadDir, onProgress);
         return {
           status: { kind: 'ready', version: release.version, releaseNotes: release.releaseNotes },
           install: () => installDeb(dest)
@@ -103,6 +99,19 @@ export function createUpdateDriver(): Pick<UpdateServiceOptions, 'check' | 'prep
       };
     }
   };
+}
+
+/** Downloads one release file, verifies it, and returns where it was saved. */
+async function fetchAsset(
+  file: ReleaseFile,
+  version: string,
+  dir: string,
+  onProgress: (percent: number) => void
+): Promise<string> {
+  const dest = join(dir, basename(file.url));
+  await downloadVerified({ url: assetUrl(version, file.url), sha512: file.sha512, dest });
+  onProgress(100);
+  return dest;
 }
 
 function assetUrl(version: string, name: string): string {
