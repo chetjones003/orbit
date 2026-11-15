@@ -215,6 +215,8 @@ describe('ProjectsView', () => {
     await screen.findByText('Write docs');
     const added = item('issue-9', 'New thing', null);
     api.projects.addItem.mockResolvedValue(added);
+    // The view is filtered, so Orbit reloads from GitHub, which is what returns the new item.
+    api.projects.items.mockResolvedValue({ items: [...items, added], partial: false });
     fireEvent.change(screen.getByLabelText('Add an item'), { target: { value: 'orbit-owner/app#9' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add to project' }));
     await waitFor(() => expect(api.projects.addItem).toHaveBeenCalledWith('PVT_1', 'orbit-owner/app', 9));

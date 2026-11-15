@@ -360,6 +360,8 @@ export class ProjectsService {
     if (this.pending.has(itemId)) return { kind: 'busy' };
     this.pending.add(itemId);
     let session: { token: string; scope: string } | null = null;
+    // Set once GitHub has confirmed the write, so a later read failure cannot report it as unsaved.
+    let confirmed = false;
     try {
       const current = await this.session();
       session = current;
@@ -373,6 +375,7 @@ export class ProjectsService {
             : { applied: false };
         }
       });
+      confirmed = true;
       const item = await this.readItem(itemId, current.token, current.scope);
       if (!item) return { kind: 'failed', item: null, message: 'That item is no longer in the project.' };
       return { kind: 'saved', item };
@@ -381,6 +384,12 @@ export class ProjectsService {
       const item = session
         ? await this.readItem(itemId, session.token, session.scope).catch(() => null)
         : null;
+      if (confirmed) {
+        // The write landed; only the read-back failed. Report it as saved when the value can now be read.
+        return item
+          ? { kind: 'saved', item }
+          : { kind: 'failed', item: null, message: 'The change saved, but GitHub could not be read back.' };
+      }
       return { kind: 'failed', item, message: messageOf(error, 'GitHub could not save this change.') };
     } finally {
       this.pending.delete(itemId);

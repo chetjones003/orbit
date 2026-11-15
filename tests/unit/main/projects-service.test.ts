@@ -606,4 +606,25 @@ describe('ProjectsService writes', () => {
     });
     expect(gh.writes('clearProjectV2ItemFieldValue')).toHaveLength(0);
   });
+
+  it('reports a save as saved when only the read-back after the write fails', async () => {
+    let reads = 0;
+    const gh = fakeGitHub((q) => {
+      if (q.includes('updateProjectV2ItemFieldValue('))
+        return { updateProjectV2ItemFieldValue: { projectV2Item: { id: ITEM_ID } } };
+      if (isItemRead(q)) {
+        reads++;
+        // The first read after the write fails; the next one succeeds and shows the saved value.
+        if (reads === 1) return new Response('{}', { status: 502 });
+        return { node: issueItem('opt_done') };
+      }
+      return {};
+    });
+    const result = await service(gh).setFieldValue(PROJECT_ID, ITEM_ID, {
+      fieldId: 'FLD_status',
+      value: { kind: 'single-select', optionId: 'opt_done' }
+    });
+    expect(gh.writes('updateProjectV2ItemFieldValue')).toHaveLength(1);
+    expect(result.kind).toBe('saved');
+  });
 });

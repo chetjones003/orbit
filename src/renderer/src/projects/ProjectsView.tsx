@@ -35,6 +35,13 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   const [addText, setAddText] = useState('');
   const pendingRef = useRef(new Set<string>());
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
+  // The project on screen now, so a late add result can tell whether it still belongs here.
+  const projectIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
+  // The filter of the view on screen now. Saves and adds read it when they finish, not when they start.
+  const filterRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +76,9 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   }, [projectId]);
 
   const view = detail?.views.find((v) => v.id === viewId) ?? null;
+  useEffect(() => {
+    filterRef.current = view?.filter ?? '';
+  }, [view]);
 
   // Items follow the selected view's filter. GitHub applies the filter, so Orbit only shows the result.
   useEffect(() => {
@@ -112,15 +122,21 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     replaceItem(item.id, withFieldValue(item, field, value));
     try {
       const result = await window.orbit.projects.setField(projectId, item.id, { fieldId: field.id, value });
-      // Busy means another save on this item is running, so the local copy can't be trusted: reload.
+      // Busy: another save on this item is still running, which will not refresh this row. Restore the row as it was before this edit.
+      if (result.kind === 'busy') {
+        replaceItem(item.id, item);
+        return;
+      }
       // A null item means GitHub could not be read back, so the row stays until a reload confirms it.
-      if (result.kind === 'busy' || result.item === null) {
+      if (result.item === null) {
         if (result.kind === 'failed') setMessage(result.message);
         setReloadKey((key) => key + 1);
         return;
       }
       replaceItem(item.id, result.item);
       if (result.kind === 'failed') setMessage(result.message);
+      // A filtered view may stop or start matching after a save, so GitHub decides which items it shows.
+      else if (filterRef.current !== '') setReloadKey((key) => key + 1);
     } catch (error) {
       setMessage(messageOf(error, 'This change could not be saved.'));
       setReloadKey((key) => key + 1);
@@ -151,10 +167,14 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
       return;
     }
     setMessage(null);
+    const target = projectId;
     try {
-      const added = await window.orbit.projects.addItem(projectId, ref.repoFullName, ref.number);
-      setItems((prev) => (prev.some((item) => item.id === added.id) ? prev : [...prev, added]));
+      await window.orbit.projects.addItem(target, ref.repoFullName, ref.number);
       setAddText('');
+      // The user moved to another project while this was saving; the item belongs to the one it was added to.
+      if (projectIdRef.current !== target) return;
+      // Let GitHub decide whether the added item belongs in the view on screen now.
+      setReloadKey((key) => key + 1);
     } catch (error) {
       setMessage(messageOf(error, 'The item could not be added.'));
     }

@@ -97,8 +97,13 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
     replaceItem(item.id, withFieldValue(item, field, value));
     try {
       const result = await window.orbit.projects.setField(project.id, item.id, { fieldId: field.id, value });
-      // Busy or unreadable: reload from GitHub rather than trust the local copy or drop the membership.
-      if (result.kind === 'busy' || result.item === null) {
+      // Busy: another save on this item is still running and will not refresh this panel. Restore the row as it was before this edit.
+      if (result.kind === 'busy') {
+        replaceItem(item.id, item);
+        return;
+      }
+      // Unreadable: reload from GitHub rather than trust the local copy or drop the membership.
+      if (result.item === null) {
         if (result.kind === 'failed') setMessage(result.message);
         setReloadKey((key) => key + 1);
         return;
