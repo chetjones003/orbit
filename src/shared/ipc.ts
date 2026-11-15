@@ -14,7 +14,10 @@ import type {
   IssueRepoOptions,
   IssueSnapshot,
   IssueSummary,
-  TaskToggleResult
+  TaskToggleResult,
+  PullListQuery,
+  PullListPage,
+  PullDetail
 } from './issues';
 
 /**
@@ -41,6 +44,7 @@ export const IpcChannels = {
   issuesRepoOptions: 'issues:repo-options',
   issuesSetTask: 'issues:set-task',
   pullsDetail: 'pulls:detail',
+  pullsList: 'pulls:list',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
@@ -161,7 +165,8 @@ export interface OrbitApi {
     ): Promise<TaskToggleResult>;
   };
   pulls: {
-    detail(repoFullName: string, number: number): Promise<IssueDetail>;
+    list(query: PullListQuery): Promise<PullListPage>;
+    detail(repoFullName: string, number: number): Promise<PullDetail>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */

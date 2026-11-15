@@ -149,6 +149,26 @@ describe('IssueService.listIssues', () => {
   });
 });
 
+describe('IssueService.listPulls', () => {
+  it('requests a repository pull list with filters and maps branch and draft details', async () => {
+    const pull = issue(4, { draft: true, head: { ref: 'feature/x' }, base: { ref: 'main' } });
+    delete (pull as { comments?: number }).comments;
+    const fetch = vi.fn(async (_url: string) => jsonResponse([pull]));
+    const service = makeService(fetch as unknown as typeof globalThis.fetch);
+    const page = await service.listPulls({
+      repoFullName: 'orbit-owner/app',
+      state: 'open',
+      label: 'bug',
+      author: 'someone',
+      page: 1
+    });
+    expect(String(fetch.mock.calls[0]?.[0])).toContain(
+      '/repos/orbit-owner/app/pulls?state=open&per_page=100&page=1'
+    );
+    expect(page.items[0]).toMatchObject({ number: 4, draft: true, headRef: 'feature/x', baseRef: 'main' });
+  });
+});
+
 describe('IssueService.getIssueDetail', () => {
   const comment = (id: number, overrides: Record<string, unknown> = {}) => ({
     id,
