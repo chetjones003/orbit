@@ -2,6 +2,7 @@ import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
+import type { NotificationDelivery, NotificationOpenResult } from './notifications';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -86,6 +87,11 @@ export const IpcChannels = {
   refreshGetStatus: 'refresh:get-status',
   /** Main-to-renderer push. Payload is a ConnectionStatus. */
   refreshStatusChanged: 'refresh:status-changed',
+  notificationsOpen: 'notifications:open',
+  /** Main-to-renderer push. Payload is a NotificationDelivery for in-app toasts. */
+  notificationsDelivered: 'notifications:delivered',
+  /** Main-to-renderer push. Payload is a NotificationOpenResult from a desktop notification click. */
+  notificationsNavigate: 'notifications:navigate',
   diagnosticsGetReport: 'diagnostics:get-report',
   diagnosticsRecord: 'diagnostics:record',
   settingsGet: 'settings:get',
@@ -155,6 +161,14 @@ export interface OrbitApi {
     signOut(): Promise<AuthStatus>;
     /** Subscribes to status changes. Returns an unsubscribe function. */
     onStatusChanged(listener: (status: AuthStatus) => void): () => void;
+  };
+  notifications: {
+    /** Marks the thread read and returns the item it leads to. Failure to mark read is reported, not thrown. */
+    open(threadId: string): Promise<NotificationOpenResult>;
+    /** Subscribes to new notification deliveries. Returns an unsubscribe function. */
+    onDelivered(listener: (delivery: NotificationDelivery) => void): () => void;
+    /** Subscribes to navigation requested by a desktop notification. Returns an unsubscribe function. */
+    onNavigate(listener: (result: NotificationOpenResult) => void): () => void;
   };
   refresh: {
     getStatus(): Promise<ConnectionStatus>;

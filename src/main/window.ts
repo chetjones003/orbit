@@ -10,6 +10,8 @@ export interface WindowOptions {
   show?: boolean;
   windowState?: WindowState | null;
   saveWindowState?: (state: WindowState) => void;
+  /** Asked when the window closes. True hides it instead, so notifications keep arriving from the tray. */
+  hideOnClose?: () => boolean;
 }
 
 /** Web preferences every renderer window uses. Never relaxed, including for tests. */
@@ -61,7 +63,11 @@ export function createMainWindow(options: WindowOptions = {}): BrowserWindow {
   win.on('move', saveState);
   win.on('maximize', saveState);
   win.on('unmaximize', saveState);
-  win.on('close', () => {
+  win.on('close', (event) => {
+    if (options.hideOnClose?.()) {
+      event.preventDefault();
+      win.hide();
+    }
     if (saveTimer) clearTimeout(saveTimer);
     persistState();
   });

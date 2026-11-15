@@ -12,6 +12,13 @@ import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
+import { NotificationToasts, type NotificationToast } from './notifications/NotificationToasts';
+import {
+  describeItem,
+  describeSummary,
+  type NotificationOpenResult,
+  type NotificationTarget
+} from '../../shared/notifications';
 import { IssueList } from './issues/IssueList';
 import { PullList } from './issues/PullList';
 import { Inbox } from './inbox/Inbox';
@@ -27,6 +34,10 @@ interface IssueRef {
 }
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
+/** Seconds-scale toasts go away on their own; errors stay until dismissed so they are not missed. */
+const NOTIFICATION_TOAST_MS = 6000;
+/** Newest notifications kept on screen. Older ones are dropped rather than queued without limit. */
+const NOTIFICATION_QUEUE_LIMIT = 20;
 /** Focus refetches only when the last successful refresh is at least this old. */
 const FOCUS_REFRESH_MS = 60_000;
 
@@ -53,6 +64,9 @@ export function App() {
   const [refreshStatus, setRefreshStatus] = useState<ConnectionStatus | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<string | null>(null);
+  const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
+  const reposRef = useRef<PersonalRepo[]>([]);
+  reposRef.current = repos;
 
   const updateSettings = useCallback(async (update: SettingsUpdate) => {
     const next = await window.orbit.settings.update(update);
@@ -165,6 +179,95 @@ export function App() {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(timer);
   }, [needsClock]);
+
+  // Notification toasts and navigation. Deliveries arrive from main; a failed mark-read is shown as an error toast.
+  const toastIds = useRef(0);
+  const toastTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const pushToasts = useCallback((entries: Array<Omit<NotificationToast, 'id'>>) => {
+    const added = entries.map((entry) => ({ ...entry, id: ++toastIds.current }));
+    setNotificationToasts((current) => [...current, ...added].slice(-NOTIFICATION_QUEUE_LIMIT));
+    for (const entry of added) {
+      if (entry.tone !== 'info') continue;
+      const timer = setTimeout(() => {
+        toastTimers.current.delete(timer);
+        setNotificationToasts((current) => current.filter((item) => item.id !== entry.id));
+      }, NOTIFICATION_TOAST_MS);
+      toastTimers.current.add(timer);
+    }
+  }, []);
+
+  /** Opens a notification's issue or pull request in the repo view, when the repo is in the signed-in user's list. */
+  const navigateToTarget = useCallback(
+    (target: NotificationTarget) => {
+      const repo = reposRef.current.find((candidate) => candidate.fullName === target.repoFullName);
+      if (!repo) {
+        pushToasts([
+          {
+            title: 'Notification not opened',
+            body: `${target.repoFullName} is not in your repository list.`,
+            threadId: null,
+            tone: 'error'
+          }
+        ]);
+        return;
+      }
+      setSelectedRepoId(repo.id);
+      setIssuesRepo(repo);
+      setPullMode(target.kind === 'pull');
+      setIssueRef({ repoFullName: target.repoFullName, number: target.number, kind: target.kind });
+    },
+    [pushToasts]
+  );
+
+  const applyOpenResult = useCallback(
+    (result: NotificationOpenResult) => {
+      if (result.markReadError) {
+        pushToasts([
+          {
+            title: 'Could not mark notification as read',
+            body: `${result.markReadError} It stays unread.`,
+            threadId: null,
+            tone: 'error'
+          }
+        ]);
+      }
+      if (result.target) navigateToTarget(result.target);
+    },
+    [pushToasts, navigateToTarget]
+  );
+
+  const openNotification = useCallback(
+    (threadId: string) => {
+      // The toast is answered by opening it, so it goes away now rather than on its timer.
+      setNotificationToasts((current) => current.filter((item) => item.threadId !== threadId));
+      void window.orbit.notifications.open(threadId).then(applyOpenResult, () => undefined);
+    },
+    [applyOpenResult]
+  );
+
+  useEffect(() => {
+    const timers = toastTimers.current;
+    const unsubscribeDelivered = window.orbit.notifications.onDelivered((delivery) => {
+      if (delivery.kind === 'items') {
+        pushToasts(
+          delivery.items.map((item) => ({
+            ...describeItem(item),
+            threadId: item.threadId,
+            tone: 'info' as const
+          }))
+        );
+      } else {
+        pushToasts([{ ...describeSummary(delivery.count, !delivery.desktop), threadId: null, tone: 'info' }]);
+      }
+    });
+    const unsubscribeNavigate = window.orbit.notifications.onNavigate(applyOpenResult);
+    return () => {
+      unsubscribeDelivered();
+      unsubscribeNavigate();
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+    };
+  }, [pushToasts, applyOpenResult]);
 
   useEffect(() => {
     if (!toast) return;
@@ -628,6 +731,11 @@ export function App() {
           />
         )}
         {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+        <NotificationToasts
+          toasts={notificationToasts}
+          onOpen={openNotification}
+          onDismiss={(id) => setNotificationToasts((current) => current.filter((item) => item.id !== id))}
+        />
       </section>
 
       {status?.kind === 'signed-in' && detailsOpen && (

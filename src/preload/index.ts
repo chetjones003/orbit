@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IpcChannels, type OrbitApi } from '../shared/ipc';
 import type { AuthStatus } from '../shared/auth';
 import type { ConnectionStatus } from '../shared/connection';
+import type { NotificationDelivery, NotificationOpenResult } from '../shared/notifications';
 
 /**
  * The only bridge between the sandboxed renderer and main. Each operation maps
@@ -23,6 +24,23 @@ const api: OrbitApi = {
       ipcRenderer.on(IpcChannels.authStatusChanged, handler);
       return () => {
         ipcRenderer.removeListener(IpcChannels.authStatusChanged, handler);
+      };
+    }
+  },
+  notifications: {
+    open: (threadId: string) => ipcRenderer.invoke(IpcChannels.notificationsOpen, threadId),
+    onDelivered: (listener: (delivery: NotificationDelivery) => void) => {
+      const handler = (_event: IpcRendererEvent, delivery: NotificationDelivery): void => listener(delivery);
+      ipcRenderer.on(IpcChannels.notificationsDelivered, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.notificationsDelivered, handler);
+      };
+    },
+    onNavigate: (listener: (result: NotificationOpenResult) => void) => {
+      const handler = (_event: IpcRendererEvent, result: NotificationOpenResult): void => listener(result);
+      ipcRenderer.on(IpcChannels.notificationsNavigate, handler);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.notificationsNavigate, handler);
       };
     }
   },

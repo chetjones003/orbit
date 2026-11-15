@@ -122,7 +122,8 @@ export class GitHubClient {
       init.body = JSON.stringify(options.body);
     }
     const response = await this.dispatch(url, init, false);
-    if (response.status === 204) return undefined as T;
+    // 204 and 205 carry no body (205 Reset Content is what marking a notification read returns).
+    if (response.status === 204 || response.status === 205) return undefined as T;
     if (options.text) return (await response.text()) as T;
     return (await response.json()) as T;
   }
