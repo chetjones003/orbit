@@ -122,6 +122,8 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IpcChannels.projectsAddItem, projectId, repoFullName, number),
     removeItem: (projectId: string, itemId: string) =>
       ipcRenderer.invoke(IpcChannels.projectsRemoveItem, projectId, itemId),
+    moveItem: (projectId: string, itemId: string, afterId: string | null) =>
+      ipcRenderer.invoke(IpcChannels.projectsMoveItem, projectId, itemId, afterId),
     setField: (projectId: string, itemId: string, change) =>
       ipcRenderer.invoke(IpcChannels.projectsSetField, projectId, itemId, change)
   },

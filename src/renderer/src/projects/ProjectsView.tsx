@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CustomViewDefinition } from '../../../shared/custom-views';
 import type {
   ProjectDetail,
   ProjectField,
@@ -7,6 +8,7 @@ import type {
   ProjectListPage,
   ProjectSavedView
 } from '../../../shared/projects';
+import { CustomViewPanel } from './CustomViewPanel';
 import { ProjectBoard } from './ProjectBoard';
 import { ProjectTable } from './ProjectTable';
 import { groupingField, parseItemRef, withFieldValue } from './project-model';
@@ -27,6 +29,9 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
+  // Orbit's own custom views of every project. Only definitions are kept here, never item data.
+  const [customViews, setCustomViews] = useState<CustomViewDefinition[]>([]);
+  const [customId, setCustomId] = useState<string | null>(null);
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [itemsPartial, setItemsPartial] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -54,12 +59,24 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    window.orbit.settings.get().then(
+      (settings) => !cancelled && setCustomViews(settings.customViews),
+      () => !cancelled && setMessage('Custom views could not be loaded.')
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Opening a project loads its fields and views, and selects its first view.
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     setDetail(null);
     setViewId(null);
+    setCustomId(null);
     setItems([]);
     setMessage(null);
     window.orbit.projects.detail(projectId).then(
@@ -76,16 +93,20 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   }, [projectId]);
 
   const view = detail?.views.find((v) => v.id === viewId) ?? null;
+  const projectViews = customViews.filter((v) => v.projectId === projectId);
+  const customView = projectViews.find((v) => v.id === customId) ?? null;
+  // The GitHub filter of whichever view is on screen: a saved view's filter, or a custom view's advanced filter.
+  const activeFilter = view ? view.filter : customView ? customView.advancedFilter : null;
   useEffect(() => {
-    filterRef.current = view?.filter ?? '';
-  }, [view]);
+    filterRef.current = activeFilter ?? '';
+  }, [activeFilter]);
 
   // Items follow the selected view's filter. GitHub applies the filter, so Orbit only shows the result.
   useEffect(() => {
-    if (!projectId || !view) return;
+    if (!projectId || activeFilter === null) return;
     let cancelled = false;
     setLoadingItems(true);
-    window.orbit.projects.items(projectId, view.filter).then(
+    window.orbit.projects.items(projectId, activeFilter).then(
       (page) => {
         if (cancelled) return;
         setItems(page.items);
@@ -101,8 +122,8 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     return () => {
       cancelled = true;
     };
-    // `view` is derived from `detail` and `viewId`, which are the real dependencies.
-  }, [projectId, viewId, detail, reloadKey]);
+    // `activeFilter` is derived from `detail`, `viewId`, and `customId`, which are the real dependencies.
+  }, [projectId, viewId, customId, detail, reloadKey, activeFilter]);
 
   const setPending = (id: string, on: boolean) => {
     if (on) pendingRef.current.add(id);
@@ -115,8 +136,13 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
       next ? prev.map((item) => (item.id === id ? next : item)) : prev.filter((item) => item.id !== id)
     );
 
-  const editField = async (item: ProjectItem, field: ProjectField, value: ProjectFieldInput | null) => {
-    if (!projectId || pendingRef.current.has(item.id)) return;
+  /** Resolves to the item GitHub now has when the save landed, and null otherwise. */
+  const editField = async (
+    item: ProjectItem,
+    field: ProjectField,
+    value: ProjectFieldInput | null
+  ): Promise<ProjectItem | null> => {
+    if (!projectId || pendingRef.current.has(item.id)) return null;
     setMessage(null);
     setPending(item.id, true);
     replaceItem(item.id, withFieldValue(item, field, value));
@@ -125,21 +151,26 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
       // Busy: another save on this item is still running, which will not refresh this row. Restore the row as it was before this edit.
       if (result.kind === 'busy') {
         replaceItem(item.id, item);
-        return;
+        return null;
       }
       // A null item means GitHub could not be read back, so the row stays until a reload confirms it.
       if (result.item === null) {
         if (result.kind === 'failed') setMessage(result.message);
         setReloadKey((key) => key + 1);
-        return;
+        return null;
       }
       replaceItem(item.id, result.item);
-      if (result.kind === 'failed') setMessage(result.message);
+      if (result.kind === 'failed') {
+        setMessage(result.message);
+        return null;
+      }
       // A filtered view may stop or start matching after a save, so GitHub decides which items it shows.
-      else if (filterRef.current !== '') setReloadKey((key) => key + 1);
+      if (filterRef.current !== '') setReloadKey((key) => key + 1);
+      return result.item;
     } catch (error) {
       setMessage(messageOf(error, 'This change could not be saved.'));
       setReloadKey((key) => key + 1);
+      return null;
     } finally {
       setPending(item.id, false);
     }
@@ -178,6 +209,54 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     } catch (error) {
       setMessage(messageOf(error, 'The item could not be added.'));
     }
+  };
+
+  // Every change to a custom view saves the whole list straight away, so nothing waits for a save button.
+  const saveCustomViews = (next: CustomViewDefinition[]) => {
+    setCustomViews(next);
+    window.orbit.settings.update({ customViews: next }).then(undefined, () => {
+      setMessage('Custom views could not be saved.');
+    });
+  };
+
+  const addCustomView = () => {
+    if (!projectId) return;
+    const created: CustomViewDefinition = {
+      id: crypto.randomUUID(),
+      name: `Custom view ${projectViews.length + 1}`,
+      projectId,
+      layout: 'kanban',
+      advancedFilter: '',
+      conditions: [],
+      sort: null,
+      groupFieldId: null,
+      columnFieldId: null,
+      swimlaneFieldId: null
+    };
+    saveCustomViews([...customViews, created]);
+    setCustomId(created.id);
+    setViewId(null);
+  };
+
+  /** Moves an item after another in GitHub's manual order, then reloads so the view shows GitHub's order. */
+  const reorderItem = async (item: ProjectItem, afterId: string | null) => {
+    if (!projectId || pendingRef.current.has(item.id)) return;
+    setMessage(null);
+    setPending(item.id, true);
+    try {
+      await window.orbit.projects.moveItem(projectId, item.id, afterId);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setMessage(messageOf(error, 'The item could not be moved.'));
+    } finally {
+      setPending(item.id, false);
+    }
+  };
+
+  const deleteCustomView = (id: string) => {
+    saveCustomViews(customViews.filter((v) => v.id !== id));
+    setCustomId(null);
+    setViewId(detail?.views[0]?.id ?? null);
   };
 
   const selectedProject = list?.projects.find((p) => p.id === projectId) ?? null;
@@ -232,12 +311,60 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
                     role="tab"
                     aria-selected={savedView.id === viewId}
                     className={`project-view-tab ${savedView.id === viewId ? 'active' : ''}`}
-                    onClick={() => setViewId(savedView.id)}
+                    onClick={() => {
+                      setViewId(savedView.id);
+                      setCustomId(null);
+                    }}
                   >
                     {savedView.name} <span className="project-view-kind">{savedView.layout}</span>
                   </button>
                 ))}
               </div>
+            )}
+            {detail && (
+              <div className="project-view-tabs" role="tablist" aria-label="Custom views">
+                {projectViews.map((custom) => (
+                  <button
+                    key={custom.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={custom.id === customId}
+                    className={`project-view-tab ${custom.id === customId ? 'active' : ''}`}
+                    onClick={() => {
+                      setCustomId(custom.id);
+                      setViewId(null);
+                    }}
+                  >
+                    {custom.name} <span className="project-view-kind">{custom.layout}</span>
+                  </button>
+                ))}
+                <button type="button" className="secondary-action" onClick={addCustomView}>
+                  New custom view
+                </button>
+              </div>
+            )}
+            {detail && customView && (
+              <>
+                {message && (
+                  <p role="alert" className="project-message">
+                    {message}
+                  </p>
+                )}
+                {loadingItems && <p>Loading items…</p>}
+                {itemsPartial && <p className="project-note">Some items could not be shown.</p>}
+                <CustomViewPanel
+                  view={customView}
+                  fields={detail.fields}
+                  items={items}
+                  pendingIds={pendingIds}
+                  onChange={(next) => saveCustomViews(customViews.map((v) => (v.id === next.id ? next : v)))}
+                  onDelete={() => deleteCustomView(customView.id)}
+                  onEdit={editField}
+                  onReorder={reorderItem}
+                  onRemove={(item) => void removeItem(item)}
+                  onOpen={onOpenItem}
+                />
+              </>
             )}
             {detail && view && (
               <>

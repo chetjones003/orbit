@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { OrbitSettings, SettingsUpdate, WindowState } from '../shared/ipc';
+import { normalizeCustomViews } from '../shared/custom-views';
 
 const DEFAULTS: OrbitSettings = {
   pinnedRepoIds: [],
@@ -94,16 +95,11 @@ export class SettingsStore {
 function normalizeSettings(value: unknown): OrbitSettings {
   if (!isRecord(value)) return { ...DEFAULTS };
   const windowState = isWindowState(value['windowState']) ? normalizeWindowState(value['windowState']) : null;
-  const customViews = Array.isArray(value['customViews'])
-    ? value['customViews']
-        .filter(isCustomView)
-        .map(({ id, name, projectId, layout }) => ({ id, name, projectId, layout }))
-    : [];
   return {
     pinnedRepoIds: Array.isArray(value['pinnedRepoIds'])
       ? [...new Set(value['pinnedRepoIds'].filter((id): id is number => Number.isSafeInteger(id) && id > 0))]
       : [],
-    customViews,
+    customViews: normalizeCustomViews(value['customViews']),
     theme: value['theme'] === 'light' ? 'light' : 'dark',
     windowState,
     publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
@@ -137,19 +133,6 @@ function isWindowState(value: unknown): value is WindowState {
     (value['x'] === undefined || Number.isFinite(value['x'])) &&
     (value['y'] === undefined || Number.isFinite(value['y'])) &&
     typeof value['maximized'] === 'boolean'
-  );
-}
-
-function isCustomView(value: unknown): value is OrbitSettings['customViews'][number] {
-  return (
-    isRecord(value) &&
-    typeof value['id'] === 'string' &&
-    typeof value['name'] === 'string' &&
-    typeof value['projectId'] === 'string' &&
-    (value['layout'] === 'kanban' ||
-      value['layout'] === 'gantt' ||
-      value['layout'] === 'calendar' ||
-      value['layout'] === 'table')
   );
 }
 

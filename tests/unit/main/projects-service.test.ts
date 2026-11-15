@@ -464,6 +464,26 @@ describe('ProjectsService writes', () => {
     });
   });
 
+  it('moves an item after another item in the project’s manual order', async () => {
+    const gh = fakeGitHub(() => ({ updateProjectV2ItemPosition: { items: { nodes: [] } } }));
+    await service(gh).moveItem(PROJECT_ID, ITEM_ID, 'PVTI_before');
+    expect(gh.writes('updateProjectV2ItemPosition')[0]?.variables).toEqual({
+      projectId: PROJECT_ID,
+      itemId: ITEM_ID,
+      afterId: 'PVTI_before'
+    });
+  });
+
+  it('moves an item to the top when there is no item before it', async () => {
+    const gh = fakeGitHub(() => ({ updateProjectV2ItemPosition: { items: { nodes: [] } } }));
+    await service(gh).moveItem(PROJECT_ID, ITEM_ID, null);
+    expect(gh.writes('updateProjectV2ItemPosition')[0]?.variables).toEqual({
+      projectId: PROJECT_ID,
+      itemId: ITEM_ID,
+      afterId: null
+    });
+  });
+
   it('saves a single-select change and returns GitHub’s version of the item', async () => {
     const gh = fakeGitHub((q) => {
       if (q.includes('updateProjectV2ItemFieldValue('))

@@ -133,6 +133,13 @@ mutation($projectId: ID!, $itemId: ID!) {
   deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) { deletedItemId }
 }`;
 
+const MOVE_ITEM = `
+mutation($projectId: ID!, $itemId: ID!, $afterId: ID) {
+  updateProjectV2ItemPosition(input: { projectId: $projectId, itemId: $itemId, afterId: $afterId }) {
+    items { totalCount }
+  }
+}`;
+
 const UPDATE_VALUE = `
 mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!) {
   updateProjectV2ItemFieldValue(input: { projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: $value }) {
@@ -319,6 +326,30 @@ export class ProjectsService {
       return item;
     } finally {
       this.pending.delete(lockKey);
+    }
+  }
+
+  /**
+   * Places an item right after another item in the project's manual order, or at the top when `afterId` is
+   * null. Moving to the same place again changes nothing, so a transient failure is retried as is.
+   */
+  async moveItem(projectId: string, itemId: string, afterId: string | null): Promise<void> {
+    assertNodeId(projectId);
+    assertNodeId(itemId);
+    if (afterId !== null) assertNodeId(afterId);
+    if (this.pending.has(itemId)) throw new Error('This item already has a change in progress.');
+    this.pending.add(itemId);
+    try {
+      const { token, scope } = await this.session();
+      await runWrite<void>({
+        canWrite: this.canWrite,
+        attempt: async () => {
+          await this.graphql(MOVE_ITEM, { projectId, itemId, afterId }, token, scope);
+        },
+        reconcile: async () => ({ applied: false })
+      });
+    } finally {
+      this.pending.delete(itemId);
     }
   }
 

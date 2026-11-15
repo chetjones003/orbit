@@ -1,8 +1,22 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SettingsStore } from '../../../src/main/settings';
+import type { CustomViewDefinition } from '../../../src/shared/custom-views';
+
+const CUSTOM_VIEW: CustomViewDefinition = {
+  id: 'view-1',
+  name: 'Sprint board',
+  projectId: 'PVT_1',
+  layout: 'kanban',
+  advancedFilter: '',
+  conditions: [],
+  sort: null,
+  groupFieldId: null,
+  columnFieldId: 'FLD_status',
+  swimlaneFieldId: null
+};
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -23,7 +37,7 @@ describe('SettingsStore', () => {
       pinnedRepoIds: [12, 12, -4],
       theme: 'light' as const,
       detailsWidth: 900,
-      customViews: [{ id: 'view-1', name: 'Roadmap', projectId: 'PVT_1', layout: 'gantt' as const }],
+      customViews: [CUSTOM_VIEW],
       githubRepos: [{ id: 99, fullName: 'owner/secret-repo' }]
     };
     await store.update(update);
@@ -31,7 +45,7 @@ describe('SettingsStore', () => {
     expect(await store.load()).toMatchObject({
       pinnedRepoIds: [12],
       theme: 'light',
-      customViews: [{ id: 'view-1', name: 'Roadmap', projectId: 'PVT_1', layout: 'gantt' }],
+      customViews: [CUSTOM_VIEW],
       windowState: { x: 20, y: 30, width: 1200, height: 800, maximized: false, detailsWidth: 600 }
     });
     const file = JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>;
@@ -48,6 +62,39 @@ describe('SettingsStore', () => {
     const { store } = await makeStore();
     await store.update({ detailsWidth: 100 });
     expect((await store.load()).windowState?.detailsWidth).toBe(260);
+  });
+});
+
+describe('SettingsStore custom view definitions', () => {
+  it('stores definitions only, never item data or GitHub responses', async () => {
+    const { store, dir } = await makeStore();
+    const leaky = {
+      ...CUSTOM_VIEW,
+      items: [{ id: 'PVTI_1', title: 'Private item' }],
+      fieldValues: { FLD_status: { kind: 'text', text: 'private value' } }
+    };
+    await store.update({ customViews: [leaky as unknown as CustomViewDefinition] });
+    const raw = await readFile(join(dir, 'settings.json'), 'utf8');
+    expect(raw).not.toContain('Private item');
+    expect(raw).not.toContain('private value');
+    expect(await store.load()).toMatchObject({ customViews: [CUSTOM_VIEW] });
+  });
+
+  it('drops stored entries that are not valid definitions', async () => {
+    const { store, dir } = await makeStore();
+    await writeFile(
+      join(dir, 'settings.json'),
+      JSON.stringify({ customViews: [CUSTOM_VIEW, { id: 'old', layout: 'gantt' }] }),
+      'utf8'
+    );
+    expect((await store.load()).customViews).toEqual([CUSTOM_VIEW]);
+  });
+
+  it('changing views keeps the other preferences', async () => {
+    const { store } = await makeStore();
+    await store.update({ pinnedRepoIds: [7] });
+    await store.update({ customViews: [CUSTOM_VIEW] });
+    expect(await store.load()).toMatchObject({ pinnedRepoIds: [7], customViews: [CUSTOM_VIEW] });
   });
 });
 

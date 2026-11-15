@@ -11,6 +11,7 @@ import type {
   ProjectItemsPage,
   ProjectListPage
 } from './projects';
+import type { CustomViewDefinition } from './custom-views';
 import type { NotificationDelivery, NotificationOpenResult } from './notifications';
 import type {
   CommentUpdateResult,
@@ -92,6 +93,7 @@ export const IpcChannels = {
   projectsItemMemberships: 'projects:item-memberships',
   projectsAddItem: 'projects:add-item',
   projectsRemoveItem: 'projects:remove-item',
+  projectsMoveItem: 'projects:move-item',
   projectsSetField: 'projects:set-field',
   pullsBranches: 'pulls:branches',
   markdownPreview: 'markdown:preview',
@@ -138,12 +140,8 @@ export interface WindowState {
 
 export interface OrbitSettings {
   pinnedRepoIds: number[];
-  customViews: Array<{
-    id: string;
-    name: string;
-    projectId: string;
-    layout: 'kanban' | 'gantt' | 'calendar' | 'table';
-  }>;
+  /** Definitions of Orbit's custom views. Never item data. */
+  customViews: CustomViewDefinition[];
   theme: 'light' | 'dark';
   windowState: WindowState | null;
   /** The user has accepted that uploads to public repos are public as soon as they upload. */
@@ -307,6 +305,8 @@ export interface OrbitApi {
     /** Adds an issue or pull request from one of the user's personal repos to a project. */
     addItem(projectId: string, repoFullName: string, number: number): Promise<ProjectItem>;
     removeItem(projectId: string, itemId: string): Promise<void>;
+    /** Places an item after another item in the project's manual order, or at the top when `afterId` is null. */
+    moveItem(projectId: string, itemId: string, afterId: string | null): Promise<void>;
     /** Sets or clears one field. Resolves with GitHub's version of the item. */
     setField(projectId: string, itemId: string, change: ProjectFieldChange): Promise<ProjectItemEditResult>;
   };
