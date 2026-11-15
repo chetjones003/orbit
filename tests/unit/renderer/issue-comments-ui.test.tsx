@@ -81,7 +81,11 @@ describe('IssueDetailView comments', () => {
         detail: vi.fn(async () => detail()),
         repoOptions: vi.fn(async () => ({ labels: [], assignees: [], milestones: [] }))
       },
-      pulls: { detail: vi.fn(async () => detail()) },
+      pulls: {
+        detail: vi.fn(async () => detail()),
+        files: vi.fn(async () => ({ files: [], partial: false })),
+        threads: vi.fn(async () => ({ threads: [], partial: false }))
+      },
       markdown: { preview: vi.fn(async (_repo: string, text: string) => `<p>${text}</p>`) },
       comments: {
         create: vi.fn(async (_repo: string, _number: number, body: string) => ({

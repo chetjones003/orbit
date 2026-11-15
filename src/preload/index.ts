@@ -60,7 +60,11 @@ const api: OrbitApi = {
   pulls: {
     list: (query) => ipcRenderer.invoke(IpcChannels.pullsList, query),
     detail: (repoFullName: string, number: number) =>
-      ipcRenderer.invoke(IpcChannels.pullsDetail, repoFullName, number)
+      ipcRenderer.invoke(IpcChannels.pullsDetail, repoFullName, number),
+    files: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.pullsFiles, repoFullName, number),
+    threads: (repoFullName: string, number: number) =>
+      ipcRenderer.invoke(IpcChannels.pullsThreads, repoFullName, number)
   },
   markdown: {
     preview: (repoFullName: string, text: string) =>

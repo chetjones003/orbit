@@ -28,7 +28,14 @@ import type {
   PullSummary,
   PullDetail,
   PullReview,
-  PullCheck
+  PullCheck,
+  PullFile,
+  PullFileNoPatchReason,
+  PullFileStatus,
+  PullFilesPage,
+  PullReviewComment,
+  PullReviewThread,
+  PullReviewThreadsPage
 } from '../../shared/issues';
 import type { AuthService } from './auth-service';
 import { GitHubClient, GitHubRequestError } from './github-client';
@@ -47,6 +54,38 @@ const STATES: readonly IssueStateFilter[] = ['open', 'closed', 'all'];
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const TEXT_FILTER_MAX = 100;
+const PULL_FILES_PER_PAGE = 100;
+/** Upper bound on file pages (3,000 files), the most GitHub lists for one pull request. */
+const PULL_FILES_PAGE_LIMIT = 30;
+const REVIEW_THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        totalCount
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          originalLine
+          comments(first: 100) {
+            totalCount
+            nodes {
+              databaseId
+              author { login }
+              body
+              bodyHTML
+              createdAt
+              url
+              diffHunk
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
 
 interface GitHubIssueResponse {
   id: number;
@@ -719,6 +758,56 @@ export class IssueService {
     };
   }
 
+  /** Changed files of a pull request, each with its unified diff where GitHub returns one. */
+  async getPullFiles(repoFullName: string, number: number): Promise<PullFilesPage> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const { token, scope } = await this.session();
+    const files: PullFile[] = [];
+    let partial = false;
+    for (let page = 1; page <= PULL_FILES_PAGE_LIMIT; page++) {
+      const body = await this.client.get<unknown>(
+        `${itemPath(owner, repo, 'pulls', number)}/files?per_page=${PULL_FILES_PER_PAGE}&page=${page}`,
+        { token, scope }
+      );
+      if (!Array.isArray(body)) throw new Error('GitHub returned an invalid list of changed files.');
+      for (const raw of body as unknown[]) {
+        const file = toPullFile(raw);
+        if (file) files.push(file);
+        else partial = true;
+      }
+      if (body.length < PULL_FILES_PER_PAGE) return { files, partial };
+    }
+    return { files, partial: true };
+  }
+
+  /**
+   * Review threads of a pull request, with resolved and outdated state, which only GraphQL reports.
+   * One query reads up to 100 threads of up to 100 replies each; anything beyond is reported as partial.
+   */
+  async getPullReviewThreads(repoFullName: string, number: number): Promise<PullReviewThreadsPage> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const { token, scope } = await this.session();
+    // GraphQL is a read, but it is sent as a POST, so it goes through the write path.
+    const response = await this.client.send<unknown>('POST', '/graphql', {
+      token,
+      scope,
+      body: { query: REVIEW_THREADS_QUERY, variables: { owner, name: repo, number } }
+    });
+    const pullRequest = (response as { data?: { repository?: { pullRequest?: unknown } | null } } | null)
+      ?.data?.repository?.pullRequest;
+    const connection = (pullRequest as { reviewThreads?: unknown } | null | undefined)?.reviewThreads as
+      { totalCount?: unknown; nodes?: unknown } | undefined;
+    if (!connection || !Array.isArray(connection.nodes)) {
+      throw new Error('GitHub returned invalid review threads.');
+    }
+    const threads = (connection.nodes as unknown[]).flatMap((raw) => toReviewThread(raw) ?? []);
+    const invalid = (connection.nodes as unknown[]).length - threads.length;
+    const total = typeof connection.totalCount === 'number' ? connection.totalCount : threads.length;
+    return { threads, partial: invalid > 0 || total > connection.nodes.length };
+  }
+
   /**
    * Follows comment pages until GitHub returns a short page. Stops at COMMENT_PAGE_LIMIT pages;
    * a thread longer than that is reported as partial, never as complete.
@@ -845,6 +934,115 @@ function validateText(value: unknown, field: string): string {
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`The ${field} filter is invalid.`);
   return value;
+}
+
+const PULL_FILE_STATUSES: readonly PullFileStatus[] = [
+  'added',
+  'removed',
+  'modified',
+  'renamed',
+  'copied',
+  'changed',
+  'unchanged'
+];
+
+function toPullFile(raw: unknown): PullFile | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const file = raw as {
+    filename?: unknown;
+    previous_filename?: unknown;
+    status?: unknown;
+    additions?: unknown;
+    deletions?: unknown;
+    changes?: unknown;
+    patch?: unknown;
+  };
+  if (
+    typeof file.filename !== 'string' ||
+    typeof file.status !== 'string' ||
+    !PULL_FILE_STATUSES.includes(file.status as PullFileStatus) ||
+    typeof file.additions !== 'number' ||
+    typeof file.deletions !== 'number' ||
+    typeof file.changes !== 'number'
+  ) {
+    return null;
+  }
+  const patch = typeof file.patch === 'string' ? file.patch : null;
+  // GitHub omits the patch for binary files, which have no changed lines, and for diffs it will not return.
+  const noPatchReason: PullFileNoPatchReason | null =
+    patch !== null ? null : file.changes === 0 ? 'binary' : 'too-large';
+  return {
+    filename: file.filename,
+    previousFilename: typeof file.previous_filename === 'string' ? file.previous_filename : null,
+    status: file.status as PullFileStatus,
+    additions: file.additions,
+    deletions: file.deletions,
+    patch,
+    noPatchReason
+  };
+}
+
+interface GraphQLReviewComment {
+  databaseId?: unknown;
+  author?: { login?: unknown } | null;
+  body?: unknown;
+  bodyHTML?: unknown;
+  createdAt?: unknown;
+  url?: unknown;
+  diffHunk?: unknown;
+}
+
+function toReviewThread(raw: unknown): PullReviewThread | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const thread = raw as {
+    id?: unknown;
+    isResolved?: unknown;
+    isOutdated?: unknown;
+    path?: unknown;
+    line?: unknown;
+    originalLine?: unknown;
+    comments?: { totalCount?: unknown; nodes?: unknown };
+  };
+  if (
+    typeof thread.id !== 'string' ||
+    typeof thread.path !== 'string' ||
+    !Array.isArray(thread.comments?.nodes)
+  ) {
+    return null;
+  }
+  const nodes = thread.comments.nodes as GraphQLReviewComment[];
+  const comments: PullReviewComment[] = nodes.flatMap((node) => {
+    if (
+      typeof node.databaseId !== 'number' ||
+      typeof node.createdAt !== 'string' ||
+      typeof node.url !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: node.databaseId,
+        authorLogin: typeof node.author?.login === 'string' ? node.author.login : 'ghost',
+        createdAt: node.createdAt,
+        htmlUrl: node.url,
+        body: typeof node.body === 'string' ? node.body : '',
+        bodyHtml: typeof node.bodyHTML === 'string' ? node.bodyHTML : ''
+      }
+    ];
+  });
+  const totalComments =
+    typeof thread.comments.totalCount === 'number' ? thread.comments.totalCount : nodes.length;
+  return {
+    id: thread.id,
+    path: thread.path,
+    line: typeof thread.line === 'number' ? thread.line : null,
+    originalLine: typeof thread.originalLine === 'number' ? thread.originalLine : null,
+    isResolved: thread.isResolved === true,
+    isOutdated: thread.isOutdated === true,
+    diffHunk: typeof nodes[0]?.diffHunk === 'string' ? nodes[0].diffHunk : '',
+    comments,
+    commentsPartial: totalComments > nodes.length || comments.length < nodes.length
+  };
 }
 
 function isPullRequest(raw: unknown): boolean {

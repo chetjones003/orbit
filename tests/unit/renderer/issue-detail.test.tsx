@@ -217,7 +217,11 @@ describe('IssueDetailView pull requests', () => {
           commentsPartial: false
         }))
       },
-      pulls: { detail: vi.fn() },
+      pulls: {
+        detail: vi.fn(),
+        files: vi.fn(async () => ({ files: [], partial: false })),
+        threads: vi.fn(async () => ({ threads: [], partial: false }))
+      },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     } as unknown as typeof window.orbit;
     const onOpenIssue = vi.fn();
@@ -246,7 +250,11 @@ describe('IssueDetailView pull requests', () => {
     const issuesDetail = vi.fn();
     window.orbit = {
       issues: { detail: issuesDetail },
-      pulls: { detail: pullDetail },
+      pulls: {
+        detail: pullDetail,
+        files: vi.fn(async () => ({ files: [], partial: false })),
+        threads: vi.fn(async () => ({ threads: [], partial: false }))
+      },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     } as unknown as typeof window.orbit;
     render(

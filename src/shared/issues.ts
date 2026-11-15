@@ -55,6 +55,68 @@ export interface PullDetail {
   merged: boolean;
 }
 
+export type PullFileStatus =
+  'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+
+/**
+ * Why a file has no text diff. `binary`: no changed lines to show. `too-large`: GitHub has changes
+ * but omitted the patch, so the diff is shown only on GitHub.
+ */
+export type PullFileNoPatchReason = 'binary' | 'too-large';
+
+export interface PullFile {
+  filename: string;
+  /** The name before a rename or copy. */
+  previousFilename: string | null;
+  status: PullFileStatus;
+  additions: number;
+  deletions: number;
+  /** Unified diff text for the file, or null when GitHub did not return one. */
+  patch: string | null;
+  noPatchReason: PullFileNoPatchReason | null;
+}
+
+export interface PullFilesPage {
+  files: PullFile[];
+  /** True when the pull request has more files than Orbit read. Never shown as the full list. */
+  partial: boolean;
+}
+
+export interface PullReviewComment {
+  id: number;
+  /** `ghost` when the author account no longer exists. */
+  authorLogin: string;
+  createdAt: string;
+  htmlUrl: string;
+  /** Raw Markdown source. */
+  body: string;
+  /** GitHub-rendered HTML. Sanitize before display. */
+  bodyHtml: string;
+}
+
+export interface PullReviewThread {
+  /** GitHub's node id for the thread. */
+  id: string;
+  path: string;
+  /** Current line in the diff, or null when the code has changed since the comment. */
+  line: number | null;
+  originalLine: number | null;
+  isResolved: boolean;
+  /** True when the code the thread was written against has since changed. */
+  isOutdated: boolean;
+  /** Diff hunk the thread was written against, so an outdated thread keeps its original context. */
+  diffHunk: string;
+  comments: PullReviewComment[];
+  /** True when the thread has more replies than were read. */
+  commentsPartial: boolean;
+}
+
+export interface PullReviewThreadsPage {
+  threads: PullReviewThread[];
+  /** True when the pull request has more review threads than Orbit read. */
+  partial: boolean;
+}
+
 export interface IssueListQuery {
   /** `owner/name`. The owner must be the signed-in account (personal repos only). */
   repoFullName: string;
