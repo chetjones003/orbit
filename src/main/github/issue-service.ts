@@ -1,8 +1,15 @@
 import { COMMENT_MAX_CHARS, ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS } from '../../shared/issues';
 import type {
+  MergeMethod,
   PendingReview,
   PendingReviewComment,
+  PullActions,
+  PullCreateInput,
+  PullMergeResult,
+  PullWriteResult,
   PullReviewState,
+  RerunMode,
+  WorkflowRun,
   ReviewAnchor,
   ReviewCommentResult,
   ReviewEvent,
@@ -65,6 +72,8 @@ const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const TEXT_FILTER_MAX = 100;
 const PULL_FILES_PER_PAGE = 100;
+/** Upper bound on branch pages (1,000 branches) read for the new pull request form. */
+const BRANCH_PAGE_LIMIT = 10;
 /** Upper bound on file pages (3,000 files), the most GitHub lists for one pull request. */
 const PULL_FILES_PAGE_LIMIT = 30;
 const REVIEW_THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
@@ -154,6 +163,30 @@ const THREAD_SIDE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequest
 const THREAD_STATE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequestReviewThread { isResolved } } }`;
 const REVIEW_STATE_NODE_QUERY = `query ($id: ID!) { node(id: $id) { ... on PullRequestReview { state } } }`;
 const REVIEW_EVENTS: readonly ReviewEvent[] = ['COMMENT', 'APPROVE', 'REQUEST_CHANGES'];
+const MERGE_METHODS: readonly MergeMethod[] = ['merge', 'squash', 'rebase'];
+const MERGE_METHOD_ENUM: Record<MergeMethod, string> = { merge: 'MERGE', squash: 'SQUASH', rebase: 'REBASE' };
+const PULL_NODE_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      id
+      headRefOid
+      isDraft
+      autoMergeRequest { mergeMethod }
+    }
+  }
+}`;
+const ENABLE_AUTO_MERGE = `mutation ($input: EnablePullRequestAutoMergeInput!) {
+  enablePullRequestAutoMerge(input: $input) { pullRequest { id } }
+}`;
+const DISABLE_AUTO_MERGE = `mutation ($input: DisablePullRequestAutoMergeInput!) {
+  disablePullRequestAutoMerge(input: $input) { pullRequest { id } }
+}`;
+const CONVERT_TO_DRAFT = `mutation ($input: ConvertPullRequestToDraftInput!) {
+  convertPullRequestToDraft(input: $input) { pullRequest { id } }
+}`;
+const MARK_READY_FOR_REVIEW = `mutation ($input: MarkPullRequestReadyForReviewInput!) {
+  markPullRequestReadyForReview(input: $input) { pullRequest { id } }
+}`;
 
 /** A pull request's head, author, and the user's pending review, as one read. */
 /** What a submit attempt has learned, kept while its outcome is unknown. */
@@ -1137,6 +1170,383 @@ export class IssueService {
     );
   }
 
+  /** What the pull request's actions panel needs: its head, draft and merge state, and what the repo allows. */
+  async getPullActions(repoFullName: string, number: number): Promise<PullActions> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const { token, scope } = await this.session();
+    const path = itemPath(owner, repo, 'pulls', number);
+    const [settings, pullRaw, node] = await Promise.all([
+      this.readMergeSettings(owner, repo, token, scope),
+      this.client.get<unknown>(path, { token, scope }),
+      this.readPullNode(owner, repo, number, token, scope)
+    ]);
+    const pr = readPullFields(pullRaw);
+    return {
+      headSha: pr.headSha,
+      headRef: pr.headRef,
+      headInRepo: pr.headRepo.toLowerCase() === `${owner}/${repo}`.toLowerCase(),
+      draft: pr.draft,
+      merged: pr.merged,
+      state: pr.state,
+      allowedMergeMethods: allowedMergeMethods(settings),
+      allowAutoMerge: settings.allowAutoMerge,
+      autoMergeMethod: node.autoMergeMethod,
+      deleteBranchOnMerge: settings.deleteBranchOnMerge
+    };
+  }
+
+  /**
+   * Merges a pull request with a method the repo allows, pinned to the head the user reviewed. If GitHub
+   * reports the merge landed (a previous request whose response was lost), it is reconciled, not repeated.
+   * Deleting the head branch happens only after a merge and only for a branch in this repo.
+   */
+  async mergePull(
+    repoFullName: string,
+    number: number,
+    input: { method: MergeMethod; deleteBranch: boolean; expectedHeadSha: string }
+  ): Promise<PullMergeResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    if (!MERGE_METHODS.includes(input?.method)) throw new Error('Choose a merge, squash, or rebase merge.');
+    validateSha(input.expectedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const path = itemPath(owner, repo, 'pulls', number);
+    const settings = await this.readMergeSettings(owner, repo, token, scope);
+    if (!allowedMergeMethods(settings).includes(input.method)) {
+      throw new Error(`This repo does not allow ${input.method} merges.`);
+    }
+    const pr = readPullFields(await this.client.get<unknown>(path, { token, scope }));
+    if (pr.merged) throw new Error('This pull request is already merged.');
+    if (pr.state !== 'open') throw new Error('This pull request is closed.');
+    if (pr.headSha !== input.expectedHeadSha) return { kind: 'new-commits', headSha: pr.headSha };
+
+    let sha: string;
+    try {
+      sha = await runWrite<string>({
+        canWrite: this.canWrite,
+        attempt: async () => {
+          const merged = await this.client.send<unknown>('PUT', `${path}/merge`, {
+            token,
+            scope,
+            body: { merge_method: input.method, sha: input.expectedHeadSha }
+          });
+          const mergedSha = (merged as { sha?: unknown } | null)?.sha;
+          if (typeof mergedSha !== 'string') throwInvalid('GitHub returned an invalid merge.');
+          return mergedSha;
+        },
+        reconcile: async () => {
+          const now = readPullFields(await this.client.get<unknown>(path, { token, scope }));
+          return now.mergeCommitSha !== null
+            ? { applied: true, value: now.mergeCommitSha }
+            : { applied: false };
+        }
+      });
+    } catch (error) {
+      // GitHub refuses a merge pinned to a head that has moved with 409.
+      if (error instanceof GitHubRequestError && error.status === 409) {
+        const now = readPullFields(await this.client.get<unknown>(path, { token, scope }));
+        return { kind: 'new-commits', headSha: now.headSha };
+      }
+      throw error;
+    }
+
+    let branchDeleted = false;
+    if (input.deleteBranch && pr.headRepo.toLowerCase() === `${owner}/${repo}`.toLowerCase()) {
+      branchDeleted = await this.deleteHeadBranch(owner, repo, pr.headRef, token, scope);
+    }
+    return { kind: 'merged', sha, branchDeleted };
+  }
+
+  /**
+   * Turns auto-merge on, with a method the repo allows, or off, pinned to the head the user reviewed. A head
+   * that has moved since is reported as new commits and nothing changes. An uncertain change is checked
+   * against GitHub before any retry, so it is never applied twice.
+   */
+  async setPullAutoMerge(
+    repoFullName: string,
+    number: number,
+    input: { enabled: boolean; method?: MergeMethod; expectedHeadSha: string }
+  ): Promise<PullWriteResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    validateSha(input.expectedHeadSha);
+    if (input.enabled && !MERGE_METHODS.includes(input.method as MergeMethod)) {
+      throw new Error('Choose a merge, squash, or rebase merge.');
+    }
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const method = input.enabled ? (input.method as MergeMethod) : null;
+    if (method !== null) {
+      const settings = await this.readMergeSettings(owner, repo, token, scope);
+      if (!settings.allowAutoMerge) throw new Error('Auto-merge is not allowed in this repo.');
+      if (!allowedMergeMethods(settings).includes(method)) {
+        throw new Error(`This repo does not allow ${method} merges.`);
+      }
+    }
+    const node = await this.readPullNode(owner, repo, number, token, scope);
+    if (node.headSha !== input.expectedHeadSha) return { kind: 'new-commits', headSha: node.headSha };
+
+    return runWrite<PullWriteResult>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        if (method !== null) {
+          await this.graphql(
+            ENABLE_AUTO_MERGE,
+            {
+              input: {
+                pullRequestId: node.id,
+                mergeMethod: MERGE_METHOD_ENUM[method],
+                expectedHeadOid: input.expectedHeadSha
+              }
+            },
+            token,
+            scope
+          );
+        } else {
+          await this.graphql(DISABLE_AUTO_MERGE, { input: { pullRequestId: node.id } }, token, scope);
+        }
+        return { kind: 'changed' };
+      },
+      reconcile: async () => {
+        const now = await this.readPullNode(owner, repo, number, token, scope);
+        return now.autoMergeMethod === method
+          ? { applied: true, value: { kind: 'changed' } }
+          : { applied: false };
+      }
+    });
+  }
+
+  /**
+   * Converts a pull request to draft, or marks it ready for review, pinned to the head the user reviewed.
+   * An uncertain change is reconciled against the draft state on GitHub before any retry.
+   */
+  async setPullDraft(
+    repoFullName: string,
+    number: number,
+    draft: boolean,
+    expectedHeadSha: string
+  ): Promise<PullWriteResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    validateSha(expectedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const node = await this.readPullNode(owner, repo, number, token, scope);
+    if (node.headSha !== expectedHeadSha) return { kind: 'new-commits', headSha: node.headSha };
+
+    return runWrite<PullWriteResult>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        await this.graphql(
+          draft ? CONVERT_TO_DRAFT : MARK_READY_FOR_REVIEW,
+          { input: { pullRequestId: node.id } },
+          token,
+          scope
+        );
+        return { kind: 'changed' };
+      },
+      reconcile: async () => {
+        const now = await this.readPullNode(owner, repo, number, token, scope);
+        return now.isDraft === draft ? { applied: true, value: { kind: 'changed' } } : { applied: false };
+      }
+    });
+  }
+
+  /** Workflow runs for the pull request's head commit, as GitHub lists them. */
+  async getPullWorkflowRuns(repoFullName: string, number: number): Promise<WorkflowRun[]> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    validateItemNumber(number);
+    const { token, scope } = await this.session();
+    const node = await this.readPullNode(owner, repo, number, token, scope);
+    const raw = await this.client.get<unknown>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs?head_sha=${encodeURIComponent(node.headSha)}&per_page=100`,
+      { token, scope }
+    );
+    const runs = (raw as { workflow_runs?: unknown } | null)?.workflow_runs;
+    return Array.isArray(runs) ? runs.flatMap(toWorkflowRun) : [];
+  }
+
+  /**
+   * Re-runs a workflow run, all of it or only its failed jobs, but only if the run still belongs to the
+   * commit the user saw; a run for a commit the pull request no longer has is reported as new commits.
+   * A re-run is not retried after an uncertain outcome, since GitHub cannot say whether it was already
+   * queued, so the caller is told to check again.
+   */
+  async rerunPullWorkflow(
+    repoFullName: string,
+    runId: number,
+    mode: RerunMode,
+    expectedHeadSha: string
+  ): Promise<PullWriteResult> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(runId) || runId < 1)
+      throw new Error('Workflow run ids must be positive whole numbers.');
+    if (mode !== 'all' && mode !== 'failed') throw new Error('Re-run all jobs or only the failed ones.');
+    validateSha(expectedHeadSha);
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const runPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}`;
+    const run = await this.client.get<unknown>(runPath, { token, scope });
+    const runHead = (run as { head_sha?: unknown } | null)?.head_sha;
+    if (typeof runHead !== 'string') throwInvalid('GitHub returned an invalid workflow run.');
+    if (runHead !== expectedHeadSha) return { kind: 'new-commits', headSha: runHead };
+
+    const suffix = mode === 'failed' ? 'rerun-failed-jobs' : 'rerun';
+    await this.client.send<unknown>('POST', `${runPath}/${suffix}`, { token, scope, text: true });
+    return { kind: 'changed' };
+  }
+
+  /**
+   * Opens a pull request from a branch in the same personal repo. An uncertain create is reconciled by
+   * looking for a pull request with this title and base created since the request began, in any state.
+   */
+  async createPull(repoFullName: string, input: PullCreateInput): Promise<PullSummary> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    const title = typeof input?.title === 'string' ? input.title.trim() : '';
+    const head = typeof input?.head === 'string' ? input.head : '';
+    const base = typeof input?.base === 'string' ? input.base : '';
+    const body = typeof input?.body === 'string' ? input.body : '';
+    if (title === '') throw new Error('A pull request needs a title.');
+    if (head === '' || base === '') throw new Error('Choose the branch to merge from and into.');
+    if (head === base) throw new Error('The head and base branches must be different.');
+    if ([...body].length > COMMENT_MAX_CHARS) {
+      throw new Error(`Descriptions can be at most ${COMMENT_MAX_CHARS.toLocaleString('en-US')} characters.`);
+    }
+    this.assertCanWrite();
+    const { token, scope } = await this.session();
+    const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`;
+    const payload = { title, body, head, base, draft: input.draft === true };
+    const since = Date.now() - RECONCILE_SKEW_MS;
+
+    return runWrite<PullSummary>({
+      canWrite: this.canWrite,
+      attempt: async () =>
+        toPullSummary(await this.client.send<unknown>('POST', path, { token, scope, body: payload })) ??
+        throwInvalid('GitHub returned an invalid pull request.'),
+      reconcile: async () => {
+        const found = await this.client.get<unknown>(
+          `${path}?state=all&head=${encodeURIComponent(`${owner}:${head}`)}&per_page=100`,
+          { token, scope }
+        );
+        const match = Array.isArray(found)
+          ? found
+              .map(toPullSummary)
+              .find(
+                (pull) =>
+                  pull !== null &&
+                  pull.title === title &&
+                  pull.baseRef === base &&
+                  Date.parse(pull.createdAt) >= since
+              )
+          : undefined;
+        return match ? { applied: true, value: match } : { applied: false };
+      }
+    });
+  }
+
+  /** Names of every branch in the repo, read page by page. */
+  async listBranches(repoFullName: string): Promise<string[]> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    const { token, scope } = await this.session();
+    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
+    const names: string[] = [];
+    for (let page = 1; page <= BRANCH_PAGE_LIMIT; page++) {
+      const raw = await this.client.get<unknown>(`${base}&page=${page}`, { token, scope });
+      if (!Array.isArray(raw)) break;
+      for (const branch of raw) {
+        const name = (branch as { name?: unknown } | null)?.name;
+        if (typeof name === 'string') names.push(name);
+      }
+      if (raw.length < 100) break;
+    }
+    return names;
+  }
+
+  /**
+   * Deletes a head branch after its pull request merged. When the delete fails, the branch is checked: a
+   * delete whose response was lost may already have landed, and a branch that is gone counts as deleted.
+   */
+  private async deleteHeadBranch(
+    owner: string,
+    repo: string,
+    branch: string,
+    token: string,
+    scope: string
+  ): Promise<boolean> {
+    if (branch === '') return false;
+    const ref = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs/heads/${branch
+      .split('/')
+      .map(encodeURIComponent)
+      .join('/')}`;
+    try {
+      await this.client.send<unknown>('DELETE', ref, { token, scope });
+      return true;
+    } catch {
+      try {
+        await this.client.get<unknown>(ref, { token, scope });
+        return false;
+      } catch (error) {
+        return error instanceof GitHubRequestError && error.status === 404;
+      }
+    }
+  }
+
+  private async readMergeSettings(
+    owner: string,
+    repo: string,
+    token: string,
+    scope: string
+  ): Promise<MergeSettings> {
+    const raw = await this.client.get<unknown>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      {
+        token,
+        scope
+      }
+    );
+    return readMergeSettings(raw);
+  }
+
+  /** The pull request's GraphQL node id, head, draft state, and current auto-merge method. */
+  private async readPullNode(
+    owner: string,
+    repo: string,
+    number: number,
+    token: string,
+    scope: string
+  ): Promise<PullNode> {
+    const data = await this.graphql<{ repository?: { pullRequest?: unknown } | null }>(
+      PULL_NODE_QUERY,
+      { owner, name: repo, number },
+      token,
+      scope
+    );
+    const pr = data?.repository?.pullRequest as
+      | {
+          id?: unknown;
+          headRefOid?: unknown;
+          isDraft?: unknown;
+          autoMergeRequest?: { mergeMethod?: unknown } | null;
+        }
+      | null
+      | undefined;
+    if (!pr || typeof pr.id !== 'string' || typeof pr.headRefOid !== 'string') {
+      throw new Error('GitHub returned an invalid pull request.');
+    }
+    const enumValue = pr.autoMergeRequest?.mergeMethod;
+    const autoMergeMethod = (Object.keys(MERGE_METHOD_ENUM) as MergeMethod[]).find(
+      (method) => MERGE_METHOD_ENUM[method] === enumValue
+    );
+    return {
+      id: pr.id,
+      headSha: pr.headRefOid,
+      isDraft: pr.isDraft === true,
+      autoMergeMethod: autoMergeMethod ?? null
+    };
+  }
+
   /** A pull request's head and author, plus the user's pending review, in one read. */
   private async readReviewPullRequest(
     owner: string,
@@ -1610,6 +2020,87 @@ function toPullSummary(raw: unknown): PullSummary | null {
     headRef: typeof pull.head?.ref === 'string' ? pull.head.ref : '',
     baseRef: typeof pull.base?.ref === 'string' ? pull.base.ref : ''
   };
+}
+
+/** A repo's merge settings, as GitHub reports them. */
+interface MergeSettings {
+  allowMergeCommit: boolean;
+  allowSquashMerge: boolean;
+  allowRebaseMerge: boolean;
+  allowAutoMerge: boolean;
+  deleteBranchOnMerge: boolean;
+}
+
+/** A pull request's GraphQL node: what the mutations need, plus its head and auto-merge state. */
+interface PullNode {
+  id: string;
+  headSha: string;
+  isDraft: boolean;
+  autoMergeMethod: MergeMethod | null;
+}
+
+function readMergeSettings(raw: unknown): MergeSettings {
+  const repo = (raw ?? {}) as Record<string, unknown>;
+  return {
+    allowMergeCommit: repo.allow_merge_commit === true,
+    allowSquashMerge: repo.allow_squash_merge === true,
+    allowRebaseMerge: repo.allow_rebase_merge === true,
+    allowAutoMerge: repo.allow_auto_merge === true,
+    deleteBranchOnMerge: repo.delete_branch_on_merge === true
+  };
+}
+
+function allowedMergeMethods(settings: MergeSettings): MergeMethod[] {
+  const methods: MergeMethod[] = [];
+  if (settings.allowMergeCommit) methods.push('merge');
+  if (settings.allowSquashMerge) methods.push('squash');
+  if (settings.allowRebaseMerge) methods.push('rebase');
+  return methods;
+}
+
+/** The fields of a REST pull request the actions and merge flow read. */
+function readPullFields(raw: unknown): {
+  headSha: string;
+  headRef: string;
+  headRepo: string;
+  draft: boolean;
+  merged: boolean;
+  mergeCommitSha: string | null;
+  state: 'open' | 'closed';
+} {
+  const pr = (raw ?? {}) as {
+    state?: unknown;
+    draft?: unknown;
+    merged?: unknown;
+    merge_commit_sha?: unknown;
+    head?: { sha?: unknown; ref?: unknown; repo?: { full_name?: unknown } | null };
+  };
+  if (typeof pr.head?.sha !== 'string') throw new Error('GitHub returned an invalid pull request.');
+  const merged = pr.merged === true;
+  return {
+    headSha: pr.head.sha,
+    headRef: typeof pr.head.ref === 'string' ? pr.head.ref : '',
+    headRepo: typeof pr.head.repo?.full_name === 'string' ? pr.head.repo.full_name : '',
+    draft: pr.draft === true,
+    merged,
+    mergeCommitSha: merged && typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : null,
+    state: pr.state === 'closed' ? 'closed' : 'open'
+  };
+}
+
+function toWorkflowRun(raw: unknown): WorkflowRun[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const run = raw as Record<string, unknown>;
+  if (typeof run.id !== 'number' || typeof run.name !== 'string') return [];
+  return [
+    {
+      id: run.id,
+      name: run.name,
+      status: typeof run.status === 'string' ? run.status : 'unknown',
+      conclusion: typeof run.conclusion === 'string' ? run.conclusion : null,
+      htmlUrl: typeof run.html_url === 'string' ? run.html_url : ''
+    }
+  ];
 }
 
 /** Repo item path, for issues or pulls. */

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PullListPage, PullListQuery, PullStateFilter, PullSummary } from '../../../shared/issues';
+import { NewPullForm } from './NewPullForm';
 
 export function PullList({
   repoFullName,
@@ -17,6 +18,8 @@ export function PullList({
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -44,9 +47,25 @@ export function PullList({
     return () => {
       cancelled = true;
     };
-  }, [repoFullName, state, page, label, author]);
+  }, [repoFullName, state, page, label, author, refreshVersion]);
+  if (creating) {
+    return (
+      <NewPullForm
+        repoFullName={repoFullName}
+        onCancel={() => setCreating(false)}
+        onCreated={(number) => {
+          setCreating(false);
+          setRefreshVersion((version) => version + 1);
+          onOpenPull(number);
+        }}
+      />
+    );
+  }
   return (
     <section className="issue-list" aria-label="Pull requests">
+      <button className="primary-action" onClick={() => setCreating(true)}>
+        New pull request
+      </button>
       <form
         className="issue-filters"
         onSubmit={(e) => {

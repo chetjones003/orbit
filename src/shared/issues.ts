@@ -289,3 +289,45 @@ export type ReviewCommentResult =
   { kind: 'saved'; comment: PendingReviewComment } | { kind: 'new-commits'; headSha: string };
 
 export type ReviewSubmitResult = { kind: 'submitted' } | { kind: 'new-commits'; headSha: string };
+
+/** The merge methods GitHub offers for a pull request. */
+export type MergeMethod = 'merge' | 'squash' | 'rebase';
+
+/** What the pull request's actions panel needs: head, draft and merge state, and what the repo allows. */
+export interface PullActions {
+  headSha: string;
+  headRef: string;
+  /** True when the head branch is in the same repo, so Orbit may delete it after a merge. */
+  headInRepo: boolean;
+  draft: boolean;
+  merged: boolean;
+  state: 'open' | 'closed';
+  allowedMergeMethods: MergeMethod[];
+  allowAutoMerge: boolean;
+  autoMergeMethod: MergeMethod | null;
+  deleteBranchOnMerge: boolean;
+}
+
+export type PullMergeResult =
+  { kind: 'merged'; sha: string; branchDeleted: boolean } | { kind: 'new-commits'; headSha: string };
+
+export type PullWriteResult = { kind: 'changed' } | { kind: 'new-commits'; headSha: string };
+
+export interface WorkflowRun {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  htmlUrl: string;
+}
+
+/** `failed` re-runs only the failed jobs; `all` re-runs the whole run. */
+export type RerunMode = 'all' | 'failed';
+
+export interface PullCreateInput {
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  draft: boolean;
+}

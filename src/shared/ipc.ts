@@ -24,7 +24,15 @@ import type {
   ReviewAnchor,
   ReviewCommentResult,
   ReviewEvent,
-  ReviewSubmitResult
+  ReviewSubmitResult,
+  MergeMethod,
+  PullActions,
+  PullCreateInput,
+  PullMergeResult,
+  PullSummary,
+  PullWriteResult,
+  RerunMode,
+  WorkflowRun
 } from './issues';
 
 /**
@@ -59,6 +67,14 @@ export const IpcChannels = {
   pullsReviewReply: 'pulls:review-reply',
   pullsReviewResolve: 'pulls:review-resolve',
   pullsReviewSubmit: 'pulls:review-submit',
+  pullsActions: 'pulls:actions',
+  pullsMerge: 'pulls:merge',
+  pullsAutoMerge: 'pulls:auto-merge',
+  pullsDraft: 'pulls:draft',
+  pullsRuns: 'pulls:runs',
+  pullsRerun: 'pulls:rerun',
+  pullsCreate: 'pulls:create',
+  pullsBranches: 'pulls:branches',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
@@ -209,6 +225,39 @@ export interface OrbitApi {
       number: number,
       input: { event: ReviewEvent; body: string; reviewedHeadSha: string }
     ): Promise<ReviewSubmitResult>;
+    /** Merge settings, draft and auto-merge state for the actions panel. */
+    actions(repoFullName: string, number: number): Promise<PullActions>;
+    /** Merges with a method the repo allows, only if the head is still `expectedHeadSha`. */
+    merge(
+      repoFullName: string,
+      number: number,
+      input: { method: MergeMethod; deleteBranch: boolean; expectedHeadSha: string }
+    ): Promise<PullMergeResult>;
+    setAutoMerge(
+      repoFullName: string,
+      number: number,
+      input: { enabled: boolean; method?: MergeMethod; expectedHeadSha: string }
+    ): Promise<PullWriteResult>;
+    /** Pinned to the head the user reviewed; a head that has moved comes back as new commits. */
+    setDraft(
+      repoFullName: string,
+      number: number,
+      draft: boolean,
+      expectedHeadSha: string
+    ): Promise<PullWriteResult>;
+    /** Workflow runs for the pull request's head commit. */
+    runs(repoFullName: string, number: number): Promise<WorkflowRun[]>;
+    /** Re-runs a workflow run: all of it, or only its failed jobs. */
+    /** Only re-runs a run that still belongs to `expectedHeadSha`; otherwise it comes back as new commits. */
+    rerun(
+      repoFullName: string,
+      runId: number,
+      mode: RerunMode,
+      expectedHeadSha: string
+    ): Promise<PullWriteResult>;
+    /** Opens a pull request from a branch in one of the user's personal repos. */
+    create(repoFullName: string, input: PullCreateInput): Promise<PullSummary>;
+    branches(repoFullName: string): Promise<string[]>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */
