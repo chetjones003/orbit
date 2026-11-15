@@ -56,8 +56,18 @@ describe('SettingsStore public-upload notice', () => {
     const { store, dir } = await makeStore();
     expect((await store.load()).publicUploadNoticeAcknowledged).toBe(false);
 
-    await store.update({ publicUploadNoticeAcknowledged: true });
+    await store.acknowledgePublicUploadNotice();
 
     expect((await new SettingsStore(dir).load()).publicUploadNoticeAcknowledged).toBe(true);
+  });
+});
+
+describe('SettingsStore notice acknowledgement is not client-updatable', () => {
+  it('ignores the acknowledgement in a general settings update', async () => {
+    const { store } = await makeStore();
+
+    await store.update({ publicUploadNoticeAcknowledged: true } as Parameters<SettingsStore['update']>[0]);
+
+    expect((await store.load()).publicUploadNoticeAcknowledged).toBe(false);
   });
 });

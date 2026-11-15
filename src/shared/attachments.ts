@@ -82,8 +82,8 @@ export function uploadPlaceholder(counter: number, name: string): string {
 
 /** The Markdown that replaces a placeholder once the upload succeeds. */
 export function attachmentMarkdown(kind: AttachmentKind, name: string, url: string): string {
-  // A video is a bare link on its own line, which GitHub renders as a player.
-  return kind === 'image' ? `![${altText(name)}](${url})` : url;
+  // A video is a bare link on its own line, which GitHub renders as a player. The line breaks keep it apart from the text around it.
+  return kind === 'image' ? `![${altText(name)}](${url})` : `\n${url}\n`;
 }
 
 /** Replaces the first occurrence of `needle`. Returns the text unchanged when it is gone. */

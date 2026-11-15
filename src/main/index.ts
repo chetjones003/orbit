@@ -73,7 +73,7 @@ if (!app.requestSingleInstanceLock()) {
       attachmentNotice: {
         isAcknowledged: async () => (await settings.load()).publicUploadNoticeAcknowledged,
         acknowledge: async () => {
-          await settings.update({ publicUploadNoticeAcknowledged: true });
+          await settings.acknowledgePublicUploadNotice();
         }
       }
     });

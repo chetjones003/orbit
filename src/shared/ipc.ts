@@ -92,9 +92,7 @@ export interface OrbitSettings {
   publicUploadNoticeAcknowledged: boolean;
 }
 
-export type SettingsUpdate = Partial<
-  Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme' | 'publicUploadNoticeAcknowledged'>
-> & {
+export type SettingsUpdate = Partial<Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme'>> & {
   detailsWidth?: number;
 };
 

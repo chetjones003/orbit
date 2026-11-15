@@ -64,7 +64,7 @@ describe('placeholders and Markdown', () => {
 
   it('turns a video into a bare link on its own line so GitHub renders the player', () => {
     expect(attachmentMarkdown('video', 'clip.mp4', 'https://github.com/user-attachments/assets/abc')).toBe(
-      'https://github.com/user-attachments/assets/abc'
+      '\nhttps://github.com/user-attachments/assets/abc\n'
     );
   });
 

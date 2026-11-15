@@ -104,8 +104,8 @@ describe('Composer attachments', () => {
     paste([image()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Open on GitHub' }));
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Repro below')));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('![Uploading shot.png (1)]()'));
+    // The copied draft is the user's text only: the placeholder for the file that failed is left out.
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Repro below'));
     expect(orbit.app.openExternal).toHaveBeenCalledWith(ITEM_URL);
   });
 
@@ -166,5 +166,15 @@ describe('Composer attachments', () => {
 
     expect(orbit.attachments.upload).not.toHaveBeenCalled();
     expect(editor().value).toBe('');
+  });
+  it('keeps Retry reachable when the user is on the Preview tab', async () => {
+    orbit.attachments.upload.mockRejectedValue(new Error('GitHub returned 422.'));
+    renderComposer();
+    paste([image()]);
+    await screen.findByRole('alert');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

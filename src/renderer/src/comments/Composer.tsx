@@ -208,7 +208,12 @@ export function Composer({
 
   const openOnGitHub = (): void => {
     // The item opens in the browser with the draft on the clipboard, so the file can be attached there.
-    void navigator.clipboard?.writeText(textRef.current).catch(() => undefined);
+    // Placeholders stand for files that never reached GitHub, so they are left out of the copied draft.
+    const draft = uploads.reduce(
+      (text, upload) => replaceFirst(text, upload.placeholder, ''),
+      textRef.current
+    );
+    void navigator.clipboard?.writeText(draft).catch(() => undefined);
     void window.orbit.app.openExternal(viewOnGitHubUrl);
   };
 
@@ -335,53 +340,6 @@ export function Composer({
               placeholder={placeholder}
               onFiles={attachTo ? attachFiles : undefined}
             />
-            {uploads.length > 0 && (
-              <ul className="composer-uploads">
-                {uploads.map((upload) => (
-                  <li key={upload.id}>
-                    {upload.status === 'uploading' && <p role="status">Uploading {upload.name}…</p>}
-                    {upload.status === 'notice' && (
-                      <div role="alert" className="composer-error">
-                        <p>
-                          This repo is public. {upload.name} becomes public on GitHub as soon as it uploads,
-                          and anyone with the link can open it. Orbit will not ask again.
-                        </p>
-                        <button
-                          type="button"
-                          className="primary-action"
-                          onClick={() => runUpload(upload, true)}
-                        >
-                          Upload anyway
-                        </button>
-                        <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                    {upload.status === 'failed' && (
-                      <div role="alert" className="composer-error">
-                        <p>
-                          {upload.name} was not attached. {upload.message} Your text is still here.
-                        </p>
-                        <button
-                          type="button"
-                          className="secondary-action"
-                          onClick={() => runUpload(upload, false)}
-                        >
-                          Retry
-                        </button>
-                        <button type="button" className="secondary-action" onClick={openOnGitHub}>
-                          Open on GitHub
-                        </button>
-                        <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
           </>
         ) : (
           <div className="composer-preview">
@@ -405,6 +363,46 @@ export function Composer({
           </div>
         )}
       </div>
+
+      {uploads.length > 0 && (
+        <ul className="composer-uploads">
+          {uploads.map((upload) => (
+            <li key={upload.id}>
+              {upload.status === 'uploading' && <p role="status">Uploading {upload.name}…</p>}
+              {upload.status === 'notice' && (
+                <div role="alert" className="composer-error">
+                  <p>
+                    This repo is public. {upload.name} becomes public on GitHub as soon as it uploads, and
+                    anyone with the link can open it. Orbit will not ask again.
+                  </p>
+                  <button type="button" className="primary-action" onClick={() => runUpload(upload, true)}>
+                    Upload anyway
+                  </button>
+                  <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
+                    Remove
+                  </button>
+                </div>
+              )}
+              {upload.status === 'failed' && (
+                <div role="alert" className="composer-error">
+                  <p>
+                    {upload.name} was not attached. {upload.message} Your text is still here.
+                  </p>
+                  <button type="button" className="secondary-action" onClick={() => runUpload(upload, false)}>
+                    Retry
+                  </button>
+                  <button type="button" className="secondary-action" onClick={openOnGitHub}>
+                    Open on GitHub
+                  </button>
+                  <button type="button" className="text-action" onClick={() => dismissUpload(upload)}>
+                    Remove
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="composer-footer">
         <p className={`composer-count ${overLimit ? 'over' : ''}`} role={overLimit ? 'alert' : undefined}>
