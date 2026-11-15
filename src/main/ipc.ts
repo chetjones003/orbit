@@ -617,7 +617,8 @@ function registerProjectHandlers(
     IpcChannels.projectsItems,
     (event, projectId: unknown, filter: unknown): Promise<ProjectItemsPage> => {
       assertTrustedSender(event, devServerOrigin);
-      return projects.listItems(String(projectId), typeof filter === 'string' ? filter : '');
+      if (typeof filter !== 'string') return Promise.reject(new Error('That filter is not valid.'));
+      return projects.listItems(String(projectId), filter);
     }
   );
   ipcMain.handle(

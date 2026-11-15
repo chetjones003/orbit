@@ -40,10 +40,14 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
         setMemberships(next);
         // Field definitions come from each project. They load once per project, not once per edit.
         const missing = [...new Set(next.memberships.map((m) => m.project.id))];
-        const loaded = await Promise.all(
-          missing.map((id) => window.orbit.projects.detail(id).then((d) => [id, d] as const))
-        );
-        if (!cancelled) setDetails((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+        try {
+          const loaded = await Promise.all(
+            missing.map((id) => window.orbit.projects.detail(id).then((d) => [id, d] as const))
+          );
+          if (!cancelled) setDetails((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+        } catch (error) {
+          if (!cancelled) setMessage(messageOf(error, 'The project fields could not be loaded.'));
+        }
       },
       (error: unknown) => !cancelled && setMessage(messageOf(error, 'Projects could not be loaded.'))
     );
@@ -93,7 +97,12 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
     replaceItem(item.id, withFieldValue(item, field, value));
     try {
       const result = await window.orbit.projects.setField(project.id, item.id, { fieldId: field.id, value });
-      if (result.kind === 'busy') return;
+      // Busy or unreadable: reload from GitHub rather than trust the local copy or drop the membership.
+      if (result.kind === 'busy' || result.item === null) {
+        if (result.kind === 'failed') setMessage(result.message);
+        setReloadKey((key) => key + 1);
+        return;
+      }
       replaceItem(item.id, result.item);
       if (result.kind === 'failed') setMessage(result.message);
     } catch (error) {

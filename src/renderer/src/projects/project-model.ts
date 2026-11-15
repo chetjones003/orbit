@@ -14,12 +14,9 @@ export type SingleSelectField = Extract<ProjectField, { kind: 'single-select' }>
  */
 export function groupingField(view: ProjectSavedView, fields: ProjectField[]): SingleSelectField | null {
   const singles = fields.filter((f): f is SingleSelectField => f.kind === 'single-select');
-  return (
-    singles.find((f) => f.id === view.groupByFieldId) ??
-    singles.find((f) => f.name === 'Status') ??
-    singles[0] ??
-    null
-  );
+  // A view grouped by another kind of field has no board to show, so it is not regrouped by a different field.
+  if (view.groupByFieldId !== null) return singles.find((f) => f.id === view.groupByFieldId) ?? null;
+  return singles.find((f) => f.name === 'Status') ?? singles[0] ?? null;
 }
 
 export interface BoardColumn {

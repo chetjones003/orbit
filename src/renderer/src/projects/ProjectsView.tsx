@@ -112,7 +112,13 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
     replaceItem(item.id, withFieldValue(item, field, value));
     try {
       const result = await window.orbit.projects.setField(projectId, item.id, { fieldId: field.id, value });
-      if (result.kind === 'busy') return;
+      // Busy means another save on this item is running, so the local copy can't be trusted: reload.
+      // A null item means GitHub could not be read back, so the row stays until a reload confirms it.
+      if (result.kind === 'busy' || result.item === null) {
+        if (result.kind === 'failed') setMessage(result.message);
+        setReloadKey((key) => key + 1);
+        return;
+      }
       replaceItem(item.id, result.item);
       if (result.kind === 'failed') setMessage(result.message);
     } catch (error) {

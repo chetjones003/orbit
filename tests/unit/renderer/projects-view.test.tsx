@@ -251,4 +251,19 @@ describe('ProjectsView', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Fix crash')).toBeInTheDocument();
   });
+
+  it('reloads the items instead of dropping a row when GitHub cannot be read back', async () => {
+    await openProject('Mine');
+    const select = await screen.findByLabelText('Status for Fix crash');
+    const callsBefore = api.projects.items.mock.calls.length;
+    api.projects.setField.mockResolvedValue({
+      kind: 'failed',
+      item: null,
+      message: 'GitHub refused the project request.'
+    } satisfies ProjectItemEditResult);
+    fireEvent.change(select, { target: { value: 'done' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('GitHub refused');
+    await waitFor(() => expect(api.projects.items.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(screen.getByText('Fix crash')).toBeInTheDocument();
+  });
 });

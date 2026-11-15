@@ -85,10 +85,12 @@ export function ProjectFieldEditor({ field, value, itemLabel, disabled, onChange
             }
             if (field.kind === 'number') {
               const number = Number(draft);
-              if (draft.trim() === '' || !Number.isFinite(number)) {
+              // An empty box clears the number. Text that is not a number is ignored, so a stray key cannot clear it.
+              if (draft.trim() === '') {
                 if (current !== '') onChange(null);
                 return;
               }
+              if (!Number.isFinite(number)) return;
               if (number !== (value?.kind === 'number' ? value.number : undefined))
                 onChange({ kind: 'number', number });
               return;

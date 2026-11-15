@@ -94,4 +94,13 @@ describe('project IPC handlers', () => {
     expect(() => invoke(IpcChannels.projectsList, untrusted)).toThrow('Untrusted IPC sender');
     expect(projects.listProjects).not.toHaveBeenCalled();
   });
+
+  it('refuses a filter that is not text instead of listing every item', async () => {
+    const projects = projectsService();
+    registerIpcHandlers({ projects: projects as never });
+    await expect(invoke(IpcChannels.projectsItems, trusted, 'PVT_1', { not: 'text' })).rejects.toThrow(
+      'That filter is not valid.'
+    );
+    expect(projects.listItems).not.toHaveBeenCalled();
+  });
 });

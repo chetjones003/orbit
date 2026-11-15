@@ -152,4 +152,8 @@ describe('openableKind', () => {
     expect(openableKind(item('a'))).toBe('issue');
     expect(openableKind({ ...item('b'), kind: 'draft', repoFullName: null, number: null })).toBeNull();
   });
+
+  it('does not regroup a view grouped by a non-single-select field', () => {
+    expect(groupingField(view({ groupByFieldId: SPRINT.id }), [STATUS, SPRINT])).toBeNull();
+  });
 });

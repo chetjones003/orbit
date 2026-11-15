@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test } from '@playwright/test';
-import { startFakeGitHub, type FakeGitHub } from '../fakes/github';
+import { startFakeGitHub, type FakeGitHub, type FakeRoute } from '../fakes/github';
 
 /**
  * Projects against the unpacked build, with GitHub replaced by the controlled fake. Covers opening a
@@ -43,7 +43,7 @@ const STATUS_FIELD = {
 };
 
 /** A GitHub project whose one item is stored in `state`, so a write changes what the next read returns. */
-function projectsFake(state: { status: 'todo' | 'done' }): Parameters<typeof startFakeGitHub>[0] {
+function projectsFake(state: { status: 'todo' | 'done' }): FakeRoute[] {
   const item = () => ({
     id: 'PVTI_1',
     type: 'ISSUE',
@@ -72,7 +72,10 @@ function projectsFake(state: { status: 'todo' | 'done' }): Parameters<typeof sta
       method: 'POST',
       path: '/graphql',
       respond: ({ body }) => {
-        const { query, variables } = JSON.parse(body) as { query: string; variables: Record<string, unknown> };
+        const { query, variables } = JSON.parse(body) as {
+          query: string;
+          variables: Record<string, unknown>;
+        };
         if (query.includes('viewer {')) {
           return { body: { data: { viewer: { projectsV2: { totalCount: 1, nodes: [PROJECT] } } } } };
         }
@@ -91,7 +94,9 @@ function projectsFake(state: { status: 'todo' | 'done' }): Parameters<typeof sta
                         name: 'Backlog',
                         layout: 'BOARD_LAYOUT',
                         filter: '',
-                        groupByFields: { nodes: [{ id: 'FLD_status', name: 'Status', dataType: 'SINGLE_SELECT' }] }
+                        groupByFields: {
+                          nodes: [{ id: 'FLD_status', name: 'Status', dataType: 'SINGLE_SELECT' }]
+                        }
                       }
                     ]
                   }
