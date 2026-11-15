@@ -17,7 +17,9 @@ import type {
   TaskToggleResult,
   PullListQuery,
   PullListPage,
-  PullDetail
+  PullDetail,
+  PullFilesPage,
+  PullReviewThreadsPage
 } from './issues';
 
 /**
@@ -45,6 +47,8 @@ export const IpcChannels = {
   issuesSetTask: 'issues:set-task',
   pullsDetail: 'pulls:detail',
   pullsList: 'pulls:list',
+  pullsFiles: 'pulls:files',
+  pullsThreads: 'pulls:threads',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
@@ -167,6 +171,10 @@ export interface OrbitApi {
   pulls: {
     list(query: PullListQuery): Promise<PullListPage>;
     detail(repoFullName: string, number: number): Promise<PullDetail>;
+    /** Changed files with their diffs. */
+    files(repoFullName: string, number: number): Promise<PullFilesPage>;
+    /** Review threads with resolved and outdated state. */
+    threads(repoFullName: string, number: number): Promise<PullReviewThreadsPage>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */

@@ -10,6 +10,7 @@ import { CommentThread } from '../comments/CommentThread';
 import { classifyLink } from './classify-link';
 import { IssueEditor } from './IssueEditor';
 import { IssueFields } from './IssueFields';
+import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 
 export interface IssueDetailViewProps {
@@ -284,6 +285,10 @@ export function IssueDetailView({
         emptyText="No description provided."
         onTaskToggle={editable ? toggleTask : undefined}
       />
+
+      {kind === 'pull' && (
+        <PullDiffView repoFullName={repoFullName} number={number} variant={variant} onLink={routeLink} />
+      )}
 
       <CommentThread
         repoFullName={repoFullName}

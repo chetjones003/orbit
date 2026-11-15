@@ -90,7 +90,11 @@ describe('IssueDetailView editing', () => {
         setState: vi.fn(),
         setTask: vi.fn()
       },
-      pulls: { detail: vi.fn(async () => detail()) },
+      pulls: {
+        detail: vi.fn(async () => detail()),
+        files: vi.fn(async () => ({ files: [], partial: false })),
+        threads: vi.fn(async () => ({ threads: [], partial: false }))
+      },
       markdown: { preview: vi.fn(async (_repo: string, text: string) => `<p>${text}</p>`) },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     };

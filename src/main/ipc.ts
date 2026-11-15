@@ -27,7 +27,9 @@ import type {
   TaskToggleResult,
   PullListQuery,
   PullListPage,
-  PullDetail
+  PullDetail,
+  PullFilesPage,
+  PullReviewThreadsPage
 } from '../shared/issues';
 
 /** The part of the refresh engine that IPC needs. */
@@ -65,7 +67,7 @@ export interface IpcOptions {
     >,
     'getPullDetail'
   > &
-    Partial<Pick<IssueService, 'listPulls'>> & {
+    Partial<Pick<IssueService, 'listPulls' | 'getPullFiles' | 'getPullReviewThreads'>> & {
       getPullDetail(repoFullName: string, number: number): Promise<IssueDetail | PullDetail>;
     };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
@@ -133,6 +135,22 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       (event, repoFullName: string, number: number): Promise<PullDetail> => {
         assertTrustedSender(event, devServerOrigin);
         return issues.getPullDetail(repoFullName, number) as Promise<PullDetail>;
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsFiles,
+      (event, repoFullName: string, number: number): Promise<PullFilesPage> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getPullFiles) throw new Error('Pull request diffs are unavailable.');
+        return issues.getPullFiles(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.pullsThreads,
+      (event, repoFullName: string, number: number): Promise<PullReviewThreadsPage> => {
+        assertTrustedSender(event, devServerOrigin);
+        if (!issues.getPullReviewThreads) throw new Error('Review threads are unavailable.');
+        return issues.getPullReviewThreads(repoFullName, number);
       }
     );
     ipcMain.handle(
