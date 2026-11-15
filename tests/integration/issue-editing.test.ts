@@ -94,7 +94,7 @@ describe('issue writes over HTTP', () => {
       'orbit-owner/app',
       4,
       { title: 'Mine', body: BODY },
-      '2026-01-03T00:00:00Z'
+      { title: 'Crash on save', body: BODY }
     );
 
     expect(result.kind).toBe('conflict');

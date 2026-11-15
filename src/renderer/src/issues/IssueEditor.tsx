@@ -8,7 +8,7 @@ export interface IssueEditorProps {
   repoFullName: string;
   number: number;
   signedInLogin: string;
-  /** The version the edit starts from. Its updatedAt is what GitHub checks the save against. */
+  /** The version the edit starts from. Its title and body are what GitHub checks the save against. */
   snapshot: IssueSnapshot;
   onSaved: (issue: IssueSnapshot) => void;
   onCancel: () => void;
@@ -33,14 +33,21 @@ export function IssueEditor({
   onLink,
   viewOnGitHubUrl
 }: IssueEditorProps) {
-  const [title, setTitle] = useState(snapshot.summary.title);
-  const [conflict, setConflict] = useState(false);
-  const draftKey = {
+  const bodyKey = {
     login: signedInLogin,
     repoFullName,
     kind: 'issue' as const,
     number,
     target: 'issue-body' as const
+  };
+  const titleKey = { ...bodyKey, target: 'issue-title' as const };
+  // An unsaved title is kept as a draft, like the description, so "Load latest version" does not lose it.
+  const [title, setTitle] = useState(() => drafts.get(titleKey) ?? snapshot.summary.title);
+  const [conflict, setConflict] = useState(false);
+
+  const changeTitle = (next: string): void => {
+    setTitle(next);
+    drafts.set(titleKey, next === snapshot.summary.title ? '' : next);
   };
 
   const save = async (body: string): Promise<'keep' | void> => {
@@ -53,10 +60,11 @@ export function IssueEditor({
       repoFullName,
       number,
       { title: cleanTitle, body },
-      snapshot.summary.updatedAt
+      { title: snapshot.summary.title, body: snapshot.body }
     );
     if (result.kind === 'saved') {
-      drafts.set(draftKey, '');
+      drafts.set(titleKey, '');
+      drafts.set(bodyKey, '');
       onSaved(result.issue);
       return;
     }
@@ -68,15 +76,10 @@ export function IssueEditor({
     <div className="issue-editor">
       <label className="field">
         <span>Title</span>
-        <input
-          aria-label="Title"
-          value={title}
-          maxLength={ISSUE_TITLE_MAX_CHARS * 4}
-          onChange={(event) => setTitle(event.target.value)}
-        />
+        <input aria-label="Title" value={title} onChange={(event) => changeTitle(event.target.value)} />
       </label>
       <Composer
-        draftKey={draftKey}
+        draftKey={bodyKey}
         initialText={snapshot.body}
         placeholder="Describe the issue"
         ariaLabel="Edit description"

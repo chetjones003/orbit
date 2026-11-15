@@ -36,7 +36,8 @@ const OPTIONS: IssueRepoOptions = {
     { name: 'urgent', color: 'ff0000' }
   ],
   assignees: ['orbit-owner', 'helper'],
-  milestones: [{ number: 2, title: 'v1' }]
+  milestones: [{ number: 2, title: 'v1' }],
+  partial: false
 };
 
 function detail(overrides: Partial<IssueDetail> = {}): IssueDetail {
@@ -120,7 +121,7 @@ describe('IssueDetailView editing', () => {
       REPO,
       4,
       { title: 'New title', body: 'New body' },
-      '2026-01-03T00:00:00Z'
+      { title: 'Crash on save', body: BODY }
     );
   });
 
@@ -210,6 +211,30 @@ describe('IssueDetailView editing', () => {
     expect(taskBoxes(container).every((box) => box.disabled)).toBe(true);
     expect(screen.queryByRole('button', { name: 'Edit issue' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close as not planned' })).toBeNull();
+  });
+
+  it('keeps the title the user typed when they load the latest version after a conflict', async () => {
+    api.issues.update.mockResolvedValueOnce({
+      kind: 'conflict',
+      current: snapshot({ title: 'Their title' }, 'Their body')
+    });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'My title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Load latest version' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('My title');
+  });
+
+  it('says when the repo has more labels, assignees, or milestones than are listed', async () => {
+    api.issues.repoOptions.mockResolvedValueOnce({ ...OPTIONS, partial: true });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Crash on save' });
+
+    expect(await screen.findByText(/Only the first 100/)).toBeInTheDocument();
   });
 
   it('shows the issue’s current milestone even when the repo no longer offers it as open', async () => {

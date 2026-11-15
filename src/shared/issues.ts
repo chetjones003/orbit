@@ -123,4 +123,6 @@ export interface IssueRepoOptions {
   labels: IssueLabel[];
   assignees: string[];
   milestones: IssueMilestone[];
+  /** True when a list was full, so the repo may offer choices that are not shown. */
+  partial: boolean;
 }

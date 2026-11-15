@@ -6,6 +6,7 @@ import { WriteBlockedError } from '../../../src/main/github/write-reconcile';
 const SIGNED_IN = { kind: 'signed-in' as const, sessionId: 7, login: 'orbit-owner', persistent: true };
 const REPO = 'orbit-owner/app';
 const ISSUE_PATH = '/repos/orbit-owner/app/issues/4';
+const BODY = 'Steps:\n- [ ] reproduce\n- [x] report';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -138,7 +139,7 @@ describe('IssueService.updateIssue', () => {
       REPO,
       4,
       { title: 'Renamed', body: 'New text' },
-      '2026-01-03T00:00:00Z'
+      { title: 'Crash on save', body: BODY }
     );
 
     expect(result.kind).toBe('saved');
@@ -151,22 +152,59 @@ describe('IssueService.updateIssue', () => {
     expect(patch?.body).toEqual({ title: 'Renamed', body: 'New text' });
   });
 
-  it('returns the newer version and writes nothing when GitHub changed the issue since the base', async () => {
-    const { service, calls } = makeService(() =>
-      json(issue({ updated_at: '2026-01-09T00:00:00Z', title: 'Theirs' }))
+  it('saves when only the issue timestamp moved, such as after someone else commented', async () => {
+    const { service, calls } = makeService((method) =>
+      method === 'PATCH'
+        ? json(issue({ title: 'Mine', body: 'x' }))
+        : json(issue({ updated_at: '2026-01-09T00:00:00Z' }))
     );
 
-    const result = await service.updateIssue(REPO, 4, { title: 'Mine', body: 'x' }, '2026-01-03T00:00:00Z');
+    const result = await service.updateIssue(
+      REPO,
+      4,
+      { title: 'Mine', body: 'x' },
+      { title: 'Crash on save', body: BODY }
+    );
+
+    expect(result.kind).toBe('saved');
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(true);
+  });
+
+  it('returns the newer version and writes nothing when GitHub changed the title since the base', async () => {
+    const { service, calls } = makeService(() => json(issue({ title: 'Theirs' })));
+
+    const result = await service.updateIssue(
+      REPO,
+      4,
+      { title: 'Mine', body: 'x' },
+      { title: 'Crash on save', body: BODY }
+    );
 
     expect(result.kind).toBe('conflict');
     if (result.kind === 'conflict') expect(result.current.summary.title).toBe('Theirs');
     expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
   });
 
+  it('returns a conflict when GitHub changed the body since the base', async () => {
+    const { service, calls } = makeService(() => json(issue({ body: 'Rewritten' })));
+
+    const result = await service.updateIssue(
+      REPO,
+      4,
+      { title: 'Crash on save', body: 'x' },
+      { title: 'Crash on save', body: BODY }
+    );
+
+    expect(result.kind).toBe('conflict');
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
   it('validates the title before reading or writing', async () => {
     const { service, calls } = makeService(() => json(issue()));
 
-    await expect(service.updateIssue(REPO, 4, { title: '', body: '' }, 'x')).rejects.toThrow(/title/i);
+    await expect(
+      service.updateIssue(REPO, 4, { title: '', body: '' }, { title: 'x', body: '' })
+    ).rejects.toThrow(/title/i);
     expect(calls).toEqual([]);
   });
 });
@@ -254,9 +292,24 @@ describe('IssueService.getRepoOptions', () => {
     expect(options).toEqual({
       labels: [{ name: 'bug', color: 'd73a4a' }],
       assignees: ['helper'],
-      milestones: [{ number: 2, title: 'v1' }]
+      milestones: [{ number: 2, title: 'v1' }],
+      partial: false
     });
     expect(calls.find((c) => c.path.endsWith('/milestones'))?.search).toContain('state=open');
+  });
+
+  it('marks the choices partial when a list fills its first page, since more may exist', async () => {
+    const fullPage = Array.from({ length: 100 }, (_, i) => ({ name: `label-${i}`, color: 'ffffff' }));
+    const { service } = makeService((_method, path) => {
+      if (path.endsWith('/labels')) return json(fullPage);
+      if (path.endsWith('/assignees')) return json([]);
+      return json([]);
+    });
+
+    const options = await service.getRepoOptions(REPO);
+
+    expect(options.labels).toHaveLength(100);
+    expect(options.partial).toBe(true);
   });
 });
 

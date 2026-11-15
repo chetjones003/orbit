@@ -47,8 +47,8 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IpcChannels.issuesDetail, repoFullName, number),
     create: (repoFullName: string, input) =>
       ipcRenderer.invoke(IpcChannels.issuesCreate, repoFullName, input),
-    update: (repoFullName: string, number: number, input, baseUpdatedAt: string) =>
-      ipcRenderer.invoke(IpcChannels.issuesUpdate, repoFullName, number, input, baseUpdatedAt),
+    update: (repoFullName: string, number: number, input, base) =>
+      ipcRenderer.invoke(IpcChannels.issuesUpdate, repoFullName, number, input, base),
     updateFields: (repoFullName: string, number: number, fields) =>
       ipcRenderer.invoke(IpcChannels.issuesUpdateFields, repoFullName, number, fields),
     setState: (repoFullName: string, number: number, state, reason) =>

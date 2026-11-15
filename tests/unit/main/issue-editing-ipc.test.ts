@@ -53,7 +53,14 @@ describe('issue editing IPC handlers', () => {
     registerIpcHandlers({ issues: issues as never, comments: undefined });
 
     await invoke(IpcChannels.issuesCreate, trusted, 'orbit-owner/app', { title: 'T', body: 'B' });
-    await invoke(IpcChannels.issuesUpdate, trusted, 'orbit-owner/app', 4, { title: 'T', body: 'B' }, 'base');
+    await invoke(
+      IpcChannels.issuesUpdate,
+      trusted,
+      'orbit-owner/app',
+      4,
+      { title: 'T', body: 'B' },
+      { title: 'old', body: 'old body' }
+    );
     await invoke(IpcChannels.issuesUpdateFields, trusted, 'orbit-owner/app', 4, {
       labels: ['bug'],
       assignees: [],
@@ -68,7 +75,12 @@ describe('issue editing IPC handlers', () => {
     });
 
     expect(issues.createIssue).toHaveBeenCalledWith('orbit-owner/app', { title: 'T', body: 'B' });
-    expect(issues.updateIssue).toHaveBeenCalledWith('orbit-owner/app', 4, { title: 'T', body: 'B' }, 'base');
+    expect(issues.updateIssue).toHaveBeenCalledWith(
+      'orbit-owner/app',
+      4,
+      { title: 'T', body: 'B' },
+      { title: 'old', body: 'old body' }
+    );
     expect(issues.updateIssueFields).toHaveBeenCalledWith('orbit-owner/app', 4, {
       labels: ['bug'],
       assignees: [],

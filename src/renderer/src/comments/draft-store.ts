@@ -8,7 +8,7 @@ export interface DraftKey {
   kind: 'issue' | 'pull';
   number: number;
   /** A new comment, an edit of one comment, the description of an issue, or a new issue. */
-  target: 'new' | 'issue-body' | 'new-issue' | { commentId: number };
+  target: 'new' | 'issue-body' | 'issue-title' | 'new-issue' | { commentId: number };
 }
 
 /** Unsent comment text, held for the length of the session. */

@@ -133,10 +133,10 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
         repoFullName: string,
         number: number,
         input: IssueContentInput,
-        baseUpdatedAt: string
+        base: IssueContentInput
       ): Promise<IssueEditResult> => {
         assertTrustedSender(event, devServerOrigin);
-        return issues.updateIssue(repoFullName, number, input, baseUpdatedAt);
+        return issues.updateIssue(repoFullName, number, input, base);
       }
     );
     ipcMain.handle(

@@ -94,6 +94,11 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
       )}
       {options && (
         <>
+          {options.partial && (
+            <p className="session-notice" role="status">
+              Only the first 100 labels, assignees, or milestones are shown.
+            </p>
+          )}
           <fieldset>
             <legend>Labels</legend>
             {options.labels.map((label) => (

@@ -133,12 +133,12 @@ export interface OrbitApi {
     detail(repoFullName: string, number: number): Promise<IssueDetail>;
     /** Opens a new issue in one of the user's personal repos. */
     create(repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot>;
-    /** `baseUpdatedAt` is the version the edit started from; a newer one comes back as a conflict. */
+    /** `base` is the title and body the edit started from. A difference on GitHub comes back as a conflict. */
     update(
       repoFullName: string,
       number: number,
       input: IssueContentInput,
-      baseUpdatedAt: string
+      base: IssueContentInput
     ): Promise<IssueEditResult>;
     /** Replaces labels, assignees, and milestone. Resolves with GitHub's version of the issue. */
     updateFields(repoFullName: string, number: number, fields: IssueFieldsInput): Promise<IssueSummary>;

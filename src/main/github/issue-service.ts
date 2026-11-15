@@ -244,14 +244,15 @@ export class IssueService {
   }
 
   /**
-   * Edits the title and body of one of the signed-in user's issues. `baseUpdatedAt` is the version the
-   * user started from; a newer one on GitHub is returned as a conflict and nothing is written.
+   * Edits the title and body of one of the signed-in user's issues. `base` is the title and body the user
+   * started from. If GitHub's title or body differs from them, nothing is written and the current issue is
+   * returned as a conflict. Other changes to the issue, such as a new comment, do not count.
    */
   async updateIssue(
     repoFullName: string,
     number: number,
     input: IssueContentInput,
-    baseUpdatedAt: string
+    base: IssueContentInput
   ): Promise<IssueEditResult> {
     const { owner, repo } = this.validateRepo(repoFullName);
     validateItemNumber(number);
@@ -260,7 +261,9 @@ export class IssueService {
     const path = itemPath(owner, repo, 'issues', number);
     const { token, scope } = await this.session();
     const current = await this.readIssueSnapshot(path, token, scope);
-    if (current.summary.updatedAt !== baseUpdatedAt) return { kind: 'conflict', current };
+    if (current.summary.title !== base.title || current.body !== base.body) {
+      return { kind: 'conflict', current };
+    }
 
     const saved = await runWrite<IssueSnapshot>({
       canWrite: this.canWrite,
@@ -369,13 +372,16 @@ export class IssueService {
     if (!Array.isArray(labels) || !Array.isArray(assignees) || !Array.isArray(milestones)) {
       throw new Error('GitHub returned invalid repo options.');
     }
+    // A list that fills its first page may have more entries that were not read.
+    const partial = [labels, assignees, milestones].some((page) => page.length >= COMMENTS_PER_PAGE);
     return {
       labels: (labels as unknown[]).flatMap(toLabel),
       assignees: (assignees as unknown[]).flatMap((raw) => {
         const login = (raw as { login?: unknown } | null)?.login;
         return typeof login === 'string' ? [login] : [];
       }),
-      milestones: (milestones as unknown[]).flatMap(toMilestone)
+      milestones: (milestones as unknown[]).flatMap(toMilestone),
+      partial
     };
   }
 
