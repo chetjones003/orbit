@@ -212,6 +212,19 @@ describe('IssueDetailView editing', () => {
     expect(screen.queryByRole('button', { name: 'Close as not planned' })).toBeNull();
   });
 
+  it('shows the issue’s current milestone even when the repo no longer offers it as open', async () => {
+    api.issues.detail.mockResolvedValueOnce(
+      detail({ summary: { ...SUMMARY, milestone: { number: 9, title: 'Closed sprint' } } })
+    );
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Crash on save' });
+
+    const fields = screen.getByRole('region', { name: 'Issue fields' });
+    expect(await within(fields).findByRole('combobox', { name: 'Milestone' })).toHaveDisplayValue(
+      'Closed sprint'
+    );
+  });
+
   it('lists the choices the repo offers for labels, assignees, and milestone', async () => {
     renderDetail();
     await screen.findByRole('heading', { name: 'Crash on save' });

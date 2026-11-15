@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { IssueLabel, IssueRepoOptions, IssueSummary } from '../../../shared/issues';
+import type { IssueLabel, IssueMilestone, IssueRepoOptions, IssueSummary } from '../../../shared/issues';
 
 export interface IssueFieldsProps {
   repoFullName: string;
@@ -14,6 +14,15 @@ export interface IssueFieldsProps {
  * Labels, assignees, and milestone of one issue. A change shows at once; it is reversed if GitHub refuses it,
  * and GitHub's reconciled summary replaces the optimistic one when it is accepted.
  */
+/**
+ * The repo's open milestones, plus the issue's own milestone when it is no longer open. Without it the
+ * select would show "No milestone" for an issue that still has one.
+ */
+function milestonesWithCurrent(offered: IssueMilestone[], current: IssueMilestone | null): IssueMilestone[] {
+  if (!current || offered.some((m) => m.number === current.number)) return offered;
+  return [current, ...offered];
+}
+
 export function IssueFields({ repoFullName, number, summary, onChange, onError }: IssueFieldsProps) {
   const [options, setOptions] = useState<IssueRepoOptions | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -119,7 +128,7 @@ export function IssueFields({ repoFullName, number, summary, onChange, onError }
               onChange={(event) => chooseMilestone(event.target.value)}
             >
               <option value="">No milestone</option>
-              {options.milestones.map((milestone) => (
+              {milestonesWithCurrent(options.milestones, summary.milestone).map((milestone) => (
                 <option key={milestone.number} value={String(milestone.number)}>
                   {milestone.title}
                 </option>
