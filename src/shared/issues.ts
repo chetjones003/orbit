@@ -309,9 +309,9 @@ export interface PullActions {
 }
 
 export type PullMergeResult =
-  { kind: 'merged'; sha: string; branchDeleted: boolean } | { kind: 'stale'; headSha: string };
+  { kind: 'merged'; sha: string; branchDeleted: boolean } | { kind: 'new-commits'; headSha: string };
 
-export type PullWriteResult = { kind: 'changed' } | { kind: 'stale'; headSha: string };
+export type PullWriteResult = { kind: 'changed' } | { kind: 'new-commits'; headSha: string };
 
 export interface WorkflowRun {
   id: number;

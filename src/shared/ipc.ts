@@ -238,11 +238,23 @@ export interface OrbitApi {
       number: number,
       input: { enabled: boolean; method?: MergeMethod; expectedHeadSha: string }
     ): Promise<PullWriteResult>;
-    setDraft(repoFullName: string, number: number, draft: boolean): Promise<void>;
+    /** Pinned to the head the user reviewed; a head that has moved comes back as new commits. */
+    setDraft(
+      repoFullName: string,
+      number: number,
+      draft: boolean,
+      expectedHeadSha: string
+    ): Promise<PullWriteResult>;
     /** Workflow runs for the pull request's head commit. */
     runs(repoFullName: string, number: number): Promise<WorkflowRun[]>;
     /** Re-runs a workflow run: all of it, or only its failed jobs. */
-    rerun(repoFullName: string, runId: number, mode: RerunMode): Promise<void>;
+    /** Only re-runs a run that still belongs to `expectedHeadSha`; otherwise it comes back as new commits. */
+    rerun(
+      repoFullName: string,
+      runId: number,
+      mode: RerunMode,
+      expectedHeadSha: string
+    ): Promise<PullWriteResult>;
     /** Opens a pull request from a branch in one of the user's personal repos. */
     create(repoFullName: string, input: PullCreateInput): Promise<PullSummary>;
     branches(repoFullName: string): Promise<string[]>;

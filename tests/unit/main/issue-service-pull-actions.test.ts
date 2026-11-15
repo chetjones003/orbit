@@ -175,7 +175,7 @@ describe('mergePull', () => {
       deleteBranch: false,
       expectedHeadSha: 'head-1'
     });
-    expect(result).toEqual({ kind: 'stale', headSha: 'head-2' });
+    expect(result).toEqual({ kind: 'new-commits', headSha: 'head-2' });
     expect(gh.sent('PUT', '/repos/orbit-owner/app/pulls/7/merge')).toHaveLength(0);
   });
 
@@ -252,6 +252,50 @@ describe('mergePull', () => {
   });
 });
 
+describe('branch deletion after merge', () => {
+  it('reports the branch deleted when a lost delete response means it is already gone', async () => {
+    const gh = fakeGitHub({
+      rest: (method, path) => {
+        if (method === 'GET' && path === '/repos/orbit-owner/app') return repoJson();
+        if (method === 'GET' && path === '/repos/orbit-owner/app/pulls/7') return pullJson();
+        if (method === 'PUT' && path === '/repos/orbit-owner/app/pulls/7/merge')
+          return { sha: 'merge-sha', merged: true };
+        if (method === 'DELETE' && path === '/repos/orbit-owner/app/git/refs/heads/feature')
+          throw new Error('reset');
+        return undefined;
+      }
+    });
+    const result = await makeService(gh.fetch).mergePull('orbit-owner/app', 7, {
+      method: 'merge',
+      deleteBranch: true,
+      expectedHeadSha: 'head-1'
+    });
+    expect(result).toEqual({ kind: 'merged', sha: 'merge-sha', branchDeleted: true });
+  });
+
+  it('reports the branch kept when the delete failed and the branch still exists', async () => {
+    const gh = fakeGitHub({
+      rest: (method, path) => {
+        if (method === 'GET' && path === '/repos/orbit-owner/app') return repoJson();
+        if (method === 'GET' && path === '/repos/orbit-owner/app/pulls/7') return pullJson();
+        if (method === 'PUT' && path === '/repos/orbit-owner/app/pulls/7/merge')
+          return { sha: 'merge-sha', merged: true };
+        if (method === 'DELETE' && path === '/repos/orbit-owner/app/git/refs/heads/feature')
+          return new Response(null, { status: 422 });
+        if (method === 'GET' && path === '/repos/orbit-owner/app/git/refs/heads/feature')
+          return { ref: 'refs/heads/feature' };
+        return undefined;
+      }
+    });
+    const result = await makeService(gh.fetch).mergePull('orbit-owner/app', 7, {
+      method: 'merge',
+      deleteBranch: true,
+      expectedHeadSha: 'head-1'
+    });
+    expect(result).toEqual({ kind: 'merged', sha: 'merge-sha', branchDeleted: false });
+  });
+});
+
 describe('auto-merge and draft state', () => {
   it('enables auto-merge with the chosen method, pinned to the reviewed head', async () => {
     const gh = fakeGitHub({
@@ -303,17 +347,80 @@ describe('auto-merge and draft state', () => {
     expect(gh.mutations('enablePullRequestAutoMerge')).toHaveLength(0);
   });
 
-  it('converts a pull request to draft and marks it ready for review', async () => {
+  it('converts a pull request to draft and marks it ready for review, pinned to the reviewed head', async () => {
     const gh = fakeGitHub({ graphql: () => pullGraphql() });
     const service = makeService(gh.fetch);
-    await service.setPullDraft('orbit-owner/app', 7, true);
-    await service.setPullDraft('orbit-owner/app', 7, false);
+    expect(await service.setPullDraft('orbit-owner/app', 7, true, 'head-1')).toEqual({ kind: 'changed' });
+    await service.setPullDraft('orbit-owner/app', 7, false, 'head-1');
     expect(gh.mutations('convertPullRequestToDraft')[0]?.variables).toEqual({
       input: { pullRequestId: 'PR_1' }
     });
     expect(gh.mutations('markPullRequestReadyForReview')[0]?.variables).toEqual({
       input: { pullRequestId: 'PR_1' }
     });
+  });
+
+  it('refuses a draft change when the head has moved since the user reviewed it', async () => {
+    const gh = fakeGitHub({ graphql: () => pullGraphql({ headRefOid: 'head-2' }) });
+    const result = await makeService(gh.fetch).setPullDraft('orbit-owner/app', 7, false, 'head-1');
+    expect(result).toEqual({ kind: 'new-commits', headSha: 'head-2' });
+    expect(gh.mutations('markPullRequestReadyForReview')).toHaveLength(0);
+  });
+
+  it('reconciles an uncertain draft change that already landed instead of repeating it', async () => {
+    let converted = false;
+    const gh = fakeGitHub({
+      graphql: (query) => {
+        if (query.includes('convertPullRequestToDraft(')) {
+          converted = true;
+          throw new Error('connection reset');
+        }
+        return pullGraphql({ isDraft: converted });
+      }
+    });
+    const result = await makeService(gh.fetch).setPullDraft('orbit-owner/app', 7, true, 'head-1');
+    expect(result).toEqual({ kind: 'changed' });
+    expect(gh.mutations('convertPullRequestToDraft')).toHaveLength(1);
+  });
+
+  it('refuses an auto-merge method the repo does not allow, before enabling anything', async () => {
+    const gh = fakeGitHub({
+      rest: (method, path) =>
+        method === 'GET' && path === '/repos/orbit-owner/app'
+          ? repoJson({ allow_rebase_merge: false })
+          : undefined,
+      graphql: () => pullGraphql()
+    });
+    await expect(
+      makeService(gh.fetch).setPullAutoMerge('orbit-owner/app', 7, {
+        enabled: true,
+        method: 'rebase',
+        expectedHeadSha: 'head-1'
+      })
+    ).rejects.toThrow(/rebase/i);
+    expect(gh.mutations('enablePullRequestAutoMerge')).toHaveLength(0);
+  });
+
+  it('reconciles an uncertain auto-merge enable that already landed instead of repeating it', async () => {
+    let enabled = false;
+    const gh = fakeGitHub({
+      rest: (method, path) =>
+        method === 'GET' && path === '/repos/orbit-owner/app' ? repoJson() : undefined,
+      graphql: (query) => {
+        if (query.includes('enablePullRequestAutoMerge(')) {
+          enabled = true;
+          throw new Error('connection reset');
+        }
+        return pullGraphql(enabled ? { autoMergeRequest: { mergeMethod: 'MERGE' } } : {});
+      }
+    });
+    const result = await makeService(gh.fetch).setPullAutoMerge('orbit-owner/app', 7, {
+      enabled: true,
+      method: 'merge',
+      expectedHeadSha: 'head-1'
+    });
+    expect(result).toEqual({ kind: 'changed' });
+    expect(gh.mutations('enablePullRequestAutoMerge')).toHaveLength(1);
   });
 
   it('reports the allowed merge methods, draft state, and current auto-merge method', async () => {
@@ -344,6 +451,20 @@ describe('auto-merge and draft state', () => {
 
 describe('workflow re-runs', () => {
   const runsPath = '/repos/orbit-owner/app/actions/runs?head_sha=head-1&per_page=100';
+
+  it('refuses to re-run a run for a commit the pull request no longer has', async () => {
+    const gh = fakeGitHub({
+      rest: (method, path) =>
+        method === 'GET' && path === '/repos/orbit-owner/app/actions/runs/11'
+          ? { id: 11, head_sha: 'head-0' }
+          : undefined
+    });
+    expect(await makeService(gh.fetch).rerunPullWorkflow('orbit-owner/app', 11, 'all', 'head-1')).toEqual({
+      kind: 'new-commits',
+      headSha: 'head-0'
+    });
+    expect(gh.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
+  });
 
   it('lists the workflow runs for the head commit', async () => {
     const gh = fakeGitHub({
@@ -378,14 +499,19 @@ describe('workflow re-runs', () => {
 
   it('re-runs failed jobs only when asked, and everything otherwise', async () => {
     const gh = fakeGitHub({
-      rest: (method, path) =>
-        method === 'POST' && (path.endsWith('/rerun') || path.endsWith('/rerun-failed-jobs'))
-          ? new Response('{}', { status: 201, headers: { 'content-type': 'application/json' } })
-          : undefined
+      rest: (method, path) => {
+        if (method === 'GET' && path === '/repos/orbit-owner/app/actions/runs/11')
+          return { id: 11, head_sha: 'head-1' };
+        if (method === 'POST' && (path.endsWith('/rerun') || path.endsWith('/rerun-failed-jobs')))
+          return new Response('{}', { status: 201, headers: { 'content-type': 'application/json' } });
+        return undefined;
+      }
     });
     const service = makeService(gh.fetch);
-    await service.rerunPullWorkflow('orbit-owner/app', 11, 'failed');
-    await service.rerunPullWorkflow('orbit-owner/app', 11, 'all');
+    expect(await service.rerunPullWorkflow('orbit-owner/app', 11, 'failed', 'head-1')).toEqual({
+      kind: 'changed'
+    });
+    await service.rerunPullWorkflow('orbit-owner/app', 11, 'all', 'head-1');
     expect(gh.sent('POST', '/repos/orbit-owner/app/actions/runs/11/rerun-failed-jobs')).toHaveLength(1);
     expect(gh.sent('POST', '/repos/orbit-owner/app/actions/runs/11/rerun')).toHaveLength(1);
   });
@@ -441,9 +567,9 @@ describe('createPull', () => {
         }
         if (
           method === 'GET' &&
-          path === '/repos/orbit-owner/app/pulls?state=open&head=orbit-owner%3Afeature&per_page=100'
+          path === '/repos/orbit-owner/app/pulls?state=all&head=orbit-owner%3Afeature&per_page=100'
         )
-          return created ? [pullJson({ number: 9 })] : [];
+          return created ? [pullJson({ number: 9, created_at: new Date().toISOString() })] : [];
         return undefined;
       }
     });
@@ -460,10 +586,25 @@ describe('createPull', () => {
 });
 
 describe('listBranches', () => {
+  it('reads every page of branches, not just the first hundred', async () => {
+    const first = Array.from({ length: 100 }, (_, i) => ({ name: 'b' + i }));
+    const gh = fakeGitHub({
+      rest: (method, path) => {
+        if (method !== 'GET') return undefined;
+        if (path === '/repos/orbit-owner/app/branches?per_page=100&page=1') return first;
+        if (path === '/repos/orbit-owner/app/branches?per_page=100&page=2') return [{ name: 'feature' }];
+        return undefined;
+      }
+    });
+    const names = await makeService(gh.fetch).listBranches('orbit-owner/app');
+    expect(names).toHaveLength(101);
+    expect(names.at(-1)).toBe('feature');
+  });
+
   it('lists the branch names of the repo', async () => {
     const gh = fakeGitHub({
       rest: (method, path) =>
-        method === 'GET' && path === '/repos/orbit-owner/app/branches?per_page=100'
+        method === 'GET' && path === '/repos/orbit-owner/app/branches?per_page=100&page=1'
           ? [{ name: 'main' }, { name: 'feature' }]
           : undefined
     });

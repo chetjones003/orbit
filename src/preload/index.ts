@@ -81,12 +81,12 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IpcChannels.pullsMerge, repoFullName, number, input),
     setAutoMerge: (repoFullName: string, number: number, input) =>
       ipcRenderer.invoke(IpcChannels.pullsAutoMerge, repoFullName, number, input),
-    setDraft: (repoFullName: string, number: number, draft: boolean) =>
-      ipcRenderer.invoke(IpcChannels.pullsDraft, repoFullName, number, draft),
+    setDraft: (repoFullName: string, number: number, draft: boolean, expectedHeadSha: string) =>
+      ipcRenderer.invoke(IpcChannels.pullsDraft, repoFullName, number, draft, expectedHeadSha),
     runs: (repoFullName: string, number: number) =>
       ipcRenderer.invoke(IpcChannels.pullsRuns, repoFullName, number),
-    rerun: (repoFullName: string, runId: number, mode) =>
-      ipcRenderer.invoke(IpcChannels.pullsRerun, repoFullName, runId, mode),
+    rerun: (repoFullName: string, runId: number, mode, expectedHeadSha: string) =>
+      ipcRenderer.invoke(IpcChannels.pullsRerun, repoFullName, runId, mode, expectedHeadSha),
     create: (repoFullName: string, input) => ipcRenderer.invoke(IpcChannels.pullsCreate, repoFullName, input),
     branches: (repoFullName: string) => ipcRenderer.invoke(IpcChannels.pullsBranches, repoFullName)
   },

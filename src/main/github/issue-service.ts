@@ -72,6 +72,8 @@ const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const TEXT_FILTER_MAX = 100;
 const PULL_FILES_PER_PAGE = 100;
+/** Upper bound on branch pages (1,000 branches) read for the new pull request form. */
+const BRANCH_PAGE_LIMIT = 10;
 /** Upper bound on file pages (3,000 files), the most GitHub lists for one pull request. */
 const PULL_FILES_PAGE_LIMIT = 30;
 const REVIEW_THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!) {
@@ -1218,7 +1220,7 @@ export class IssueService {
     const pr = readPullFields(await this.client.get<unknown>(path, { token, scope }));
     if (pr.merged) throw new Error('This pull request is already merged.');
     if (pr.state !== 'open') throw new Error('This pull request is closed.');
-    if (pr.headSha !== input.expectedHeadSha) return { kind: 'stale', headSha: pr.headSha };
+    if (pr.headSha !== input.expectedHeadSha) return { kind: 'new-commits', headSha: pr.headSha };
 
     let sha: string;
     try {
@@ -1245,7 +1247,7 @@ export class IssueService {
       // GitHub refuses a merge pinned to a head that has moved with 409.
       if (error instanceof GitHubRequestError && error.status === 409) {
         const now = readPullFields(await this.client.get<unknown>(path, { token, scope }));
-        return { kind: 'stale', headSha: now.headSha };
+        return { kind: 'new-commits', headSha: now.headSha };
       }
       throw error;
     }
@@ -1258,8 +1260,9 @@ export class IssueService {
   }
 
   /**
-   * Turns auto-merge on, with a method, or off, pinned to the head the user reviewed. A head that has
-   * moved since is reported as stale and nothing is changed.
+   * Turns auto-merge on, with a method the repo allows, or off, pinned to the head the user reviewed. A head
+   * that has moved since is reported as new commits and nothing changes. An uncertain change is checked
+   * against GitHub before any retry, so it is never applied twice.
    */
   async setPullAutoMerge(
     repoFullName: string,
@@ -1274,47 +1277,84 @@ export class IssueService {
     }
     this.assertCanWrite();
     const { token, scope } = await this.session();
-    if (input.enabled) {
+    const method = input.enabled ? (input.method as MergeMethod) : null;
+    if (method !== null) {
       const settings = await this.readMergeSettings(owner, repo, token, scope);
       if (!settings.allowAutoMerge) throw new Error('Auto-merge is not allowed in this repo.');
+      if (!allowedMergeMethods(settings).includes(method)) {
+        throw new Error(`This repo does not allow ${method} merges.`);
+      }
     }
     const node = await this.readPullNode(owner, repo, number, token, scope);
-    if (node.headSha !== input.expectedHeadSha) return { kind: 'stale', headSha: node.headSha };
-    if (input.enabled) {
-      await this.graphql(
-        ENABLE_AUTO_MERGE,
-        {
-          input: {
-            pullRequestId: node.id,
-            mergeMethod: MERGE_METHOD_ENUM[input.method as MergeMethod],
-            expectedHeadOid: input.expectedHeadSha
-          }
-        },
-        token,
-        scope
-      );
-    } else {
-      await this.graphql(DISABLE_AUTO_MERGE, { input: { pullRequestId: node.id } }, token, scope);
-    }
-    return { kind: 'changed' };
+    if (node.headSha !== input.expectedHeadSha) return { kind: 'new-commits', headSha: node.headSha };
+
+    return runWrite<PullWriteResult>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        if (method !== null) {
+          await this.graphql(
+            ENABLE_AUTO_MERGE,
+            {
+              input: {
+                pullRequestId: node.id,
+                mergeMethod: MERGE_METHOD_ENUM[method],
+                expectedHeadOid: input.expectedHeadSha
+              }
+            },
+            token,
+            scope
+          );
+        } else {
+          await this.graphql(DISABLE_AUTO_MERGE, { input: { pullRequestId: node.id } }, token, scope);
+        }
+        return { kind: 'changed' };
+      },
+      reconcile: async () => {
+        const now = await this.readPullNode(owner, repo, number, token, scope);
+        return now.autoMergeMethod === method
+          ? { applied: true, value: { kind: 'changed' } }
+          : { applied: false };
+      }
+    });
   }
 
-  /** Converts a pull request to draft, or marks it ready for review. */
-  async setPullDraft(repoFullName: string, number: number, draft: boolean): Promise<void> {
+  /**
+   * Converts a pull request to draft, or marks it ready for review, pinned to the head the user reviewed.
+   * An uncertain change is reconciled against the draft state on GitHub before any retry.
+   */
+  async setPullDraft(
+    repoFullName: string,
+    number: number,
+    draft: boolean,
+    expectedHeadSha: string
+  ): Promise<PullWriteResult> {
     const { owner, repo } = this.validateRepo(repoFullName);
     validateItemNumber(number);
+    validateSha(expectedHeadSha);
     this.assertCanWrite();
     const { token, scope } = await this.session();
     const node = await this.readPullNode(owner, repo, number, token, scope);
-    await this.graphql(
-      draft ? CONVERT_TO_DRAFT : MARK_READY_FOR_REVIEW,
-      { input: { pullRequestId: node.id } },
-      token,
-      scope
-    );
+    if (node.headSha !== expectedHeadSha) return { kind: 'new-commits', headSha: node.headSha };
+
+    return runWrite<PullWriteResult>({
+      canWrite: this.canWrite,
+      attempt: async () => {
+        await this.graphql(
+          draft ? CONVERT_TO_DRAFT : MARK_READY_FOR_REVIEW,
+          { input: { pullRequestId: node.id } },
+          token,
+          scope
+        );
+        return { kind: 'changed' };
+      },
+      reconcile: async () => {
+        const now = await this.readPullNode(owner, repo, number, token, scope);
+        return now.isDraft === draft ? { applied: true, value: { kind: 'changed' } } : { applied: false };
+      }
+    });
   }
 
-  /** Workflow runs for the pull request's head commit, newest first, as GitHub lists them. */
+  /** Workflow runs for the pull request's head commit, as GitHub lists them. */
   async getPullWorkflowRuns(repoFullName: string, number: number): Promise<WorkflowRun[]> {
     const { owner, repo } = this.validateRepo(repoFullName);
     validateItemNumber(number);
@@ -1329,25 +1369,39 @@ export class IssueService {
   }
 
   /**
-   * Re-runs a workflow run, all of it or only its failed jobs. A re-run is not retried after an uncertain
-   * outcome, since GitHub cannot say whether it was already queued, so the caller is told to check again.
+   * Re-runs a workflow run, all of it or only its failed jobs, but only if the run still belongs to the
+   * commit the user saw; a run for a commit the pull request no longer has is reported as new commits.
+   * A re-run is not retried after an uncertain outcome, since GitHub cannot say whether it was already
+   * queued, so the caller is told to check again.
    */
-  async rerunPullWorkflow(repoFullName: string, runId: number, mode: RerunMode): Promise<void> {
+  async rerunPullWorkflow(
+    repoFullName: string,
+    runId: number,
+    mode: RerunMode,
+    expectedHeadSha: string
+  ): Promise<PullWriteResult> {
     const { owner, repo } = this.validateRepo(repoFullName);
     if (!Number.isInteger(runId) || runId < 1)
       throw new Error('Workflow run ids must be positive whole numbers.');
     if (mode !== 'all' && mode !== 'failed') throw new Error('Re-run all jobs or only the failed ones.');
+    validateSha(expectedHeadSha);
     this.assertCanWrite();
     const { token, scope } = await this.session();
+    const runPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}`;
+    const run = await this.client.get<unknown>(runPath, { token, scope });
+    const runHead = (run as { head_sha?: unknown } | null)?.head_sha;
+    if (typeof runHead !== 'string') throwInvalid('GitHub returned an invalid workflow run.');
+    if (runHead !== expectedHeadSha) return { kind: 'new-commits', headSha: runHead };
+
     const suffix = mode === 'failed' ? 'rerun-failed-jobs' : 'rerun';
-    await this.client.send<unknown>(
-      'POST',
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/${suffix}`,
-      { token, scope, text: true }
-    );
+    await this.client.send<unknown>('POST', `${runPath}/${suffix}`, { token, scope, text: true });
+    return { kind: 'changed' };
   }
 
-  /** Opens a pull request from a branch in the same personal repo. An uncertain create is reconciled first. */
+  /**
+   * Opens a pull request from a branch in the same personal repo. An uncertain create is reconciled by
+   * looking for a pull request with this title and base created since the request began, in any state.
+   */
   async createPull(repoFullName: string, input: PullCreateInput): Promise<PullSummary> {
     const { owner, repo } = this.validateRepo(repoFullName);
     const title = typeof input?.title === 'string' ? input.title.trim() : '';
@@ -1364,6 +1418,7 @@ export class IssueService {
     const { token, scope } = await this.session();
     const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`;
     const payload = { title, body, head, base, draft: input.draft === true };
+    const since = Date.now() - RECONCILE_SKEW_MS;
 
     return runWrite<PullSummary>({
       canWrite: this.canWrite,
@@ -1371,36 +1426,48 @@ export class IssueService {
         toPullSummary(await this.client.send<unknown>('POST', path, { token, scope, body: payload })) ??
         throwInvalid('GitHub returned an invalid pull request.'),
       reconcile: async () => {
-        const open = await this.client.get<unknown>(
-          `${path}?state=open&head=${encodeURIComponent(`${owner}:${head}`)}&per_page=100`,
+        const found = await this.client.get<unknown>(
+          `${path}?state=all&head=${encodeURIComponent(`${owner}:${head}`)}&per_page=100`,
           { token, scope }
         );
-        const match = Array.isArray(open)
-          ? open
+        const match = Array.isArray(found)
+          ? found
               .map(toPullSummary)
-              .find((pull) => pull !== null && pull.title === title && pull.baseRef === base)
+              .find(
+                (pull) =>
+                  pull !== null &&
+                  pull.title === title &&
+                  pull.baseRef === base &&
+                  Date.parse(pull.createdAt) >= since
+              )
           : undefined;
         return match ? { applied: true, value: match } : { applied: false };
       }
     });
   }
 
-  /** Names of the branches in the repo: the first page, which covers the branches the user works from. */
+  /** Names of every branch in the repo, read page by page. */
   async listBranches(repoFullName: string): Promise<string[]> {
     const { owner, repo } = this.validateRepo(repoFullName);
     const { token, scope } = await this.session();
-    const raw = await this.client.get<unknown>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`,
-      { token, scope }
-    );
-    return Array.isArray(raw)
-      ? raw.flatMap((b: unknown) =>
-          typeof (b as { name?: unknown })?.name === 'string' ? [(b as { name: string }).name] : []
-        )
-      : [];
+    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
+    const names: string[] = [];
+    for (let page = 1; page <= BRANCH_PAGE_LIMIT; page++) {
+      const raw = await this.client.get<unknown>(`${base}&page=${page}`, { token, scope });
+      if (!Array.isArray(raw)) break;
+      for (const branch of raw) {
+        const name = (branch as { name?: unknown } | null)?.name;
+        if (typeof name === 'string') names.push(name);
+      }
+      if (raw.length < 100) break;
+    }
+    return names;
   }
 
-  /** Deletes a head branch after its pull request merged. A failure is reported as not deleted, not thrown. */
+  /**
+   * Deletes a head branch after its pull request merged. When the delete fails, the branch is checked: a
+   * delete whose response was lost may already have landed, and a branch that is gone counts as deleted.
+   */
   private async deleteHeadBranch(
     owner: string,
     repo: string,
@@ -1409,16 +1476,20 @@ export class IssueService {
     scope: string
   ): Promise<boolean> {
     if (branch === '') return false;
-    const encoded = branch.split('/').map(encodeURIComponent).join('/');
+    const ref = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs/heads/${branch
+      .split('/')
+      .map(encodeURIComponent)
+      .join('/')}`;
     try {
-      await this.client.send<unknown>(
-        'DELETE',
-        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs/heads/${encoded}`,
-        { token, scope }
-      );
+      await this.client.send<unknown>('DELETE', ref, { token, scope });
       return true;
     } catch {
-      return false;
+      try {
+        await this.client.get<unknown>(ref, { token, scope });
+        return false;
+      } catch (error) {
+        return error instanceof GitHubRequestError && error.status === 404;
+      }
     }
   }
 
@@ -1471,6 +1542,7 @@ export class IssueService {
     return {
       id: pr.id,
       headSha: pr.headRefOid,
+      isDraft: pr.isDraft === true,
       autoMergeMethod: autoMergeMethod ?? null
     };
   }
@@ -1963,6 +2035,7 @@ interface MergeSettings {
 interface PullNode {
   id: string;
   headSha: string;
+  isDraft: boolean;
   autoMergeMethod: MergeMethod | null;
 }
 

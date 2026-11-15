@@ -283,10 +283,16 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     );
     ipcMain.handle(
       IpcChannels.pullsDraft,
-      (event, repoFullName: string, number: number, draft: boolean): Promise<void> => {
+      (
+        event,
+        repoFullName: string,
+        number: number,
+        draft: boolean,
+        expectedHeadSha: string
+      ): Promise<PullWriteResult> => {
         assertTrustedSender(event, devServerOrigin);
         if (!issues.setPullDraft) throw new Error('Draft changes are unavailable.');
-        return issues.setPullDraft(repoFullName, number, draft === true);
+        return issues.setPullDraft(repoFullName, number, draft === true, expectedHeadSha);
       }
     );
     ipcMain.handle(
@@ -299,10 +305,16 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     );
     ipcMain.handle(
       IpcChannels.pullsRerun,
-      (event, repoFullName: string, runId: number, mode: RerunMode): Promise<void> => {
+      (
+        event,
+        repoFullName: string,
+        runId: number,
+        mode: RerunMode,
+        expectedHeadSha: string
+      ): Promise<PullWriteResult> => {
         assertTrustedSender(event, devServerOrigin);
         if (!issues.rerunPullWorkflow) throw new Error('Re-running workflows is unavailable.');
-        return issues.rerunPullWorkflow(repoFullName, runId, mode);
+        return issues.rerunPullWorkflow(repoFullName, runId, mode, expectedHeadSha);
       }
     );
     ipcMain.handle(

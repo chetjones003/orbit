@@ -35,9 +35,9 @@ function actionsService() {
     getPullActions: vi.fn(async () => ({ headSha: 'head-1' })),
     mergePull: vi.fn(async () => ({ kind: 'merged', sha: 'merge-sha', branchDeleted: false })),
     setPullAutoMerge: vi.fn(async () => ({ kind: 'changed' })),
-    setPullDraft: vi.fn(async () => undefined),
+    setPullDraft: vi.fn(async () => ({ kind: 'changed' })),
     getPullWorkflowRuns: vi.fn(async () => []),
-    rerunPullWorkflow: vi.fn(async () => undefined),
+    rerunPullWorkflow: vi.fn(async () => ({ kind: 'changed' })),
     createPull: vi.fn(async () => ({ number: 9 })),
     listBranches: vi.fn(async () => ['main', 'feature'])
   };
@@ -69,14 +69,14 @@ describe('pull request action IPC handlers', () => {
     await invoke(IpcChannels.pullsAutoMerge, trusted, 'orbit-owner/app', 7, autoMerge);
     expect(issues.setPullAutoMerge).toHaveBeenCalledWith('orbit-owner/app', 7, autoMerge);
 
-    await invoke(IpcChannels.pullsDraft, trusted, 'orbit-owner/app', 7, true);
-    expect(issues.setPullDraft).toHaveBeenCalledWith('orbit-owner/app', 7, true);
+    await invoke(IpcChannels.pullsDraft, trusted, 'orbit-owner/app', 7, true, 'head-1');
+    expect(issues.setPullDraft).toHaveBeenCalledWith('orbit-owner/app', 7, true, 'head-1');
 
     await invoke(IpcChannels.pullsRuns, trusted, 'orbit-owner/app', 7);
     expect(issues.getPullWorkflowRuns).toHaveBeenCalledWith('orbit-owner/app', 7);
 
-    await invoke(IpcChannels.pullsRerun, trusted, 'orbit-owner/app', 11, 'failed');
-    expect(issues.rerunPullWorkflow).toHaveBeenCalledWith('orbit-owner/app', 11, 'failed');
+    await invoke(IpcChannels.pullsRerun, trusted, 'orbit-owner/app', 11, 'failed', 'head-1');
+    expect(issues.rerunPullWorkflow).toHaveBeenCalledWith('orbit-owner/app', 11, 'failed', 'head-1');
 
     const create = { title: 'Add x', body: '', head: 'feature', base: 'main', draft: false };
     await expect(invoke(IpcChannels.pullsCreate, trusted, 'orbit-owner/app', create)).resolves.toEqual({

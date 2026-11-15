@@ -37,8 +37,8 @@ function installApi(overrides: Record<string, unknown> = {}) {
     runs: vi.fn(async () => RUNS),
     merge: vi.fn(async () => ({ kind: 'merged', sha: 'merge-sha', branchDeleted: false })),
     setAutoMerge: vi.fn(async () => ({ kind: 'changed' })),
-    setDraft: vi.fn(async () => undefined),
-    rerun: vi.fn(async () => undefined),
+    setDraft: vi.fn(async () => ({ kind: 'changed' })),
+    rerun: vi.fn(async () => ({ kind: 'changed' })),
     create: vi.fn(async () => ({ number: 9 })),
     branches: vi.fn(async () => ['main', 'feature']),
     ...overrides
@@ -78,7 +78,7 @@ describe('PullActionsPanel', () => {
 
   it('says the pull request changed and merges nothing when the head moved', async () => {
     const pulls = installApi({
-      merge: vi.fn(async () => ({ kind: 'stale', headSha: 'head-2' }))
+      merge: vi.fn(async () => ({ kind: 'new-commits', headSha: 'head-2' }))
     });
     const onChanged = vi.fn();
     render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={onChanged} />);
@@ -99,7 +99,7 @@ describe('PullActionsPanel', () => {
     const pulls = installApi({ actions: vi.fn(async () => actions({ draft: true })) });
     render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Mark ready for review' }));
-    await waitFor(() => expect(pulls.setDraft).toHaveBeenCalledWith('orbit-owner/app', 7, false));
+    await waitFor(() => expect(pulls.setDraft).toHaveBeenCalledWith('orbit-owner/app', 7, false, 'head-1'));
   });
 
   it('turns auto-merge on with the chosen method, pinned to the head', async () => {
@@ -120,9 +120,9 @@ describe('PullActionsPanel', () => {
     const pulls = installApi();
     render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Re-run failed jobs for CI' }));
-    await waitFor(() => expect(pulls.rerun).toHaveBeenCalledWith('orbit-owner/app', 11, 'failed'));
+    await waitFor(() => expect(pulls.rerun).toHaveBeenCalledWith('orbit-owner/app', 11, 'failed', 'head-1'));
     fireEvent.click(screen.getByRole('button', { name: 'Re-run all jobs for CI' }));
-    await waitFor(() => expect(pulls.rerun).toHaveBeenCalledWith('orbit-owner/app', 11, 'all'));
+    await waitFor(() => expect(pulls.rerun).toHaveBeenCalledWith('orbit-owner/app', 11, 'all', 'head-1'));
   });
 });
 

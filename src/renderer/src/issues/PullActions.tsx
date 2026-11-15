@@ -88,7 +88,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
         deleteBranch,
         expectedHeadSha: actions.headSha
       });
-      if (result.kind === 'stale') {
+      if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
@@ -105,7 +105,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
         ...(enabled && method !== '' ? { method } : {}),
         expectedHeadSha: actions.headSha
       });
-      if (result.kind === 'stale') {
+      if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
@@ -116,14 +116,23 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
   const toggleDraft = (): Promise<void> => {
     if (!actions) return Promise.resolve();
     return run(async () => {
-      await window.orbit.pulls.setDraft(repoFullName, number, !actions.draft);
+      const result = await window.orbit.pulls.setDraft(repoFullName, number, !actions.draft, actions.headSha);
+      if (result.kind === 'new-commits') {
+        setError(STALE_MESSAGE);
+        return null;
+      }
       return actions.draft ? 'Marked ready for review.' : 'Converted to draft.';
     });
   };
 
   const rerun = (runId: number, name: string, mode: 'all' | 'failed'): Promise<void> =>
     run(async () => {
-      await window.orbit.pulls.rerun(repoFullName, runId, mode);
+      if (!actions) return null;
+      const result = await window.orbit.pulls.rerun(repoFullName, runId, mode, actions.headSha);
+      if (result.kind === 'new-commits') {
+        setError(STALE_MESSAGE);
+        return null;
+      }
       return `Re-run requested for ${name}.`;
     });
 

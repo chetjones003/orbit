@@ -70,7 +70,7 @@ _Avoid_: Head (the head is the latest commit; the reviewed commit is the one the
 **Review outcome**: Comment, Approve, or Request changes. Approve and Request changes are unavailable on the user's own pull request.
 _Avoid_: Verdict, review state
 
-**Pull request actions**: The writes Orbit makes on one pull request from its actions panel: merge, auto-merge, draft or ready for review, and re-running workflow runs. Merge and auto-merge are pinned to the reviewed commit, so a head that moved since the user looked is reported as stale and nothing is merged.
+**Pull request actions**: The writes Orbit makes on one pull request from its actions panel: merge, auto-merge, converting to a draft pull request or marking it ready, and re-running workflow runs. Each one is pinned to the reviewed commit, so a head that moved since the user looked is reported as new commits and nothing changes.
 _Avoid_: Controls, buttons
 
 **Merge method**: How a pull request is merged: a merge commit, squash, or rebase. Only the methods the repo allows are offered. A merge can also delete the head branch, but only when that branch is in the same repo, never a fork's.
@@ -79,7 +79,7 @@ _Avoid_: Strategy, merge type
 **Auto-merge**: GitHub merges the pull request by itself once its required checks and reviews pass. Orbit can turn it on or off, with a merge method, where the repo allows it. Orbit does not merge on the user's behalf after that.
 _Avoid_: Merge queue (a separate GitHub feature), scheduled merge
 
-**Workflow re-run**: Running a GitHub Actions workflow run again, either all of it or only its failed jobs. It is not retried after an uncertain outcome: GitHub cannot show whether a re-run was already queued, so the user checks again.
+**Workflow re-run**: Running a GitHub Actions workflow run again, either all of it or only its failed jobs. It runs only if the run belongs to the commit the user saw, and it is not retried after an uncertain outcome: GitHub cannot show whether a re-run was already queued, so the user checks again.
 _Avoid_: Retry (a re-run is a new run, not a retry of the same request)
 
 **New pull request**: A pull request the user opens from one branch into another in one of their personal repos. Both branches are in that repo, so it is never opened from a fork. An uncertain failure is checked against GitHub before retrying.
@@ -88,6 +88,9 @@ _Avoid_: Retry (a re-run is a new run, not a retry of the same request)
 _Avoid_: Partial page (a list can be partial without being paged)
 
 **Owner repo link**: A link in an issue body that points to an issue or pull request in one of the signed-in owner's personal repos. It opens inside Orbit. Other http(s) and mailto links open through the controlled external open.
+
+**Draft pull request**: A pull request that GitHub holds as not ready for review. Orbit can convert a pull request to a draft or mark it ready, pinned to the reviewed commit.
+_Avoid_: Draft (on its own, when it means a pull request; the word alone means unsent comment text)
 
 **Draft**: Unsent comment text (a new comment or an edit), held in memory only and keyed by account, repo, item, and target. It survives navigation. It is dropped when the account changes or the user signs out, and warned about before it is discarded, on sign-out, or when the window closes.
 _Avoid_: Autosave, saved text (drafts are never written to disk)
