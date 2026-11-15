@@ -26,7 +26,7 @@ export function fileNote(file: PullFile): string | null {
   if (file.noPatchReason === 'binary') {
     return file.status === 'renamed' || file.status === 'copied'
       ? 'Renamed without content changes.'
-      : 'Binary file: no text diff to show.';
+      : 'No text diff to show: a binary file or a mode-only change.';
   }
   if (file.status === 'renamed' || file.status === 'copied') {
     return `Renamed from ${file.previousFilename ?? 'another path'}`;

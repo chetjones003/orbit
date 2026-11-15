@@ -144,3 +144,22 @@ describe('PullDiffView', () => {
     expect(screen.getByText(/original hunk/)).toBeTruthy();
   });
 });
+
+describe('PullDiffView partial notices', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('says review threads may be missing even when the selected file has none', async () => {
+    window.orbit = {
+      pulls: {
+        files: vi.fn(async () => ({ files: [file()], partial: false })),
+        threads: vi.fn(async () => ({ threads: [], partial: true }))
+      },
+      app: { openExternal: vi.fn(async () => ({ opened: true })) }
+    } as unknown as typeof window.orbit;
+    render(<PullDiffView repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />);
+
+    expect(await screen.findByText('Some review threads may not be shown.')).toBeTruthy();
+  });
+});

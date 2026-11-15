@@ -49,7 +49,7 @@ describe('fileNote', () => {
 
   it('says a binary file has no text diff, and a rename with no content change says so', () => {
     expect(fileNote(file({ patch: null, noPatchReason: 'binary', additions: 0, deletions: 0 }))).toBe(
-      'Binary file: no text diff to show.'
+      'No text diff to show: a binary file or a mode-only change.'
     );
     expect(
       fileNote(file({ status: 'renamed', previousFilename: 'a.png', patch: null, noPatchReason: 'binary' }))

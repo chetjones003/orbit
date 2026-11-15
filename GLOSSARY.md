@@ -55,7 +55,7 @@ _Avoid_: Failed write (it may have succeeded)
 **Issue view**: Detail of one issue: its metadata, body, and comments. From it the user can add comments and edit or delete their own, and for their own issues, edit the title and body, change the issue fields and state, and tick task checkboxes. It opens in the details panel, and can be expanded to fill the main view.
 _Avoid_: Issue page, issue modal
 
-**Pull diff**: The changed files of a pull request, with a file navigator and each file's diff. Unified in the details panel; the expanded view can also show a split diff. A file's diff loads only when the reader opens it if it is large.
+**Pull diff**: The changed files of a pull request, with a file navigator and each file's diff. Unified in the details panel; the expanded view can also show a split diff. GitHub returns every file's patch with the file list. A large diff is parsed and rendered only when the reader asks for it.
 _Avoid_: Patch view, changes tab
 
 **Review thread**: A line-anchored discussion on a pull request's diff, with its replies. It can be resolved, and it is outdated once the code it was written against has changed. An outdated thread keeps its original diff context.

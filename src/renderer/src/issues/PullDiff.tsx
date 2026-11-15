@@ -76,6 +76,7 @@ export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }
   return (
     <section aria-label="Changed files" className={`pull-diff ${variant}`}>
       {filesPage.partial && <p role="note">Some changed files may not be shown.</p>}
+      {threadsPage.partial && <p role="note">Some review threads may not be shown.</p>}
       <div className="pull-diff-layout">
         <nav aria-label="File navigator">
           <ul>
@@ -116,9 +117,6 @@ export function PullDiffView({ repoFullName, number, variant = 'panel', onLink }
             number={number}
             onLink={onLink}
           />
-          {threadsForFile.length > 0 && threadsPage.partial && (
-            <p role="note">Some review threads may not be shown.</p>
-          )}
         </div>
       </div>
     </section>
@@ -143,6 +141,7 @@ function FileBody({ file, viewType, loaded, onLoad, threads, repoFullName, numbe
     [file, large, loaded]
   );
 
+  const filesUrl = `https://github.com/${repoFullName}/pull/${number}/files`;
   if (file.patch === null || (large && !loaded)) {
     const lines = file.patch === null ? null : file.patch.split('\n').length;
     return (
@@ -154,10 +153,10 @@ function FileBody({ file, viewType, loaded, onLoad, threads, repoFullName, numbe
         )}
         {file.noPatchReason === 'too-large' && (
           <a
-            href={`https://github.com/${repoFullName}/pull/${number}/files`}
+            href={filesUrl}
             onClick={(event) => {
               event.preventDefault();
-              void window.orbit.app.openExternal(`https://github.com/${repoFullName}/pull/${number}/files`);
+              void window.orbit.app.openExternal(filesUrl);
             }}
           >
             View the diff on GitHub ↗
