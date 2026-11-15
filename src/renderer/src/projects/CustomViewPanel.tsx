@@ -3,7 +3,7 @@ import type { ProjectField, ProjectFieldInput, ProjectItem } from '../../../shar
 import { CustomViewEditor } from './CustomViewEditor';
 import { KanbanView } from './KanbanView';
 import { ProjectTable } from './ProjectTable';
-import { groupItems, viewItems } from './custom-view-model';
+import { findMappingRepairs, groupItems, viewItems } from './custom-view-model';
 
 export interface CustomViewPanelProps {
   view: CustomViewDefinition;
@@ -44,12 +44,14 @@ export function CustomViewPanel({
   const swimlane = usable(fields, view.swimlaneFieldId);
   const group = usable(fields, view.groupFieldId);
   const needsColumn = view.layout === 'kanban' && !column;
+  // A broken reference opens the settings, so the repair it needs is visible.
+  const repairs = findMappingRepairs(view, fields);
 
   return (
     <div className="custom-view-panel">
-      <details className="custom-view-settings" open={needsColumn}>
+      <details className="custom-view-settings" open={needsColumn || repairs.length > 0}>
         <summary>View settings</summary>
-        <CustomViewEditor view={view} fields={fields} onChange={onChange} onDelete={onDelete} />
+        <CustomViewEditor key={view.id} view={view} fields={fields} onChange={onChange} onDelete={onDelete} />
       </details>
       {needsColumn && (
         <p className="project-note">

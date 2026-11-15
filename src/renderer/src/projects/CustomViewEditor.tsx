@@ -30,6 +30,8 @@ const CONDITION_LABELS: Record<ConditionKind, string> = {
  */
 export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomViewEditorProps) {
   const [confirming, setConfirming] = useState(false);
+  // The name as typed. Only a non-blank name is saved: a blank one would be dropped from storage on reload.
+  const [nameDraft, setNameDraft] = useState(view.name);
   const groupable = fields.filter((f) => f.kind === 'single-select' || f.kind === 'iteration');
   const repairs = findMappingRepairs(view, fields);
   const suggestion = suggestMapping(fields);
@@ -40,10 +42,19 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
   const removeCondition = (index: number) =>
     update({ conditions: view.conditions.filter((_, i) => i !== index) });
 
+  // A new filter uses the first kind of field the project has, so every project can add one.
   const addCondition = () => {
-    const first = groupable[0];
-    if (!first) return;
-    update({ conditions: [...view.conditions, { kind: 'one-of', fieldId: first.id, valueIds: [] }] });
+    const single = groupable[0];
+    const text = fields.find((f) => f.kind === 'text');
+    const first = fields[0];
+    const next: CustomViewCondition | null = single
+      ? { kind: 'one-of', fieldId: single.id, valueIds: [] }
+      : text
+        ? { kind: 'contains', fieldId: text.id, text: '' }
+        : first
+          ? { kind: 'no-value', fieldId: first.id }
+          : null;
+    if (next) update({ conditions: [...view.conditions, next] });
   };
 
   return (
@@ -56,9 +67,12 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
         View name
         <input
           type="text"
-          value={view.name}
+          value={nameDraft}
           maxLength={CUSTOM_VIEW_NAME_MAX}
-          onChange={(event) => update({ name: event.target.value })}
+          onChange={(event) => {
+            setNameDraft(event.target.value);
+            if (event.target.value.trim() !== '') update({ name: event.target.value });
+          }}
         />
       </label>
 
@@ -101,7 +115,7 @@ export function CustomViewEditor({ view, fields, onChange, onDelete }: CustomVie
           type="button"
           className="secondary-action"
           onClick={addCondition}
-          disabled={groupable.length === 0}
+          disabled={fields.length === 0}
         >
           Add filter
         </button>

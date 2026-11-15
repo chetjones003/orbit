@@ -285,6 +285,40 @@ describe('KanbanView', () => {
   });
 });
 
+describe('CustomViewPanel repairs', () => {
+  it('opens the settings when a grouping field was removed, so the repair is visible', async () => {
+    const { CustomViewPanel } = await import('../../../src/renderer/src/projects/CustomViewPanel');
+    const items = [item('a', 'Write docs', { FLD_status: at('todo', 'Todo') })];
+    const { container } = render(
+      <CustomViewPanel
+        view={{
+          id: 'cv-table',
+          name: 'Table',
+          projectId: 'PVT_1',
+          layout: 'table',
+          advancedFilter: '',
+          conditions: [],
+          sort: null,
+          groupFieldId: 'FLD_gone',
+          columnFieldId: null,
+          swimlaneFieldId: null
+        }}
+        fields={FIELDS}
+        items={items}
+        pendingIds={new Set()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onReorder={vi.fn()}
+        onRemove={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    );
+    expect(container.querySelector('details')?.open).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('Group field was removed from this project');
+  });
+});
+
 describe('ProjectTable grouping and sorting', () => {
   const items = [
     item('a', 'Write docs', { FLD_status: at('todo', 'Todo'), FLD_est: { kind: 'number', number: 5 } }),

@@ -54,6 +54,31 @@ describe('CustomViewEditor', () => {
     expect(onChange).toHaveBeenCalledWith(kanban({ name: 'Triage' }));
   });
 
+  it('does not save a blank name, so the view keeps its last saved name', () => {
+    const onChange = vi.fn();
+    render(<CustomViewEditor view={kanban()} fields={FIELDS} onChange={onChange} onDelete={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('View name'), { target: { value: '   ' } });
+    expect(onChange).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('View name') as HTMLInputElement).value).toBe('   ');
+  });
+
+  it('adds a text filter when the project has no single-select or iteration field', () => {
+    const onChange = vi.fn();
+    const NOTES: ProjectField = { id: 'FLD_notes', name: 'Notes', kind: 'text' };
+    render(
+      <CustomViewEditor
+        view={kanban({ columnFieldId: null })}
+        fields={[NOTES]}
+        onChange={onChange}
+        onDelete={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add filter' }));
+    expect(onChange).toHaveBeenCalledWith(
+      kanban({ columnFieldId: null, conditions: [{ kind: 'contains', fieldId: 'FLD_notes', text: '' }] })
+    );
+  });
+
   it('switches between Kanban and Table and keeps the mapping', () => {
     const onChange = vi.fn();
     render(<CustomViewEditor view={kanban()} fields={FIELDS} onChange={onChange} onDelete={vi.fn()} />);
