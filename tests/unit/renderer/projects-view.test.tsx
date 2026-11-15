@@ -77,6 +77,7 @@ describe('ProjectsView', () => {
       'list' | 'detail' | 'items' | 'setField' | 'addItem' | 'removeItem',
       ReturnType<typeof vi.fn>
     >;
+    settings: Record<'get' | 'update', ReturnType<typeof vi.fn>>;
     app: { openExternal: ReturnType<typeof vi.fn> };
   };
   let items: ProjectItem[];
@@ -93,6 +94,7 @@ describe('ProjectsView', () => {
         addItem: vi.fn(),
         removeItem: vi.fn()
       },
+      settings: { get: vi.fn(async () => ({ customViews: [] })), update: vi.fn() },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     };
     window.orbit = api as unknown as typeof window.orbit;

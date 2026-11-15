@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test } from '@playwright/test';
@@ -126,6 +126,19 @@ function projectsFake(state: { status: 'todo' | 'done' }): FakeRoute[] {
   ];
 }
 
+const CUSTOM_KANBAN = {
+  id: 'cv-sprint',
+  name: 'Sprint board',
+  projectId: 'PVT_1',
+  layout: 'kanban',
+  advancedFilter: '',
+  conditions: [],
+  sort: null,
+  groupFieldId: null,
+  columnFieldId: 'FLD_status',
+  swimlaneFieldId: null
+};
+
 function fakeGitHub(state: { status: 'todo' | 'done' }): Promise<FakeGitHub> {
   return startFakeGitHub([
     {
@@ -199,6 +212,50 @@ test.describe('projects flow (unpacked build)', () => {
 
       await window.screenshot({ path: join(profile, 'projects.png') });
       console.log(`PROJECTS_SCREENSHOT=${join(profile, 'projects.png')}`);
+    } finally {
+      await app.close();
+      await github.close();
+    }
+  });
+
+  test('opens a saved custom Kanban over the project and writes a drop back to GitHub', async () => {
+    const state: { status: 'todo' | 'done' } = { status: 'todo' };
+    const github = await fakeGitHub(state);
+    const profile = mkdtempSync(join(tmpdir(), 'orbit-e2e-custom-'));
+    // The definition is what Orbit stores locally for a custom view; the items come from GitHub.
+    writeFileSync(join(profile, 'settings.json'), JSON.stringify({ customViews: [CUSTOM_KANBAN] }));
+    const { ELECTRON_RUN_AS_NODE: _ignored, ...inherited } = process.env;
+    const app = await electron.launch({
+      args: ['.'],
+      cwd: repoRoot,
+      env: { ...inherited, ORBIT_USER_DATA: profile, ORBIT_GITHUB_URL: github.url }
+    });
+    try {
+      const window = await app.firstWindow();
+      await expect(window.locator('html')).toHaveAttribute('data-orbit-ready', 'true');
+
+      await window.getByRole('button', { name: 'Sign in with GitHub' }).click();
+      await expect(window.getByText('ABCD-1234')).toBeVisible();
+      await expect(window.getByRole('button', { name: 'Open orbit-owner/app' })).toBeVisible({
+        timeout: 30_000
+      });
+
+      await window.getByRole('button', { name: 'Projects' }).click();
+      await window.getByRole('button', { name: 'Roadmap' }).click();
+      await window.getByRole('tab', { name: /Sprint board/ }).click();
+
+      const todo = window.getByRole('listitem', { name: /^Todo,/ });
+      const done = window.getByRole('listitem', { name: /^Done,/ });
+      const card = todo.locator('article').filter({ hasText: 'Fix crash' });
+      await expect(card).toBeVisible();
+
+      await card.dragTo(done);
+      await expect(done.locator('article').filter({ hasText: 'Fix crash' })).toBeVisible();
+      await expect.poll(() => state.status, { timeout: 15_000 }).toBe('done');
+      await expect(window.getByRole('alert')).toHaveCount(0);
+
+      await window.screenshot({ path: join(profile, 'custom-kanban.png') });
+      console.log(`CUSTOM_KANBAN_SCREENSHOT=${join(profile, 'custom-kanban.png')}`);
     } finally {
       await app.close();
       await github.close();

@@ -1230,3 +1230,73 @@ input:focus-visible,
   gap: 8px;
   margin-top: 8px;
 }
+
+/* Custom views: Orbit's own Kanban and table layouts over one project. */
+.custom-view-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.custom-view-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.custom-view-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 10px 0;
+}
+.custom-view-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.custom-view-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.custom-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.custom-filter-value {
+  flex-direction: row !important;
+  align-items: center;
+}
+.custom-view-danger {
+  display: flex;
+  gap: 8px;
+}
+.kanban-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.kanban-lane-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.kanban-lane-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(200px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+}
+.project-group-row th {
+  text-align: left;
+  font-size: 13px;
+  padding-top: 12px;
+}

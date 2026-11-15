@@ -11,6 +11,7 @@ import type {
   ProjectItemsPage,
   ProjectListPage
 } from './projects';
+import type { CustomViewDefinition } from './custom-views';
 import type { NotificationDelivery, NotificationOpenResult } from './notifications';
 import type {
   CommentUpdateResult,
@@ -138,12 +139,8 @@ export interface WindowState {
 
 export interface OrbitSettings {
   pinnedRepoIds: number[];
-  customViews: Array<{
-    id: string;
-    name: string;
-    projectId: string;
-    layout: 'kanban' | 'gantt' | 'calendar' | 'table';
-  }>;
+  /** Definitions of Orbit's custom views. Never item data. */
+  customViews: CustomViewDefinition[];
   theme: 'light' | 'dark';
   windowState: WindowState | null;
   /** The user has accepted that uploads to public repos are public as soon as they upload. */

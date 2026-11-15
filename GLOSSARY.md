@@ -32,6 +32,33 @@ _Avoid_: Column (a column is one option of a board's grouping field), property
 **Custom view**: An Orbit-defined way to show one Project's items: Kanban, Gantt, Calendar, or Table. It exists only in Orbit, not on GitHub.
 _Avoid_: Board, layout, saved view
 
+**Custom view definition**: The settings of one custom view (its name, layout, filters, sort, and field mapping), saved locally. A definition never holds item data.
+_Avoid_: Saved view (that is defined on GitHub), item cache
+
+**Advanced filter**: A custom view's filter in GitHub's project filter syntax. GitHub applies it, so only the matching items are loaded.
+_Avoid_: Query, search
+
+**Visual filter**: A condition a custom view applies to the loaded items, built from a field: is one of chosen options, has no value, or contains text. A condition with no value chosen yet filters nothing.
+_Avoid_: Filter (on its own is ambiguous with the advanced filter)
+
+**Field mapping**: The field a custom view uses for its Kanban columns, its Kanban swimlanes, or its table grouping.
+_Avoid_: Binding, connection
+
+**Mapping suggestion**: A field Orbit proposes for an unset field mapping, such as Status for columns. It takes effect only when the user accepts it.
+_Avoid_: Default (a default is applied without asking)
+
+**Mapping repair**: The user's explicit change to a field mapping whose field was removed from the project or can no longer be used. Orbit never changes a mapping silently.
+_Avoid_: Auto-fix, migration
+
+**Swimlane**: A row band on a custom Kanban view, one for each value of its swimlane field.
+_Avoid_: Row (a row is one item in a table)
+
+**Manual order**: The item order GitHub stores for the project, shared by every view. A custom view shows it only when the view has no sort.
+_Avoid_: Position (the stored value), custom order
+
+**No value group**: The group in a custom Kanban or grouped Table view for items without a value in the field used to group them.
+_Avoid_: Unscheduled (this group is not specific to dates)
+
 **Sign-in**: Connecting Orbit to the user's GitHub account through the OAuth device flow: Orbit shows a code, the user enters it on GitHub, and Orbit receives tokens.
 _Avoid_: Login (ambiguous with the account name), authentication (use for the general concept only)
 
