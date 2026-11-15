@@ -32,7 +32,7 @@ function setup(poll: NotificationPoll, options: { focused?: boolean; markRead?: 
 }
 
 describe('NotificationCenter', () => {
-  it('pushes each delivery to the window and shows desktop notices when the window is not focused', async () => {
+  it('shows a desktop notice and no toast while the window is not focused', async () => {
     const { center, deliver, notify } = setup({
       pollIntervalMs: 60_000,
       delivery: { kind: 'items', items: [item('1')] }
@@ -41,7 +41,7 @@ describe('NotificationCenter', () => {
     const result = await center.pollOnce();
 
     expect(result).toEqual({ pollIntervalMs: 60_000 });
-    expect(deliver).toHaveBeenCalledWith({ kind: 'items', items: [item('1')] });
+    expect(deliver).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith({
       threadId: '1',
       title: 'orbit-owner/app',
@@ -49,7 +49,7 @@ describe('NotificationCenter', () => {
     });
   });
 
-  it('pushes the delivery but no desktop notice while the window is focused', async () => {
+  it('pushes the in-app toast and no desktop notice while the window is focused', async () => {
     const { center, deliver, notify } = setup(
       { delivery: { kind: 'items', items: [item('1')] } },
       { focused: true }
@@ -57,7 +57,16 @@ describe('NotificationCenter', () => {
 
     await center.pollOnce();
 
-    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver).toHaveBeenCalledWith({ kind: 'items', items: [item('1')] });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('drops the quiet startup summary while unfocused, because nothing should interrupt a hidden window', async () => {
+    const { center, deliver, notify } = setup({ delivery: { kind: 'summary', count: 4, desktop: false } });
+
+    await center.pollOnce();
+
+    expect(deliver).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
   });
 

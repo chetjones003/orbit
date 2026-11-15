@@ -1,6 +1,6 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
-import { trayMenuItems } from './notification-policy';
+import { trayMenuItems } from './tray-policy';
 
 /**
  * Creates the system tray icon. Its menu and click behaviour come from trayMenuItems,

@@ -1,9 +1,5 @@
 import { desktopNotices, type DesktopNotice } from './notification-policy';
-import type {
-  NotificationDelivery,
-  NotificationItem,
-  NotificationTarget
-} from './github/notification-service';
+import type { NotificationDelivery, NotificationItem, NotificationOpenResult } from '../shared/notifications';
 
 /** The part of the notification service the center needs. */
 export interface NotificationPort {
@@ -13,20 +9,14 @@ export interface NotificationPort {
 
 export interface NotificationCenterOptions {
   service: NotificationPort;
-  /** True while the Orbit window has focus. Focused windows show toasts instead of desktop notices. */
+  /** True while the Orbit window has focus. Focused windows show toasts; otherwise desktop notices. */
   isFocused: () => boolean;
-  /** Sends a delivery to the renderer for in-app toasts. */
+  /** Sends a delivery to the renderer for in-app toasts. Called only while the window is focused. */
   deliver: (delivery: NotificationDelivery) => void;
   /** Shows one desktop notification. */
   notify: (notice: DesktopNotice) => void;
   /** How many delivered items stay openable. Older ones are dropped to bound memory. */
   rememberLimit?: number;
-}
-
-export interface NotificationOpenResult {
-  target: NotificationTarget | null;
-  /** Set when GitHub refused to mark the thread read. The thread stays unread and can be opened again. */
-  markReadError: string | null;
 }
 
 const DEFAULT_REMEMBER_LIMIT = 200;
@@ -58,8 +48,9 @@ export class NotificationCenter {
       if (poll.delivery.kind === 'items') {
         for (const item of poll.delivery.items) this.remember(item);
       }
-      this.deliver(poll.delivery);
-      for (const notice of desktopNotices(poll.delivery, this.isFocused())) this.notify(notice);
+      // Focused: an animated in-app toast. Unfocused: a desktop notification. Never both.
+      if (this.isFocused()) this.deliver(poll.delivery);
+      else for (const notice of desktopNotices(poll.delivery, false)) this.notify(notice);
     }
     return poll.pollIntervalMs === undefined ? {} : { pollIntervalMs: poll.pollIntervalMs };
   }

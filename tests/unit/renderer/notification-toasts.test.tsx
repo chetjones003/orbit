@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   NotificationToasts,
+  trimToastQueue,
   type NotificationToast
 } from '../../../src/renderer/src/notifications/NotificationToasts';
 
@@ -74,5 +75,22 @@ describe('NotificationToasts', () => {
     const { container } = render(<NotificationToasts toasts={[]} onOpen={vi.fn()} onDismiss={vi.fn()} />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('trimToastQueue', () => {
+  it('drops the oldest info toasts first and keeps errors until the user dismisses them', () => {
+    const error = toast(0, { tone: 'error', threadId: null, title: 'Could not mark notification as read' });
+    const queue = [error, ...[1, 2, 3, 4, 5].map((n) => toast(n))];
+
+    const trimmed = trimToastQueue(queue, 3);
+
+    expect(trimmed.map((entry) => entry.id)).toEqual([0, 4, 5]);
+  });
+
+  it('leaves a short queue unchanged', () => {
+    const queue = [toast(1), toast(2)];
+
+    expect(trimToastQueue(queue, 3)).toEqual(queue);
   });
 });

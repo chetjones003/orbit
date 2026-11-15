@@ -12,7 +12,11 @@ import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError, Toast } from './Feedback';
-import { NotificationToasts, type NotificationToast } from './notifications/NotificationToasts';
+import {
+  NotificationToasts,
+  trimToastQueue,
+  type NotificationToast
+} from './notifications/NotificationToasts';
 import {
   describeItem,
   describeSummary,
@@ -66,7 +70,9 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
   const reposRef = useRef<PersonalRepo[]>([]);
-  reposRef.current = repos;
+  useEffect(() => {
+    reposRef.current = repos;
+  }, [repos]);
 
   const updateSettings = useCallback(async (update: SettingsUpdate) => {
     const next = await window.orbit.settings.update(update);
@@ -185,7 +191,7 @@ export function App() {
   const toastTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const pushToasts = useCallback((entries: Array<Omit<NotificationToast, 'id'>>) => {
     const added = entries.map((entry) => ({ ...entry, id: ++toastIds.current }));
-    setNotificationToasts((current) => [...current, ...added].slice(-NOTIFICATION_QUEUE_LIMIT));
+    setNotificationToasts((current) => trimToastQueue([...current, ...added], NOTIFICATION_QUEUE_LIMIT));
     for (const entry of added) {
       if (entry.tone !== 'info') continue;
       const timer = setTimeout(() => {
@@ -232,6 +238,17 @@ export function App() {
         ]);
       }
       if (result.target) navigateToTarget(result.target);
+      else if (!result.markReadError) {
+        // The item is no longer remembered in main, for example after a long session or a restart.
+        pushToasts([
+          {
+            title: 'Notification not available',
+            body: 'It is no longer available to open. Check it on GitHub.',
+            threadId: null,
+            tone: 'error'
+          }
+        ]);
+      }
     },
     [pushToasts, navigateToTarget]
   );
@@ -240,9 +257,18 @@ export function App() {
     (threadId: string) => {
       // The toast is answered by opening it, so it goes away now rather than on its timer.
       setNotificationToasts((current) => current.filter((item) => item.threadId !== threadId));
-      void window.orbit.notifications.open(threadId).then(applyOpenResult, () => undefined);
+      void window.orbit.notifications.open(threadId).then(applyOpenResult, () => {
+        pushToasts([
+          {
+            title: 'Could not open notification',
+            body: 'Orbit could not reach the notification. Try again.',
+            threadId: null,
+            tone: 'error'
+          }
+        ]);
+      });
     },
-    [applyOpenResult]
+    [applyOpenResult, pushToasts]
   );
 
   useEffect(() => {

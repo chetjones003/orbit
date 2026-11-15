@@ -61,6 +61,11 @@ export class NotificationService {
       token,
       scope: String(status.sessionId)
     });
+    // The account may have changed while GitHub answered. That answer belongs to the old session.
+    const current = this.auth.getStatus();
+    if (current.kind !== 'signed-in' || current.sessionId !== status.sessionId) {
+      return { pollIntervalMs: result.pollIntervalMs, delivery: null };
+    }
     if (!Array.isArray(result.data)) throw new Error('GitHub returned an invalid notification list.');
     const login = status.login.toLowerCase();
     const mine = (result.data as RawThread[]).filter(

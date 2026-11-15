@@ -123,15 +123,27 @@ export class RefreshEngine {
       outcome = await this.refreshFn();
     } catch (error) {
       if (generation === this.generation) this.handleFailure(error);
+      else this.resumeAfterRestart();
       return;
     }
     // A refresh that finishes after stop() must not overwrite the signed-out state.
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) {
+      this.resumeAfterRestart();
+      return;
+    }
     this.consecutiveFailures = 0;
     const now = this.now();
     const delay = Math.max(this.intervalMs, outcome?.pollIntervalMs ?? 0);
     this.setState('fresh', now + delay, now);
     this.schedule(delay);
+  }
+
+  /**
+   * A stale refresh ends after the engine was stopped and started again. start() saw it in flight and did
+   * not begin, so the engine must schedule its own next run here or polling silently stops.
+   */
+  private resumeAfterRestart(): void {
+    if (this.running) this.schedule(0);
   }
 
   private handleFailure(error: unknown): void {

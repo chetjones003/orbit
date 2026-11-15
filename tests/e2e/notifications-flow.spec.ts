@@ -101,6 +101,9 @@ test.describe('notifications flow (unpacked build)', () => {
       // The baseline poll found nothing unread, so no toast appears yet.
       await expect(window.getByText('Fix the thing')).toHaveCount(0);
 
+      // Toasts show only while Orbit is focused, so the window is focused before the next poll.
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.focus());
+
       // The next background poll (about a minute later) delivers the mention as an in-app toast.
       const toast = window.getByRole('button', { name: /Mention: Fix the thing/ });
       await expect(toast).toBeVisible({ timeout: 120_000 });

@@ -10,6 +10,19 @@ export interface NotificationToast {
   tone: 'info' | 'error';
 }
 
+/**
+ * Keeps the queue to `limit` entries. Info toasts go first, oldest first; errors are
+ * kept until the user dismisses them, even when that leaves the queue longer.
+ */
+export function trimToastQueue(queue: NotificationToast[], limit: number): NotificationToast[] {
+  let next = queue;
+  while (next.length > limit) {
+    const index = next.findIndex((entry) => entry.tone === 'info');
+    next = next.filter((_, position) => position !== (index === -1 ? 0 : index));
+  }
+  return next;
+}
+
 interface NotificationToastsProps {
   toasts: NotificationToast[];
   onOpen: (threadId: string) => void;

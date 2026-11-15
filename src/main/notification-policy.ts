@@ -20,26 +20,3 @@ export function desktopNotices(delivery: NotificationDelivery, focused: boolean)
   }
   return delivery.items.map((item) => ({ threadId: item.threadId, ...describeItem(item) }));
 }
-
-/**
- * Closing the window hides it while the tray icon keeps Orbit running. Quitting
- * or the absence of a tray icon always closes it, so the user can never lose the app.
- */
-export function shouldHideOnClose(state: { quitting: boolean; trayAvailable: boolean }): boolean {
-  return !state.quitting && state.trayAvailable;
-}
-
-export interface TrayMenuEntry {
-  label?: string;
-  separator?: boolean;
-  onSelect?: () => void;
-}
-
-/** The tray menu, independent of Electron so its wiring can be tested. */
-export function trayMenuItems(handlers: { show: () => void; quit: () => void }): TrayMenuEntry[] {
-  return [
-    { label: 'Show Orbit', onSelect: handlers.show },
-    { separator: true },
-    { label: 'Quit Orbit', onSelect: handlers.quit }
-  ];
-}

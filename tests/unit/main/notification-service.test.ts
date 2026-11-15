@@ -205,6 +205,25 @@ describe('NotificationService', () => {
     await expect(service.markRead('42')).rejects.toBeInstanceOf(GitHubRequestError);
   });
 
+  it('delivers nothing when the account changed while the poll was in flight', async () => {
+    let session = 7;
+    const fetch = vi.fn(async () => {
+      session = 8; // the account changes while GitHub is answering
+      return json([thread({ id: '1' })]);
+    });
+    const auth = {
+      getStatus: () => ({ kind: 'signed-in' as const, sessionId: session, login: LOGIN, persistent: true }),
+      getAccessToken: vi.fn(async () => 'secret')
+    } as unknown as Pick<AuthService, 'getStatus' | 'getAccessToken'>;
+    const service = new NotificationService({
+      auth,
+      apiBaseUrl: API,
+      client: new GitHubClient({ apiBaseUrl: API, fetch })
+    });
+
+    await expect(service.poll()).resolves.toMatchObject({ delivery: null });
+  });
+
   it('refuses to poll while signed out', async () => {
     const auth = {
       getStatus: () => ({ kind: 'signed-out' as const }),
