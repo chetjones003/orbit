@@ -20,6 +20,12 @@ import type { SettingsStore } from './settings';
 import type { ConnectionStatus, RefreshStart } from '../shared/connection';
 import type { RefreshEngine } from './github/refresh-engine';
 import type { UpdateStatus } from '../shared/updates';
+import type {
+  ThemeImportDraft,
+  ThemeImportRef,
+  ThemeSearchRequest,
+  ThemeSearchResult
+} from '../shared/themes';
 import type { NotificationCenter } from './notification-center';
 import type { NotificationOpenResult } from '../shared/notifications';
 import type { Diagnostics } from './diagnostics';
@@ -85,6 +91,12 @@ export type UpdatePort = {
   onChange(listener: (status: UpdateStatus) => void): () => void;
 };
 
+/** The part of the theme catalogue that IPC needs. */
+export type ThemesPort = {
+  search(request: ThemeSearchRequest): Promise<ThemeSearchResult[]>;
+  import(ref: ThemeImportRef): Promise<ThemeImportDraft>;
+};
+
 /** The part of the notification center that IPC needs. */
 export type NotificationsPort = Pick<NotificationCenter, 'open'>;
 
@@ -101,6 +113,7 @@ export interface IpcOptions {
   settings?: SettingsStore;
   refresh?: RefreshPort;
   updates?: UpdatePort;
+  themes?: ThemesPort;
   notifications?: NotificationsPort;
   diagnostics?: Pick<Diagnostics, 'report' | 'record'>;
   issues?: Omit<
@@ -177,6 +190,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     settings,
     refresh,
     updates,
+    themes,
     notifications,
     diagnostics,
     issues,
@@ -213,6 +227,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
   if (auth) registerAuthHandlers(auth, devServerOrigin);
   if (refresh) registerRefreshHandlers(refresh, devServerOrigin);
   if (updates) registerUpdateHandlers(updates, devServerOrigin);
+  if (themes) registerThemeHandlers(themes, devServerOrigin);
   if (notifications) {
     ipcMain.handle(
       IpcChannels.notificationsOpen,
@@ -627,6 +642,27 @@ export function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload);
   }
+}
+
+/** Theme catalogue: search and import from Open VSX. The renderer passes only names, which are checked first. */
+function registerThemeHandlers(themes: ThemesPort, devServerOrigin?: string): void {
+  ipcMain.handle(IpcChannels.themesSearch, (event, request: unknown): Promise<ThemeSearchResult[]> => {
+    assertTrustedSender(event, devServerOrigin);
+    const record =
+      typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : {};
+    return themes.search({
+      query: typeof record['query'] === 'string' ? record['query'] : '',
+      sort: record['sort'] === 'timestamp' ? 'timestamp' : 'downloadCount'
+    });
+  });
+  ipcMain.handle(IpcChannels.themesImport, (event, ref: unknown): Promise<ThemeImportDraft> => {
+    assertTrustedSender(event, devServerOrigin);
+    const record = typeof ref === 'object' && ref !== null ? (ref as Record<string, unknown>) : {};
+    return themes.import({
+      namespace: typeof record['namespace'] === 'string' ? record['namespace'] : '',
+      name: typeof record['name'] === 'string' ? record['name'] : ''
+    });
+  });
 }
 
 function registerUpdateHandlers(updates: UpdatePort, devServerOrigin?: string): void {

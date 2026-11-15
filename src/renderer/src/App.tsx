@@ -31,6 +31,8 @@ import { SettingsDialog } from './shell/SettingsDialog';
 import { SideList, type ItemRef } from './shell/SideList';
 import { SidePanelStack } from './shell/SidePanelStack';
 import { motionMode, useSystemReducedMotion } from './shell/motion';
+import { resolveColorScheme, useSystemPrefersDark } from './shell/theme';
+import { PALETTE_PROPERTY_NAMES, paletteVariables, type CustomTheme } from '../../shared/themes';
 import type { IssueStateFilter } from '../../shared/issues';
 import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
@@ -161,7 +163,6 @@ export function App() {
         setInfo(nextInfo);
         setDebugMediaOrigin(nextInfo.debugMediaOrigin);
         setSettings(nextSettings);
-        document.documentElement.dataset['theme'] = nextSettings.theme;
         if (nextSettings.pinnedRepoIds.length > 0) {
           setView((current) => (current === 'repos' ? 'issues' : current));
         }
@@ -367,9 +368,23 @@ export function App() {
     };
   }, []);
 
+  // The page shows the light or dark variant of the chosen palette. System follows Windows.
+  const systemPrefersDark = useSystemPrefersDark();
+  const resolvedScheme = resolveColorScheme(settings?.colorScheme ?? 'dark', systemPrefersDark);
+  const palette = settings?.palette ?? 'orbit';
+  const customTheme = settings?.customThemes.find((theme) => theme.id === palette);
   useEffect(() => {
-    if (settings) document.documentElement.dataset['theme'] = settings.theme;
-  }, [settings]);
+    const root = document.documentElement;
+    root.dataset['theme'] = resolvedScheme;
+    root.dataset['palette'] = palette;
+    // A custom theme sets its colours on the page. Clear the last ones first, so a built-in palette shows its own.
+    for (const name of PALETTE_PROPERTY_NAMES) root.style.removeProperty(name);
+    if (customTheme) {
+      for (const [name, value] of Object.entries(paletteVariables(customTheme[resolvedScheme]))) {
+        root.style.setProperty(name, value);
+      }
+    }
+  }, [resolvedScheme, palette, customTheme]);
 
   const orderedRepos = useMemo(() => {
     const visible = repos.filter((repo) => showForksAndArchived || (!repo.isFork && !repo.isArchived));
@@ -442,7 +457,7 @@ export function App() {
 
   const toggleTheme = (): void => {
     if (!settings) return;
-    void updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' }).catch(() =>
+    void updateSettings({ colorScheme: resolvedScheme === 'dark' ? 'light' : 'dark' }).catch(() =>
       setActionError('Could not save the theme preference.')
     );
   };
@@ -492,7 +507,7 @@ export function App() {
       <TitleBar
         platform={info?.platform}
         signedIn={status?.kind === 'signed-in'}
-        nextThemeLabel={`Switch to ${settings?.theme === 'dark' ? 'light' : 'dark'} theme`}
+        nextThemeLabel={`Switch to ${resolvedScheme === 'dark' ? 'light' : 'dark'} theme`}
         onToggleTheme={toggleTheme}
         onCheckUpdates={openUpdates}
         onSignOut={signOut}
@@ -857,20 +872,42 @@ export function App() {
         )}
         {settingsOpen && settings && (
           <SettingsDialog
-            theme={settings.theme}
+            colorScheme={settings.colorScheme}
+            palette={settings.palette}
+            customThemes={settings.customThemes}
+            systemPrefersDark={systemPrefersDark}
             openItemsIn={settings.openItemsIn}
             motion={settings.motion}
             systemReducedMotion={systemReducedMotion}
             version={info?.version}
-            onTheme={(theme) =>
-              void updateSettings({ theme }).catch(() => setActionError('Could not save the theme.'))
+            onColorScheme={(colorScheme) =>
+              void updateSettings({ colorScheme }).catch(() => setActionError('Could not save the theme.'))
             }
+            onPalette={(next) =>
+              void updateSettings({ palette: next }).catch(() => setActionError('Could not save the theme.'))
+            }
+            onSaveCustomTheme={(theme: CustomTheme) => {
+              const others = settings.customThemes.filter((entry) => entry.id !== theme.id);
+              void updateSettings({ customThemes: [...others, theme] }).catch(() =>
+                setActionError('Could not save this theme.')
+              );
+            }}
+            onDeleteCustomTheme={(id) => {
+              void updateSettings({
+                customThemes: settings.customThemes.filter((entry) => entry.id !== id),
+                palette: settings.palette === id ? 'orbit' : settings.palette
+              }).catch(() => setActionError('Could not delete this theme.'));
+            }}
             onOpenItemsIn={(openItemsIn) =>
               void updateSettings({ openItemsIn }).catch(() => setActionError('Could not save this setting.'))
             }
             onMotion={(motion) =>
               void updateSettings({ motion }).catch(() => setActionError('Could not save this setting.'))
             }
+            onCheckUpdates={() => {
+              setSettingsOpen(false);
+              openUpdates();
+            }}
             onSignOut={() => signOut()}
             login={status?.kind === 'signed-in' ? status.login : null}
             onClose={() => setSettingsOpen(false)}

@@ -56,6 +56,11 @@ const api: OrbitApi = {
       };
     }
   },
+  themes: {
+    search: (request: { query: string; sort: 'downloadCount' | 'timestamp' }) =>
+      ipcRenderer.invoke(IpcChannels.themesSearch, request),
+    import: (ref: { namespace: string; name: string }) => ipcRenderer.invoke(IpcChannels.themesImport, ref)
+  },
   updates: {
     getStatus: () => ipcRenderer.invoke(IpcChannels.updatesGetStatus),
     check: () => ipcRenderer.invoke(IpcChannels.updatesCheck),

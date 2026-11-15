@@ -4,6 +4,15 @@ import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
 import type { WorkflowGraphJob, WorkflowJob } from './issues';
 import type {
+  ColorScheme,
+  CustomTheme,
+  PaletteId,
+  ThemeImportDraft,
+  ThemeImportRef,
+  ThemeSearchRequest,
+  ThemeSearchResult
+} from './themes';
+import type {
   ItemMemberships,
   ProjectDetail,
   ProjectFieldChange,
@@ -124,6 +133,8 @@ export const IpcChannels = {
   updatesCheck: 'updates:check',
   updatesInstall: 'updates:install',
   updatesDownload: 'updates:download',
+  themesSearch: 'themes:search',
+  themesImport: 'themes:import',
   /** Main-to-renderer push. Payload is an UpdateStatus. */
   updatesStatusChanged: 'updates:status-changed',
   diagnosticsGetReport: 'diagnostics:get-report',
@@ -158,7 +169,11 @@ export interface OrbitSettings {
   pinnedRepoIds: number[];
   /** Definitions of Orbit's custom views. Never item data. */
   customViews: CustomViewDefinition[];
-  theme: 'light' | 'dark';
+  colorScheme: ColorScheme;
+  /** The named palette: each has a light and a dark variant. */
+  palette: PaletteId;
+  /** Themes the person made. Only colours and names, never item data. */
+  customThemes: CustomTheme[];
   /** Where an issue or pull request opens when it is picked from a list. */
   openItemsIn: OpenItemsIn;
   /** Whether the side panels animate when Windows has animations off. */
@@ -178,7 +193,10 @@ export type OpenItemsIn = 'full' | 'side';
 export type MotionSetting = 'system' | 'always';
 
 export type SettingsUpdate = Partial<
-  Pick<OrbitSettings, 'pinnedRepoIds' | 'customViews' | 'theme' | 'openItemsIn' | 'motion'>
+  Pick<
+    OrbitSettings,
+    'pinnedRepoIds' | 'customViews' | 'colorScheme' | 'palette' | 'customThemes' | 'openItemsIn' | 'motion'
+  >
 > & {
   detailsWidth?: number;
 };
@@ -251,6 +269,12 @@ export interface OrbitApi {
     onDelivered(listener: (delivery: NotificationDelivery) => void): () => void;
     /** Subscribes to navigation requested by a desktop notification. Returns an unsubscribe function. */
     onNavigate(listener: (result: NotificationOpenResult) => void): () => void;
+  };
+  themes: {
+    /** Searches Open VSX for colour themes. Never rejects on an empty query; failures reject with a message. */
+    search(request: ThemeSearchRequest): Promise<ThemeSearchResult[]>;
+    /** Reads the colours of one Open VSX theme. Nothing from the package is run. */
+    import(ref: ThemeImportRef): Promise<ThemeImportDraft>;
   };
   updates: {
     getStatus(): Promise<UpdateStatus>;
