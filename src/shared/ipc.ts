@@ -1,6 +1,7 @@
 import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
+import type { InboxPage, InboxQuery } from './inbox';
 import type {
   CommentUpdateResult,
   IssueCloseReason,
@@ -74,6 +75,7 @@ export const IpcChannels = {
   pullsRuns: 'pulls:runs',
   pullsRerun: 'pulls:rerun',
   pullsCreate: 'pulls:create',
+  inboxList: 'inbox:list',
   pullsBranches: 'pulls:branches',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
@@ -258,6 +260,10 @@ export interface OrbitApi {
     /** Opens a pull request from a branch in one of the user's personal repos. */
     create(repoFullName: string, input: PullCreateInput): Promise<PullSummary>;
     branches(repoFullName: string): Promise<string[]>;
+  };
+  inbox: {
+    /** One fixed inbox tab across the signed-in account's personal repos. */
+    list(query: InboxQuery): Promise<InboxPage>;
   };
   markdown: {
     /** Renders Markdown with GitHub's rules for the repo. Main sends the text; HTML comes back sanitized by the renderer. */

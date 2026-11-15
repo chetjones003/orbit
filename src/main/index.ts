@@ -10,6 +10,7 @@ import { CredentialStore } from './github/credential-store';
 import { resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
 import { IssueService } from './github/issue-service';
+import { InboxService } from './github/inbox-service';
 import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
 import { Diagnostics } from './diagnostics';
@@ -63,6 +64,7 @@ if (!app.requestSingleInstanceLock()) {
       uploadsBaseUrl: endpoints.uploadsBaseUrl
     });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
+    const inbox = new InboxService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
     // Writes are refused while the engine reports offline or rate limiting, so outcomes stay certain.
     const issues = new IssueService({
       auth,
@@ -108,6 +110,7 @@ if (!app.requestSingleInstanceLock()) {
       auth,
       repos,
       issues,
+      inbox,
       comments: issues,
       settings,
       refresh: engine,

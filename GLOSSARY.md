@@ -11,6 +11,9 @@
 **Inbox**: The cross-repo view of the issues and pull requests that need the user's attention, split into fixed tabs.
 _Avoid_: Dashboard, home feed
 
+**Inbox tab**: One fixed view in the inbox: My open PRs, Assigned to me, Review requested, Mentioned, or Recently updated. Each is a GitHub search limited to the user's personal repos. A tab that GitHub cannot fully return, or cannot return at all, is labeled partial or as an error, never shown as empty.
+_Avoid_: Filter, saved search (a saved search is user-defined and not part of v1)
+
 **Pinned repo**: A personal repo the user has chosen to keep at the top of the repo list.
 _Avoid_: Favourite, starred repo (starring is a separate GitHub feature)
 
