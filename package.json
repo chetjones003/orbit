@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Orbit: a desktop GitHub issue and PR client for personal repos",
   "private": true,
   "main": "./out/main/index.js",
