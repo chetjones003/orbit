@@ -75,8 +75,8 @@ describe('SettingsStore', () => {
       'palette',
       'pinnedRepoIds',
       'publicUploadNoticeAcknowledged',
-      'wordWrap',
-      'windowState'
+      'windowState',
+      'wordWrap'
     ]);
   });
 
