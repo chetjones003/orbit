@@ -85,6 +85,7 @@ describe('IssueDetailView editing', () => {
     api = {
       projects: projectsStub(),
       issues: {
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
         detail: vi.fn(async () => detail()),
         repoOptions: vi.fn(async () => OPTIONS),
         update: vi.fn(),
@@ -308,6 +309,7 @@ describe('NewIssueForm', () => {
     api = {
       projects: projectsStub(),
       issues: {
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
         detail: vi.fn(),
         repoOptions: vi.fn(),
         update: vi.fn(),

@@ -49,7 +49,10 @@ describe('IssueDetailView', () => {
   beforeEach(() => {
     api = {
       projects: projectsStub(),
-      issues: { detail: vi.fn(async () => detail()) },
+      issues: {
+        detail: vi.fn(async () => detail()),
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false }))
+      },
       app: { openExternal: vi.fn(async () => ({ opened: true })) }
     };
     window.orbit = api as unknown as typeof window.orbit;
@@ -183,6 +186,7 @@ describe('IssueDetailView notice links', () => {
     window.orbit = {
       projects: projectsStub(),
       issues: {
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
         detail: vi.fn(async () => ({
           summary: SUMMARY,
           bodyHtml: '<pre><code class="language-mermaid">graph TD</code></pre>',
@@ -216,6 +220,7 @@ describe('IssueDetailView pull requests', () => {
     window.orbit = {
       projects: projectsStub(),
       issues: {
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
         detail: vi.fn(async () => ({
           summary: SUMMARY,
           bodyHtml: '<p><a href="https://github.com/orbit-owner/app/pull/7">PR 7</a></p>',
@@ -269,7 +274,10 @@ describe('IssueDetailView pull requests', () => {
     const issuesDetail = vi.fn();
     window.orbit = {
       projects: projectsStub(),
-      issues: { detail: issuesDetail },
+      issues: {
+        detail: issuesDetail,
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false }))
+      },
       pulls: {
         detail: pullDetail,
         files: vi.fn(async () => ({ files: [], partial: false })),

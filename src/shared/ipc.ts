@@ -33,6 +33,7 @@ import type {
   IssueDetail,
   IssueEditResult,
   IssueFieldsInput,
+  IssueLinks,
   IssueListPage,
   IssueListQuery,
   IssueRepoOptions,
@@ -80,6 +81,7 @@ export const IpcChannels = {
   reposRefresh: 'repos:refresh',
   issuesList: 'issues:list',
   issuesDetail: 'issues:detail',
+  issuesLinks: 'issues:links',
   issuesCreate: 'issues:create',
   issuesUpdate: 'issues:update',
   issuesUpdateFields: 'issues:update-fields',
@@ -326,6 +328,8 @@ export interface OrbitApi {
   issues: {
     list(query: IssueListQuery): Promise<IssueListPage>;
     detail(repoFullName: string, number: number): Promise<IssueDetail>;
+    /** Pull requests and commits linked to an issue, read from its timeline. */
+    links(repoFullName: string, number: number): Promise<IssueLinks>;
     /** Opens a new issue in one of the user's personal repos. */
     create(repoFullName: string, input: IssueContentInput): Promise<IssueSnapshot>;
     /** `base` is the title and body the edit started from. A difference on GitHub comes back as a conflict. */

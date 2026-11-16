@@ -80,6 +80,7 @@ function installBridge(
     },
     projects: projectsStub(),
     issues: {
+      links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
       list: vi.fn(async () => ({ items: [], page: 1, hasNextPage: false, partial: false })),
       detail: vi.fn(async () => {
         throw new Error('not stubbed');

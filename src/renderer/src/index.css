@@ -5393,6 +5393,85 @@ body.card-dragging * {
   padding: 0;
   list-style: none;
 }
+.linked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.linked-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-size: calc(var(--ui-font-scale, 1) * 12.5px);
+}
+/* Pull requests: open is green, closed or merged is purple. Commits are green. */
+.linked-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 3px;
+  color: var(--subtle);
+}
+.linked-icon.open,
+.linked-icon.commit {
+  color: var(--color-success, #82d2bc);
+}
+.linked-icon.closed {
+  color: var(--accent);
+}
+.linked-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.linked-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.linked-state {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+  font-weight: 600;
+  line-height: 20px;
+}
+.linked-state.open {
+  color: var(--color-success, #82d2bc);
+}
+.linked-state.merged {
+  color: var(--accent);
+}
+.linked-title {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.linked-title:hover {
+  text-decoration: underline;
+}
+.linked-sha {
+  flex: none;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 11.5px);
+}
 .sub-issue-row {
   display: flex;
   align-items: center;
@@ -6285,33 +6364,41 @@ code {
   min-width: 28px;
 }
 
-/* Title bar search: a field between the menus and the window controls. */
-.titlebar-search-slot {
+/* Search: a dialog opened with Ctrl+K over a blurred window. The results are the search view. */
+.search-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
   display: flex;
-  flex: 0 1 380px;
-  align-items: center;
-  min-width: 160px;
-  margin: 4px 8px;
-  -webkit-app-region: no-drag;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 16px 16px;
+  background: color-mix(in srgb, #000 28%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
-.titlebar-search {
+.search-palette {
   display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 24px;
-  padding: 0 8px;
+  flex-direction: column;
+  width: min(820px, 100%);
+  max-height: 80vh;
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+}
+.search-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
 }
-.titlebar-search:focus-within {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.titlebar-search-input {
+.search-palette-input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -6319,17 +6406,25 @@ code {
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-scale, 1) * 16px);
 }
-.titlebar-search-input::placeholder {
+.search-palette-input::placeholder {
   color: var(--muted);
 }
-
-/* Search results: the same rows as the inbox, with a summary and count above them. */
-.search-page {
+.search-palette-key {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+}
+.search-palette-body {
   min-height: 0;
   overflow: auto;
+  padding: 12px 16px 16px;
 }
+
 .search-view {
   display: flex;
   flex-direction: column;

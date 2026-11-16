@@ -33,6 +33,7 @@ function makeIssues() {
   return {
     listIssues: vi.fn(),
     getIssueDetail: vi.fn(),
+    getIssueLinks: vi.fn(),
     getPullDetail: vi.fn(),
     createIssue: vi.fn(),
     updateIssue: vi.fn(),

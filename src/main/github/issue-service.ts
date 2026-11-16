@@ -1,5 +1,7 @@
 import { COMMENT_MAX_CHARS, ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS } from '../../shared/issues';
 import type {
+  IssueLinks,
+  LinkedCommit,
   MergeMethod,
   PendingReview,
   PendingReviewComment,
@@ -20,6 +22,7 @@ import type {
   SubIssueRef
 } from '../../shared/issues';
 import { anchorInPatch } from './review-anchor';
+import { linksFromTimeline, toLinkedCommit } from './issue-links';
 import {
   checkAttachment,
   isSafeAttachmentUrl,
@@ -71,6 +74,10 @@ const PULL_LIST_PAGE_LIMIT = 10;
 const COMMENTS_PER_PAGE = 100;
 /** Upper bound on comment pages read for one issue (1,000 comments). */
 const COMMENT_PAGE_LIMIT = 10;
+/** Timeline events are read 100 at a time. Past this many pages the links are reported as partial. */
+const TIMELINE_PAGE_LIMIT = 5;
+/** Most recent linked commits whose details are read. Each one is a request of its own. */
+const LINKED_COMMIT_LIMIT = 25;
 const HTML_ACCEPT = 'application/vnd.github.html+json';
 const STATES: readonly IssueStateFilter[] = ['open', 'closed', 'all'];
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
@@ -818,6 +825,53 @@ export class IssueService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Pull requests and commits linked to an issue. They come from the issue's timeline, which is read in
+   * full, and the details of the most recent commits. A commit that cannot be read is left out and the
+   * result is marked partial, so the lists are never shown as complete when they are not.
+   */
+  async getIssueLinks(repoFullName: string, number: number): Promise<IssueLinks> {
+    const { owner, repo } = this.validateRepo(repoFullName);
+    if (!Number.isInteger(number) || number < 1)
+      throw new Error('Issue numbers must be positive whole numbers.');
+    const base = itemPath(owner, repo, 'issues', number);
+    const { token, scope } = await this.session();
+
+    const events: unknown[] = [];
+    let partial = false;
+    for (let page = 1; ; page++) {
+      if (page > TIMELINE_PAGE_LIMIT) {
+        partial = true;
+        break;
+      }
+      const body = await this.client.get<unknown>(`${base}/timeline?per_page=100&page=${page}`, {
+        token,
+        scope
+      });
+      if (!Array.isArray(body)) throw new Error('GitHub returned an invalid timeline.');
+      events.push(...body);
+      if (body.length < 100) break;
+    }
+
+    const links = linksFromTimeline(events, owner, repo);
+    const recentShas = [...links.commitShas].reverse();
+    if (recentShas.length > LINKED_COMMIT_LIMIT) partial = true;
+    const commits = await Promise.all(
+      recentShas.slice(0, LINKED_COMMIT_LIMIT).map(async (sha): Promise<LinkedCommit | null> => {
+        try {
+          return toLinkedCommit(
+            await this.client.get<unknown>(`/repos/${owner}/${repo}/commits/${sha}`, { token, scope })
+          );
+        } catch {
+          return null;
+        }
+      })
+    );
+    const shown = commits.filter((commit): commit is LinkedCommit => commit !== null);
+    if (shown.length < Math.min(recentShas.length, LINKED_COMMIT_LIMIT)) partial = true;
+    return { pulls: links.pulls, commits: shown, partial };
   }
 
   /** A pull request conversation, read with the same shape as an issue. */

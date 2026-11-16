@@ -42,6 +42,7 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
+      getIssueLinks: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
       getPullDetail: vi.fn(async () => emptyDetail),
       createIssue: vi.fn(),
       updateIssue: vi.fn(),
@@ -62,6 +63,7 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
+      getIssueLinks: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
       getPullDetail: vi.fn(async () => emptyDetail),
       createIssue: vi.fn(),
       updateIssue: vi.fn(),
@@ -85,6 +87,7 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
+      getIssueLinks: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
       getPullDetail: vi.fn(async () => emptyDetail),
       createIssue: vi.fn(),
       updateIssue: vi.fn(),
@@ -105,6 +108,7 @@ describe('issue IPC handlers', () => {
     const issues = {
       listIssues: vi.fn(async () => emptyPage),
       getIssueDetail: vi.fn(async () => emptyDetail),
+      getIssueLinks: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
       getPullDetail: vi.fn(async () => emptyDetail),
       createIssue: vi.fn(),
       updateIssue: vi.fn(),

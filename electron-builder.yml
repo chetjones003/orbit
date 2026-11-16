@@ -7,6 +7,7 @@ directories:
 files:
   - out/**/*
   - build/icon.png
+  - build/icon.ico
   - package.json
 asar: true
 # Public GitHub Releases feed for electron-updater (latest*.yml). CI publishes; local builds never upload.
@@ -22,11 +23,13 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.png
+  icon: build/icon.ico
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Removes every earlier Orbit install before the new one is written. See build/installer.nsh.
+  include: build/installer.nsh
   artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
 mac:
   target:
