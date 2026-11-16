@@ -678,6 +678,12 @@ export function createFakeGitHub() {
               .map((c) => c.body)
               .join('\n');
             if (!`${item.body}\n${comments}`.includes(who)) return false;
+            continue;
+          }
+          // Plain words match the title or body, as GitHub's search does.
+          if (!token.includes(':')) {
+            const text = `${item.title}\n${item.body ?? ''}`.toLowerCase();
+            if (!text.includes(token.toLowerCase())) return false;
           }
         }
         return true;

@@ -38,6 +38,10 @@ import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
 import { OrbitMark } from './brand/OrbitMark';
 import { TitleBar } from './chrome/TitleBar';
+import { SearchField } from './search/SearchField';
+import { SearchView } from './search/SearchView';
+import { ListResizeHandle } from './shell/ListResizeHandle';
+import { clampListWidth, readStoredListWidth, storeListWidth } from './shell/side-list-width';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
@@ -71,6 +75,11 @@ export function App() {
   // The right-hand side panels, oldest first. Two at most, so two items can be read side by side.
   const [sideItems, setSideItems] = useState<ItemRef[]>([]);
   const [sideWidth, setSideWidth] = useState(440);
+  // The left panel's width, kept between launches. The window can shrink, so the width is clamped when drawn too.
+  const [listWidth, setListWidth] = useState(readStoredListWidth);
+  /** The title bar search text. Typing shows the search view; clearing it returns to the section that was open. */
+  const [searchText, setSearchText] = useState('');
+  const [searchReturnView, setSearchReturnView] = useState<WorkspaceView>('repos');
   const systemReducedMotion = useSystemReducedMotion();
   const [itemMenu, setItemMenu] = useState<{ item: ItemRef; x: number; y: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -105,6 +114,10 @@ export function App() {
   useEffect(() => {
     reposRef.current = repos;
   }, [repos]);
+  useEffect(() => {
+    storeListWidth(listWidth);
+  }, [listWidth]);
+  const shownListWidth = clampListWidth(listWidth, window.innerWidth);
 
   const updateSettings = useCallback(async (update: SettingsUpdate) => {
     const next = await window.orbit.settings.update(update);
@@ -213,6 +226,7 @@ export function App() {
       setIssuesRepo(null);
       setIssueRef(null);
       setIssueExpanded(false);
+      setSearchText('');
     }
   }, [status, loadRepos]);
 
@@ -439,6 +453,22 @@ export function App() {
       ? (view as RailTarget)
       : null;
 
+  /** Focusing or typing in the title bar opens the search view, remembering the section it came from. */
+  const openSearch = (): void => {
+    if (view === 'search') return;
+    setSearchReturnView(view);
+    setView('search');
+  };
+  const changeSearch = (next: string): void => {
+    setSearchText(next);
+    openSearch();
+  };
+  /** Escape or Close search clears the text and returns to the section that was open. */
+  const closeSearch = (): void => {
+    setSearchText('');
+    if (view === 'search') setView(searchReturnView);
+  };
+
   const selectRail = (target: RailTarget): void => {
     if (target === 'settings') return setSettingsOpen(true);
     if (target === 'update') {
@@ -511,6 +541,16 @@ export function App() {
         onToggleTheme={toggleTheme}
         onCheckUpdates={openUpdates}
         onSignOut={signOut}
+        search={
+          status?.kind === 'signed-in' ? (
+            <SearchField
+              value={searchText}
+              onChange={changeSearch}
+              onFocus={openSearch}
+              onClose={closeSearch}
+            />
+          ) : undefined
+        }
       />
       <main
         className="orbit-shell"
@@ -518,7 +558,11 @@ export function App() {
         data-motion={motionMode(settings?.motion, systemReducedMotion)}
       >
         {status?.kind === 'signed-in' && (
-          <aside className="side-list" aria-label="Lists">
+          <aside className="side-list" aria-label="Lists" style={{ flexBasis: shownListWidth }}>
+            <ListResizeHandle
+              width={shownListWidth}
+              onResize={(next) => setListWidth(clampListWidth(next, window.innerWidth))}
+            />
             <div className="side-list-scroll">
               <SideList
                 kind={listKind}
@@ -625,6 +669,20 @@ export function App() {
                   openItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
                   setIssueExpanded(false);
                 }}
+              />
+            </div>
+          ) : view === 'search' ? (
+            <div className="issues-view search-page">
+              <SearchView
+                text={searchText}
+                onTextChange={changeSearch}
+                repos={repos}
+                selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
+                onOpenItem={(item) => {
+                  openItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
+                  setIssueExpanded(false);
+                }}
+                onClose={closeSearch}
               />
             </div>
           ) : view === 'projects' ? (
