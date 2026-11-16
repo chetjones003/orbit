@@ -66,11 +66,16 @@ describe('SettingsStore', () => {
       'colorScheme',
       'customThemes',
       'customViews',
+      'interfaceFont',
+      'interfaceFontSize',
       'motion',
+      'monospaceFont',
+      'monospaceFontSize',
       'openItemsIn',
       'palette',
       'pinnedRepoIds',
       'publicUploadNoticeAcknowledged',
+      'wordWrap',
       'windowState'
     ]);
   });
