@@ -1,0 +1,40 @@
+[package]
+name = "orbit"
+version = "0.5.0"
+description = "Orbit: a desktop GitHub issue and PR client for personal repos"
+authors = ["Chet Jones"]
+license = "GPL-3.0-only"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "orbit_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+base64 = "0.22"
+aes-gcm = "0.10"
+rand = "0.8"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+serde_yaml_ng = "0.10"
+sha2 = "0.10"
+regex-lite = "0.1"
+flate2 = "1"
+futures = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

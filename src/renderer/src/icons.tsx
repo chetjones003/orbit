@@ -111,6 +111,50 @@ const PATHS = {
   ),
   timeline: <path d="M4 6h10M9 12h11M6 18h8" />,
   comment: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  kebab: (
+    <>
+      <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </>
+  ),
+  quote: (
+    <>
+      <path d="M5 17h4l2-4V7H5v6" />
+      <path d="M14 17h4l2-4V7h-6v6" />
+    </>
+  ),
+  bullet: (
+    <>
+      <circle cx="5" cy="7" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="17" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M10 7h10M10 12h10M10 17h10" />
+    </>
+  ),
+  task: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M8 12.5l2.5 2.5L16 9.5" />
+    </>
+  ),
+  merge: (
+    <>
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="18" cy="12" r="2" />
+      <path d="M6 7v10M18 10a6 6 0 0 0-6-6H8" />
+    </>
+  ),
+  attach: (
+    <path d="M21 11.5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.1-8.1" />
+  ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   dots: (
     <>

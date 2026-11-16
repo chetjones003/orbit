@@ -39,6 +39,8 @@ export function ThemeImportDialog({ onAdd, onClose }: ThemeImportDialogProps) {
   const [results, setResults] = useState<ThemeSearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Bumped by Try again, so a failed search runs once more without the query changing.
+  const [attempt, setAttempt] = useState(0);
 
   // What is searched: whatever was typed, otherwise the chosen tab's query.
   const typedQuery = typed.trim();
@@ -68,7 +70,7 @@ export function ThemeImportDialog({ onAdd, onClose }: ThemeImportDialogProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, sort, typedQuery.length]);
+  }, [query, sort, typedQuery.length, attempt]);
 
   const add = (result: ThemeSearchResult): void => {
     const key = `${result.namespace}.${result.name}`;
@@ -134,7 +136,16 @@ export function ThemeImportDialog({ onAdd, onClose }: ThemeImportDialogProps) {
             {error}
           </p>
         )}
-        {results === null && !error && <p className="theme-import-status">Loading themes…</p>}
+        {results === null && !error && (
+          <p className="theme-import-status" role="status">
+            Loading themes… This can take up to 8 seconds.
+          </p>
+        )}
+        {results !== null && results.length === 0 && error && (
+          <button type="button" className="secondary-action" onClick={() => setAttempt((count) => count + 1)}>
+            Try again
+          </button>
+        )}
         {results !== null && results.length === 0 && !error && (
           <p className="theme-import-status">No colour themes found.</p>
         )}

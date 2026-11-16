@@ -736,7 +736,7 @@ export function createFakeGitHub() {
     /** Handles one request. Returns `{ status, headers, body }` with body as an object, a string, or a Buffer. */
     handle(method, url, raw, headers) {
       const path = url.pathname;
-      if (path.startsWith('/__fake/')) return debugRoute(method, path, url);
+      if (path.startsWith('/__fake/')) return debugRoute(method, path, raw);
       if (path.startsWith('/assets/')) return serveAsset(path.slice('/assets/'.length));
       if (path.startsWith('/user-attachments/files/')) return serveUpload(path);
       if (!path.startsWith('/login/')) requireAuthHeader(headers);
@@ -807,7 +807,54 @@ export function createFakeGitHub() {
     return { status: 200, headers: { 'content-type': upload.contentType }, body: upload.bytes };
   }
 
-  function debugRoute(method, path) {
+  function debugRoute(method, path, raw) {
+    const body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+    // Pushes a new unread notification about an item, the way GitHub does when someone mentions you or requests a review.
+    if (path === '/__fake/notify' && method === 'POST') {
+      const found = findItemByKey(body.key);
+      if (!found) return { status: 404, headers: {}, body: { message: 'No such item' } };
+      const notification = {
+        id: `${state.store.nextId++}`,
+        reason: body.reason ?? 'mention',
+        unread: true,
+        updated_at: new Date().toISOString(),
+        repo: found.repo.name,
+        subject: {
+          title: body.title ?? found.item.title,
+          type: found.item.kind === 'pull' ? 'PullRequest' : 'Issue',
+          key: found.item.key
+        }
+      };
+      state.store.notifications.push(notification);
+      return { status: 201, headers: {}, body: notification };
+    }
+    // Sets the state of an item's first workflow run, so CI can move from queued to running to passed or failed.
+    if (path === '/__fake/run' && method === 'POST') {
+      const found = findItemByKey(body.key);
+      const runs = found && state.store.runs.get(found.item.key);
+      if (!runs?.length)
+        return { status: 404, headers: {}, body: { message: 'No workflow run for that item' } };
+      const run = runs[body.index ?? 0];
+      run.status = body.status ?? run.status;
+      run.conclusion = body.conclusion ?? null;
+      state.store.checks.set(
+        found.item.key,
+        state.store.checks
+          .get(found.item.key)
+          .map((check) => ({ ...check, status: run.status, conclusion: run.conclusion }))
+      );
+      return {
+        status: 200,
+        headers: {},
+        body: { key: found.item.key, status: run.status, conclusion: run.conclusion }
+      };
+    }
+    function findItemByKey(key) {
+      const [repoName, number] = String(key ?? '').split('#');
+      const repo = state.store.repos.find((r) => r.name === repoName);
+      const item = repo?.items.find((i) => i.number === Number(number));
+      return item ? { repo, item } : null;
+    }
     if (path === '/__fake/state' && method === 'GET') {
       return { status: 200, headers: {}, body: summarize(state.store) };
     }

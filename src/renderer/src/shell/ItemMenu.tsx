@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { Menu, MenuContent, MenuItem } from '@ui-sdk/react/menu';
 
 export interface ItemMenuProps {
   x: number;
@@ -10,30 +11,21 @@ export interface ItemMenuProps {
 
 /** The menu for an item in the list: open it full screen, or in a side panel. Closes on Escape or outside press. */
 export function ItemMenu({ x, y, onOpenFull, onOpenSide, onClose }: ItemMenuProps) {
-  const menu = useRef<HTMLDivElement | null>(null);
+  // A pointer-opened menu does not move focus into itself, so keyboard users would press keys on the list. Focus the
+  // first action once it is open; the menu then handles the arrow keys.
   useEffect(() => {
-    const onPress = (event: MouseEvent): void => {
-      if (!menu.current?.contains(event.target as Node)) onClose();
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('mousedown', onPress);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPress);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
-
+    document.querySelector<HTMLElement>('.item-menu [role="menuitem"]')?.focus();
+  }, []);
   return (
-    <div ref={menu} className="item-menu" role="menu" style={{ left: x, top: y }}>
-      <button type="button" role="menuitem" onClick={onOpenFull}>
-        Open full screen
-      </button>
-      <button type="button" role="menuitem" onClick={onOpenSide}>
-        Open in side panel
-      </button>
-    </div>
+    <Menu open modal="pointer" onOpenChange={(open) => (open ? undefined : onClose())}>
+      <MenuContent className="item-menu" anchor={{ x, y }} aria-label="Item actions">
+        <MenuItem value="full" onClick={onOpenFull}>
+          Open full screen
+        </MenuItem>
+        <MenuItem value="side" onClick={onOpenSide}>
+          Open in side panel
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

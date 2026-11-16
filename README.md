@@ -54,64 +54,102 @@ Orbit v1 is not code-signed or notarized, so each OS asks for confirmation the f
 - **Linux (AppImage):** `chmod +x Orbit-*.AppImage`, then run it.
 - **Linux (deb):** `sudo apt install ./Orbit-*-linux-x64.deb`.
 
+## Releasing
+
+Releases are cut from `main`. To release `X.Y.Z`:
+
+1. Set `version` to `X.Y.Z` in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`, then run `cargo check` in `src-tauri/` so `Cargo.lock` picks up the new version.
+2. Merge that change into `main`.
+3. Tag the merged commit `vX.Y.Z` and push the tag.
+
+Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`. It builds installers for Windows (NSIS), macOS (Apple silicon and Intel, DMG), and Linux (AppImage and .deb), signs the updater artifacts, and publishes the GitHub Release with `latest.json`, which installed copies read to offer updates. The updater replaces Windows, macOS, and AppImage installs. A `.deb` install is updated through its package manager, so Orbit points those users to the releases page.
+
+The workflow needs two repository secrets, from the signing key generated with `npx tauri signer generate`:
+
+- `TAURI_SIGNING_PRIVATE_KEY`: the contents of the private key file.
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: its password.
+
+Keep the private key and password out of the repository. Losing them means installed copies can no longer be updated, so store them in a password manager.
+
 ## Development
 
-Requirements: Node.js 24.11.0 (see `.nvmrc`; `engine-strict` refuses other versions) and npm 11.
+Requirements:
+
+- Node.js 26.12.1 (see `.nvmrc`; `engine-strict` refuses other versions) and npm 11.
+- Rust, stable, installed with [rustup](https://rustup.rs). On Windows, also the Microsoft C++ build tools. On Linux, the Tauri webview and tray libraries (`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`).
 
 ```sh
-nvm use            # or install Node 24.11.0 yourself
+nvm use            # or install Node 26.12.1 yourself
 npm ci             # installs exactly what package-lock.json pins
-npm run dev        # starts the app with hot reload
+npm run dev        # runs the app with hot reload (Vite renderer and Rust backend)
 ```
 
-Dependencies are pinned to exact versions. The stack is Electron, electron-vite, React 19, TypeScript and Tailwind CSS with daisyUI.
+Orbit is a Tauri 2 app. The backend is Rust in `src-tauri/` (GitHub client, auth, settings, tray, notifications, updates). The interface is React 19 and TypeScript in `src/renderer/`, built with Vite, Tailwind CSS, daisyUI and [ui-sdk](https://ui-sdk.dev). Shared types are in `src/shared/`.
 
-| Script                           | What it does                                                               |
-| -------------------------------- | -------------------------------------------------------------------------- |
-| `npm run dev`                    | Run the app with the electron-vite dev server                              |
-| `npm run build`                  | Build main, preload and renderer into `out/`                               |
-| `npm run typecheck`              | Strict TypeScript for main, preload, shared and renderer                   |
-| `npm run lint`                   | ESLint (flat config, typescript-eslint)                                    |
-| `npm run format:check`           | Prettier check                                                             |
-| `npm run test:unit`              | Unit tests (Vitest, jsdom for the renderer)                                |
-| `npm run fake-app -- --cdp 9333` | Run the app against the controlled fake GitHub, with DevTools on port 9333 |
-| `npm run icons`                  | Regenerate `build/icon.png` from `build/icon.svg`                          |
+### Scripts
 
-Routine tests do not use real GitHub credentials. The fake GitHub server in `tests/fakes/` is the harness for the GitHub-facing code.
+| Command                                   | What it does                                                                                                                      |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                             | Run the app with `tauri dev` (hot reload)                                                                                         |
+| `npm run fake-dev`                        | Run the app against the fake GitHub on `127.0.0.1:4010`, seeded with demo repositories, projects, notifications and workflow runs |
+| `npm run fake-dev -- --cdp`               | The same, plus WebView2 DevTools on port 9222, for scripted checks                                                                |
+| `npm run fake-check`                      | Drive a running `fake-dev --cdp` app: sign in, push a review request, and check the in-app notification                           |
+| `npm run fake-github`                     | Start only the fake GitHub server; point a build at it with `ORBIT_GITHUB_URL`                                                    |
+| `npm run build`                           | Build the renderer with Vite into `dist/`                                                                                         |
+| `npm run package`                         | Build installers for this machine with `tauri build`                                                                              |
+| `npm run typecheck`                       | TypeScript for the Node tooling and the web app                                                                                   |
+| `npm run lint`                            | ESLint                                                                                                                            |
+| `npm run format` / `npm run format:check` | Prettier, write or check                                                                                                          |
+| `npm run test:unit`                       | Renderer and shared unit tests (Vitest, jsdom)                                                                                    |
+| `npm run icons`                           | Regenerate `build/icon.png` from `build/icon.svg`                                                                                 |
+| `cargo test --locked` (in `src-tauri/`)   | Rust backend tests                                                                                                                |
 
-## CI
+### Testing
+
+Before you open a pull request, run:
+
+```sh
+npm run format:check && npm run lint && npm run typecheck && npm run test:unit
+cd src-tauri && cargo test --locked
+```
+
+Routine tests do not use real GitHub credentials. The fake GitHub server in `scripts/fake-github/` is the harness for the GitHub-facing code. To check the app end to end against it:
+
+```sh
+npm run fake-dev -- --cdp      # terminal 1: the app on the fake GitHub
+npm run fake-check             # terminal 2: sign in, notify, and check the toast
+```
+
+`ORBIT_USER_DATA` overrides the profile folder, so a test run can use its own settings and sign-in.
+
+### Building
+
+`npm run package` builds the installer for the machine you run it on. The release targets (Windows x64, macOS arm64 and x64, Linux x64) are built in CI, not locally. macOS builds need the Xcode command line tools, and Linux builds need the packages listed above.
+
+### CI
 
 `.github/workflows/ci.yml` runs on every pull request:
 
-1. **Verify** on Ubuntu: format, lint, typecheck, unit tests, build, and integration tests under xvfb.
-2. **Package and smoke** on Windows x64, macOS arm64, macOS x64 (smoke-tested under Rosetta), and Linux x64.
-   Each packaged artifact is launched signed out with an isolated profile. The app must load its window
-   and bundled assets, then exit with code 0.
-
-Installers are uploaded as `orbit-pr<N>-<shortsha>-<os>-<arch>` with 7-day retention. Downloads
-from a PR check are for testing only.
+1. **Verify** (Ubuntu): format, lint, typecheck and unit tests.
+2. **Rust backend** (Windows): `cargo test --locked`.
+3. **Package** (Windows x64, macOS arm64, macOS x64, Linux x64): `tauri build` for each platform. Each platform's installers are uploaded as `orbit-pr<N>-<sha>-<platform>` with 7-day retention. Downloads from a pull request check are for testing only.
 
 ## Releases and updates
 
-`.github/workflows/release.yml` publishes a GitHub Release when a `vX.Y.Z` tag is pushed. It only
-publishes when:
+`.github/workflows/release.yml` publishes a GitHub Release when a `vX.Y.Z` tag is pushed. It only publishes when:
 
-1. the tag matches `version` in `package.json`, and
+1. the tag matches `version` in `package.json` and `src-tauri/tauri.conf.json`, and
 2. the tagged commit is on `main`.
 
-It then reruns every `ci.yml` check on all platforms and packaged smoke tests. A single publish job
-creates the release with the installers and `latest*.yml` metadata. The two macOS architectures'
-metadata is merged by `scripts/merge-update-metadata.mjs`. Releases are never prereleases.
+It then reruns every `ci.yml` check on all platforms, and a publish job builds, signs and uploads the installers and the updater manifest (`latest.json`). Releases are never prereleases.
 
-Installed copies check for updates at startup, every four hours, and from **Check for updates** (topbar
-or tray). Updates are never offered for prereleases or older versions.
+Installed copies check for updates at startup, every four hours, and from **Check for updates** (topbar or tray). Updates are never offered for prereleases or older versions.
 
-- **Windows, AppImage:** downloaded in the background. Orbit restarts only after you confirm. If you
-  have unsent comments or edits, you are warned first.
-- **Linux .deb:** downloaded and checked against its sha512, then installed with `pkexec`, which asks for
-  administrator credentials.
-- **macOS:** the DMG for your CPU architecture is downloaded, checked against its sha512, and opened.
-  Drag Orbit into Applications to finish.
+- **Windows, AppImage:** downloaded in the background. Orbit restarts only after you confirm. If you have unsent comments or edits, you are warned first.
+- **Linux .deb:** downloaded and checked against its sha512, then installed with `pkexec`, which asks for administrator credentials.
+- **macOS:** the DMG for your CPU architecture is downloaded, checked against its sha512, and opened. Drag Orbit into Applications to finish.
+
+Development builds do not check for updates; **Check for updates** says so.
 
 ## Contributing
 

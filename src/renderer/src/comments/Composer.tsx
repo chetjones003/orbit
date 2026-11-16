@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Tabs, TabsList, TabsTab } from '@ui-sdk/react/tabs';
 import { COMMENT_MAX_CHARS } from '../../../shared/issues';
 import {
   attachmentMarkdown,
@@ -6,6 +7,7 @@ import {
   replaceFirst,
   uploadPlaceholder
 } from '../../../shared/attachments';
+import { Icon, type IconName } from '../icons';
 import { RichBody } from '../issues/RichBody';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
 import { countCharacters, isOverLimit, type FormatKind } from './markdown-edit';
@@ -58,15 +60,21 @@ interface Upload {
   message?: string;
 }
 
-const TOOLBAR: Array<{ kind: FormatKind; label: string; glyph: string; shortcut?: string }> = [
+const TOOLBAR: Array<{
+  kind: FormatKind;
+  label: string;
+  glyph?: string;
+  icon?: IconName;
+  shortcut?: string;
+}> = [
   { kind: 'bold', label: 'Bold', glyph: 'B', shortcut: 'Ctrl/Cmd+B' },
   { kind: 'italic', label: 'Italic', glyph: 'I', shortcut: 'Ctrl/Cmd+I' },
   { kind: 'code', label: 'Code', glyph: '<>', shortcut: 'Ctrl/Cmd+E' },
-  { kind: 'link', label: 'Link', glyph: '🔗', shortcut: 'Ctrl/Cmd+K' },
-  { kind: 'quote', label: 'Quote', glyph: '❝' },
-  { kind: 'bullet', label: 'Bulleted list', glyph: '•' },
+  { kind: 'link', label: 'Link', icon: 'link', shortcut: 'Ctrl/Cmd+K' },
+  { kind: 'quote', label: 'Quote', icon: 'quote' },
+  { kind: 'bullet', label: 'Bulleted list', icon: 'bullet' },
   { kind: 'numbered', label: 'Numbered list', glyph: '1.' },
-  { kind: 'task', label: 'Task list', glyph: '☐' }
+  { kind: 'task', label: 'Task list', icon: 'task' }
 ];
 
 const ATTACHMENT_EXTENSIONS = '.png,.jpg,.jpeg,.gif,.webp,.svg,.mp4,.mov,.webm';
@@ -263,29 +271,22 @@ export function Composer({
 
   return (
     <div className="composer">
-      <div className="composer-tabs" role="tablist" aria-label={`${ariaLabel} view`}>
-        <button
-          type="button"
-          role="tab"
-          id={`${draftKeyId(draftKey)}-write-tab`}
-          aria-selected={tab === 'write'}
-          aria-controls={`${draftKeyId(draftKey)}-panel`}
-          className={tab === 'write' ? 'active' : ''}
-          onClick={() => showTab('write')}
-        >
-          Write
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'preview'}
-          aria-controls={`${draftKeyId(draftKey)}-panel`}
-          className={tab === 'preview' ? 'active' : ''}
-          onClick={() => showTab('preview')}
-        >
-          Preview
-        </button>
-      </div>
+      <Tabs
+        className="composer-tabs"
+        value={tab}
+        onValueChange={(next) => {
+          if (next === 'write' || next === 'preview') showTab(next);
+        }}
+      >
+        <TabsList aria-label={`${ariaLabel} view`}>
+          <TabsTab value="write" className={tab === 'write' ? 'active' : ''}>
+            Write
+          </TabsTab>
+          <TabsTab value="preview" className={tab === 'preview' ? 'active' : ''}>
+            Preview
+          </TabsTab>
+        </TabsList>
+      </Tabs>
 
       <div id={`${draftKeyId(draftKey)}-panel`} role="tabpanel">
         {tab === 'write' ? (
@@ -299,7 +300,7 @@ export function Composer({
                   title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
                   onClick={() => editor.current?.format(item.kind)}
                 >
-                  {item.glyph}
+                  {item.icon ? <Icon name={item.icon} size={14} /> : item.glyph}
                 </button>
               ))}
               {attachTo && (
@@ -310,7 +311,7 @@ export function Composer({
                     title="Attach a PNG, JPG, GIF, WebP, SVG, MP4, MOV, or WebM"
                     onClick={() => fileInput.current?.click()}
                   >
-                    📎
+                    <Icon name="attach" size={14} />
                   </button>
                   <input
                     ref={fileInput}
@@ -339,6 +340,7 @@ export function Composer({
               ariaLabel={ariaLabel}
               placeholder={placeholder}
               onFiles={attachTo ? attachFiles : undefined}
+              readOnly={sending}
             />
           </>
         ) : (
@@ -405,6 +407,9 @@ export function Composer({
       )}
 
       <div className="composer-footer">
+        <p className="composer-hint">
+          Tab indents. To leave the editor from the keyboard, press Esc, then Tab.
+        </p>
         <p className={`composer-count ${overLimit ? 'over' : ''}`} role={overLimit ? 'alert' : undefined}>
           {overLimit
             ? `${length.toLocaleString('en-US')} of ${COMMENT_MAX_CHARS.toLocaleString('en-US')} characters. Shorten this comment to send it.`

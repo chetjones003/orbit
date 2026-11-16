@@ -23,7 +23,7 @@ export function ProjectFilterBar({ keyword, onKeywordChange, count, children }: 
         <input
           type="search"
           value={keyword}
-          placeholder="Filter by keyword or by field"
+          placeholder="Filter by keyword"
           onChange={(event) => onKeywordChange(event.target.value)}
         />
       </label>

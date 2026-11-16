@@ -5,6 +5,11 @@ import { PullDiffView } from '../../../src/renderer/src/issues/PullDiff';
 import { drafts } from '../../../src/renderer/src/comments/draft-store';
 import type { PullFile, PullReviewState, PullReviewThread } from '../../../src/shared/issues';
 
+vi.mock('../../../src/renderer/src/comments/CodeEditor', async () => {
+  const { FakeCodeEditor } = await import('./fakes/fake-code-editor');
+  return { CodeEditor: FakeCodeEditor };
+});
+
 const PATCH = '@@ -1,2 +1,2 @@\n-old line\n+new line\n same';
 
 function file(overrides: Partial<PullFile> = {}): PullFile {

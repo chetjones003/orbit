@@ -72,7 +72,10 @@ export function SidePanelStack({
   // Keeps a width between the minimum and the room left beside the workspace. Before the stack is laid out there
   // is no room to measure, so only the minimum applies.
   const clampWidth = (next: number): number => {
-    const room = stackRef.current?.clientWidth ?? 0;
+    // The room is the shell less the list beside it, since the stack now shares the row with the workspace.
+    const shell = stackRef.current?.parentElement;
+    const listWidth = shell?.querySelector<HTMLElement>('.side-list')?.clientWidth ?? 0;
+    const room = shell ? shell.clientWidth - listWidth : 0;
     const max = room > 0 ? Math.max(SIDE_PANEL_MIN_WIDTH, room - MIN_MAIN_WIDTH) : Infinity;
     return Math.min(max, Math.max(SIDE_PANEL_MIN_WIDTH, Math.round(next)));
   };

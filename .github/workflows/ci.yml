@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify (format, lint, typecheck, unit, integration)
+    name: Verify (format, lint, typecheck, unit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,122 +28,67 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:unit
-      - run: npm run build
-      - name: Linux prerequisites for real-Electron tests
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-      - name: Integration tests (real Electron under xvfb)
-        run: xvfb-run --auto-servernum npm run test:integration
 
-  e2e:
-    name: End-to-end (Windows, unpacked build, fake GitHub)
-    needs: verify
+  rust:
+    name: Rust backend (cargo test, Windows)
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - name: Playwright flows against the controlled GitHub stand-in
-        run: npm run test:e2e
+          workspaces: src-tauri
+      - run: cargo test --locked
 
   package:
-    name: Package and smoke (${{ matrix.label }})
+    name: Package (${{ matrix.label }})
     needs: verify
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, platform: win, arch: x64, name: windows, label: windows-x64 }
-          - { os: macos-15, platform: mac, arch: arm64, name: macos, label: macos-arm64 }
-          # Apple Silicon runner builds and smoke-tests the Intel app under Rosetta.
-          - { os: macos-15, platform: mac, arch: x64, name: macos, label: macos-x64 }
-          - { os: ubuntu-latest, platform: linux, arch: x64, name: linux, label: linux-x64 }
+          - { os: windows-latest, label: windows-x64, target: '' }
+          - { os: macos-15, label: macos-arm64, target: aarch64-apple-darwin }
+          - { os: macos-15, label: macos-x64, target: x86_64-apple-darwin }
+          - { os: ubuntu-latest, label: linux-x64, target: '' }
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm run build
-
-      - name: Linux prerequisites for Electron sandbox and AppImage
-        if: matrix.platform == 'linux'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.label }}
+      - name: Linux system libraries for the webview and tray
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libfuse2t64 dpkg
-          # Ubuntu 24.04 blocks unprivileged user namespaces, which the Electron sandbox needs.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-
-      - name: Package
-        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
-
-      - name: Smoke test packaged app (Windows, unpacked and installed)
-        if: matrix.platform == 'win'
-        shell: pwsh
-        run: |
-          node scripts/smoke.mjs release/win-unpacked/Orbit.exe
-          $dir = Join-Path $env:RUNNER_TEMP 'orbit-installed'
-          $installer = (Get-ChildItem release -Filter '*-setup.exe' | Select-Object -First 1).FullName
-          $p = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$dir" -PassThru -Wait
-          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
-          node scripts/smoke.mjs (Join-Path $dir 'Orbit.exe')
-
-      - name: Smoke test packaged app (macOS)
-        if: matrix.platform == 'mac'
-        run: |
-          dmg=$(ls release/*.dmg | head -n 1)
-          mount=$(mktemp -d)
-          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
-          app_dir=$(mktemp -d)
-          cp -R "$mount/Orbit.app" "$app_dir/"
-          hdiutil detach "$mount"
-          exe="$app_dir/Orbit.app/Contents/MacOS/Orbit"
-          # The Intel build on the Apple Silicon runner needs Rosetta. The arm64 Node
-          # driver spawns the x86_64 app, which macOS runs under Rosetta automatically.
-          if [ "${{ matrix.arch }}" = "x64" ]; then
-            /usr/sbin/softwareupdate --install-rosetta --agree-to-license || true
-          fi
-          echo "Smoke binary architectures: $(lipo -archs "$exe")"
-          node scripts/smoke.mjs "$exe"
-
-      - name: Smoke test packaged app (Linux AppImage and deb)
-        if: matrix.platform == 'linux'
-        run: |
-          xvfb-run --auto-servernum node scripts/smoke.mjs "$(ls release/*.AppImage | head -n 1)"
-          deb=$(ls release/*.deb | head -n 1)
-          extract=$(mktemp -d)
-          dpkg-deb -x "$deb" "$extract"
-          xvfb-run --auto-servernum node scripts/smoke.mjs "$(find "$extract/opt" -maxdepth 2 -type f -name orbit | head -n 1)"
-
-      - name: Compute artifact name
-        id: meta
-        run: echo "short=${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev
+      - run: npm ci
+      # Pull requests build unsigned installers; only the release workflow signs updater artifacts.
+      - name: Build installers
+        run: npx tauri build${{ matrix.target && format(' --target {0}', matrix.target) || '' }}
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
-          name: orbit-pr${{ github.event.pull_request.number || 0 }}-${{ steps.meta.outputs.short }}-${{ matrix.name }}-${{ matrix.arch }}
+          name: orbit-pr${{ github.event.pull_request.number || 0 }}-${{ github.sha }}-${{ matrix.label }}
           path: |
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
-            release/*.deb
-            release/*.blockmap
-            release/latest*.yml
+            src-tauri/target/*/release/bundle/*/*.exe
+            src-tauri/target/*/release/bundle/*/*.dmg
+            src-tauri/target/*/release/bundle/*/*.AppImage
+            src-tauri/target/*/release/bundle/*/*.deb
+            src-tauri/target/release/bundle/*/*.exe
+            src-tauri/target/release/bundle/*/*.dmg
+            src-tauri/target/release/bundle/*/*.AppImage
+            src-tauri/target/release/bundle/*/*.deb
           if-no-files-found: error
           retention-days: 7

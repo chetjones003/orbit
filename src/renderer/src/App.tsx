@@ -1,10 +1,18 @@
+import { contrastProperties, glassSurface } from './appearance/contrast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { AppInfo, OpenItemsIn, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
-import { ConnectionBanner, InlineError, Toast } from './Feedback';
+import { ConnectionBanner, InlineError } from './Feedback';
+import { AppToasts } from './toasts/AppToasts';
+import { publishItemCreated } from './shell/list-events';
+import { RepoMark } from './shell/RepoMark';
+import { markColor, markLetters } from './shell/repo-mark';
+import { confirm } from '@ui-sdk/react/alert-dialog';
+import { OverlayHost } from '@ui-sdk/react/overlays';
+import { appToaster, TOAST_MS } from './toasts/app-toaster';
 import {
   NotificationToasts,
   trimToastQueue,
@@ -40,6 +48,11 @@ import { Icon } from './icons';
 import { OrbitMark } from './brand/OrbitMark';
 import { TitleBar } from './chrome/TitleBar';
 import { SearchPalette } from './search/SearchPalette';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem
+} from '@ui-sdk/react/segmented-control';
 import { ListResizeHandle } from './shell/ListResizeHandle';
 import { clampListWidth, readStoredListWidth, storeListWidth } from './shell/side-list-width';
 
@@ -57,7 +70,7 @@ const NOTIFICATION_TOAST_MS = 6000;
 const NOTIFICATION_QUEUE_LIMIT = 20;
 /** Focus refetches only when the last successful refresh is at least this old. */
 const FOCUS_REFRESH_MS = 60_000;
-type ActionToast = { id: number; message: string; tone: 'success' | 'error' | 'info' };
+type ToastTone = 'success' | 'error' | 'info';
 
 const INTERFACE_FONTS = {
   inter: 'Inter Variable, Inter, ui-sans-serif, system-ui, sans-serif',
@@ -73,7 +86,7 @@ const MONOSPACE_FONTS = {
 } satisfies Record<OrbitSettings['monospaceFont'], string>;
 
 /** Short synthesized Orbit cues: a rising chime, descending alert, or soft neutral ping. */
-function playNotificationSound(tone: ActionToast['tone'] = 'info'): void {
+function playNotificationSound(tone: ToastTone = 'info'): void {
   if (typeof AudioContext === 'undefined') return;
   const audio = new AudioContext();
   const now = audio.currentTime;
@@ -134,6 +147,8 @@ export function App() {
   const systemReducedMotion = useSystemReducedMotion();
   const [itemMenu, setItemMenu] = useState<{ item: ItemRef; x: number; y: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The left panel's slot for the Projects list, set while the Projects view is open.
+  const [projectsSlot, setProjectsSlot] = useState<HTMLElement | null>(null);
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
   /** Which section fills the workspace. The details panel follows the selected item in every section. */
@@ -159,11 +174,11 @@ export function App() {
     if (offeredVersion !== null) setUpdateDialogOpen(true);
   }, [offeredVersion]);
   const [now, setNow] = useState(() => Date.now());
-  const [toasts, setToasts] = useState<ActionToast[]>([]);
-  const actionToastIds = useRef(0);
-  const showToast = (message: string, tone: ActionToast['tone'] = 'info'): void => {
-    const toast = { id: ++actionToastIds.current, message, tone };
-    setToasts((current) => [toast, ...current]);
+  const contrastSetting = settings?.contrast ?? 100;
+  const glassSetting = settings?.glassOpacity ?? 100;
+  /** Action results and the dev test buttons go through the same toaster as notifications, top right. */
+  const showToast = (message: string, tone: ToastTone = 'info'): void => {
+    appToaster(message, { type: tone, duration: TOAST_MS });
     playNotificationSound(tone);
   };
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
@@ -181,17 +196,22 @@ export function App() {
     setSettings(next);
   }, []);
 
+  // Bumped on sign-out, so a repository load that started before it cannot report a failure for the signed-out state.
+  const authEpoch = useRef(0);
   const loadRepos = useCallback(async () => {
+    const epoch = authEpoch.current;
     setLoadingRepos(true);
     setActionError(null);
     try {
-      setRepos(await window.orbit.repos.list());
+      const list = await window.orbit.repos.list();
+      if (epoch === authEpoch.current) setRepos(list);
     } catch (error) {
+      if (epoch !== authEpoch.current) return;
       setActionError(error instanceof Error ? error.message : 'Could not load repositories.');
       // Recorded in main so "Copy diagnostics" includes this failure. Only the scope and code are sent.
       void window.orbit.diagnostics.record({ scope: 'repos', code: 'load-failed' }).catch(() => undefined);
     } finally {
-      setLoadingRepos(false);
+      if (epoch === authEpoch.current) setLoadingRepos(false);
     }
   }, []);
 
@@ -336,6 +356,7 @@ export function App() {
       }
       setSelectedRepoId(repo.id);
       setIssuesRepo(repo);
+      setListKind(target.kind === 'pull' ? 'pull' : 'issue');
       setView(target.kind === 'pull' ? 'pulls' : 'issues');
       setIssueRef({ repoFullName: target.repoFullName, number: target.number, kind: target.kind });
       setIssueExpanded(true);
@@ -454,6 +475,65 @@ export function App() {
     }
   }, [resolvedScheme, palette, customTheme]);
 
+  // The interface font goes on the document as well as the app frame, so dialogs (portalled to the body) use it too.
+  const interfaceFont = settings?.interfaceFont ?? 'inter';
+  const interfaceFontSize = settings?.interfaceFontSize ?? 14;
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--ui-font-family', INTERFACE_FONTS[interfaceFont]);
+    root.style.setProperty('--ui-font-size', `${interfaceFontSize}px`);
+    root.style.setProperty('--ui-font-scale', String(interfaceFontSize / 14));
+    return () => {
+      for (const name of ['--ui-font-family', '--ui-font-size', '--ui-font-scale'])
+        root.style.removeProperty(name);
+    };
+  }, [interfaceFont, interfaceFontSize]);
+
+  // Contrast and glass go on the document, so dialogs and menus (portalled to the body) follow too. This runs after the
+  // theme effect above, so it adjusts the colours that theme has just set.
+  useEffect(() => {
+    const root = document.documentElement;
+    const computed = getComputedStyle(root);
+    root.style.setProperty('--glass-opacity', String(glassSetting));
+    root.style.setProperty('--glass-blur', `${((100 - glassSetting) * 0.16).toFixed(2)}px`);
+    // Read the theme's own colours before anything below overrides them.
+    const surface = computed.getPropertyValue('--surface').trim();
+    const raised = computed.getPropertyValue('--raised').trim();
+    const properties = contrastProperties(contrastSetting, {
+      line: computed.getPropertyValue('--line').trim(),
+      muted: computed.getPropertyValue('--muted').trim(),
+      subtle: computed.getPropertyValue('--subtle').trim(),
+      text: computed.getPropertyValue('--text').trim(),
+      surface
+    });
+    // Surfaces are translucent below 100, so every panel, card and menu that uses them lets the window show through.
+    const glassSurfaces: Record<string, string> = {};
+    const translucentSurface = glassSurface(glassSetting, surface);
+    const translucentRaised = glassSurface(glassSetting, raised);
+    if (translucentSurface) glassSurfaces['--surface'] = translucentSurface;
+    if (translucentRaised) glassSurfaces['--raised'] = translucentRaised;
+    // The solid surface stays opaque under glass, for areas that must hide what scrolls beneath them.
+    if (surface) glassSurfaces['--surface-solid'] = surface;
+    for (const [name, value] of Object.entries({ ...properties, ...glassSurfaces })) {
+      root.style.setProperty(name, value);
+    }
+    return () => {
+      for (const name of [
+        '--glass-opacity',
+        '--glass-blur',
+        '--line',
+        '--muted',
+        '--subtle',
+        '--text',
+        '--surface',
+        '--raised',
+        '--surface-solid'
+      ]) {
+        root.style.removeProperty(name);
+      }
+    };
+  }, [resolvedScheme, palette, customTheme, contrastSetting, glassSetting]);
+
   const orderedRepos = useMemo(() => {
     const visible = repos.filter((repo) => showForksAndArchived || (!repo.isFork && !repo.isArchived));
     const pinned = new Set(settings?.pinnedRepoIds ?? []);
@@ -489,6 +569,7 @@ export function App() {
     if (mode === 'full') {
       setIssueRef({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
       setIssueExpanded(true);
+      setListKind(item.kind === 'pull' ? 'pull' : 'issue');
       setView(item.kind === 'pull' ? 'pulls' : 'issues');
       return;
     }
@@ -588,11 +669,18 @@ export function App() {
 
   const rateLimitBlocked = refreshStatus !== null && isRateLimitedAt(refreshStatus, now);
 
-  const signOut = (): void => {
-    const message = drafts.hasDrafts()
-      ? 'Sign out of Orbit? Unsent comment text will be discarded, and the saved sign-in will be removed from this computer.'
-      : 'Sign out of Orbit? The saved sign-in will be removed from this computer.';
-    if (!window.confirm(message)) return;
+  const signOut = async (): Promise<void> => {
+    const agreed = await confirm({
+      title: 'Sign out of Orbit?',
+      description: drafts.hasDrafts()
+        ? 'Unsent comment text will be discarded, and the saved sign-in will be removed from this computer.'
+        : 'The saved sign-in will be removed from this computer.',
+      confirmLabel: 'Sign out'
+    });
+    if (!agreed) return;
+    authEpoch.current += 1;
+    setRepos([]);
+    setLoadingRepos(false);
     run(() => window.orbit.auth.signOut());
   };
 
@@ -612,13 +700,16 @@ export function App() {
         } as CSSProperties
       }
     >
+      <a className="skip-link" href="#workspace">
+        Skip to workspace
+      </a>
       <TitleBar
         platform={info?.platform}
         signedIn={status?.kind === 'signed-in'}
         nextThemeLabel={`Switch to ${resolvedScheme === 'dark' ? 'light' : 'dark'} theme`}
         onToggleTheme={toggleTheme}
         onCheckUpdates={openUpdates}
-        onSignOut={signOut}
+        onSignOut={() => void signOut()}
       />
       <main
         className="orbit-shell"
@@ -632,19 +723,30 @@ export function App() {
               onResize={(next) => setListWidth(clampListWidth(next, window.innerWidth))}
             />
             <div className="side-list-scroll">
-              <SideList
-                kind={listKind}
-                repos={trackedRepos}
-                selected={issueExpanded && issueRef ? issueRef : null}
-                onOpen={pickItem}
-                onOpenFull={(item) => {
-                  // A double click means full screen: drop the side panel its first click may have opened.
-                  setSideItems((current) => current.filter((entry) => !sameItem(entry, item)));
-                  openItem(item, 'full');
-                }}
-                onContextMenu={(item, x, y) => setItemMenu({ item, x, y })}
-                onRefreshRepos={refreshNow}
-              />
+              {view === 'projects' ? (
+                <section className="side-list-body projects-side" aria-label="Projects">
+                  <header className="side-list-head">
+                    <h2>Projects</h2>
+                  </header>
+                  <div className="projects-side-slot" ref={setProjectsSlot} />
+                </section>
+              ) : (
+                <SideList
+                  kind={listKind}
+                  repos={trackedRepos}
+                  selected={issueExpanded && issueRef ? issueRef : null}
+                  onOpen={pickItem}
+                  onOpenFull={(item) => {
+                    // A double click means full screen: drop the side panel its first click may have opened.
+                    setSideItems((current) => current.filter((entry) => !sameItem(entry, item)));
+                    openItem(item, 'full');
+                  }}
+                  onContextMenu={(item, x, y) => setItemMenu({ item, x, y })}
+                  onRefreshRepos={refreshNow}
+                  onSearch={() => setSearchOpen(true)}
+                  state={stateFilter}
+                />
+              )}
             </div>
             <BottomRail
               active={railActive}
@@ -653,7 +755,7 @@ export function App() {
             />
           </aside>
         )}
-        <section className="workspace" aria-label="Workspace">
+        <section className="workspace" id="workspace" tabIndex={-1} aria-label="Workspace">
           {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
             <div className="scope-bar">
               {import.meta.env.DEV && (
@@ -709,21 +811,23 @@ export function App() {
                   ))}
                 </select>
               </label>
-              {!issuesRepo && (
-                <div className="scope-state" role="group" aria-label="Item state">
+              {
+                <SegmentedControl
+                  className="scope-state"
+                  aria-label="Item state"
+                  value={stateFilter}
+                  onValueChange={(next) => {
+                    if (next !== null) setStateFilter(next);
+                  }}
+                >
+                  <SegmentedControlIndicator />
                   {(['open', 'closed', 'all'] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className="secondary-action"
-                      aria-pressed={stateFilter === option}
-                      onClick={() => setStateFilter(option)}
-                    >
+                    <SegmentedControlItem key={option} value={option} className="secondary-action">
                       {option === 'open' ? 'Open' : option === 'closed' ? 'Closed' : 'All'}
-                    </button>
+                    </SegmentedControlItem>
                   ))}
-                </div>
-              )}
+                </SegmentedControl>
+              }
               {issuesRepo && !pullMode && !creatingIssue && (
                 <button type="button" className="secondary-action" onClick={() => setCreatingIssue(true)}>
                   New issue
@@ -782,6 +886,7 @@ export function App() {
                 </div>
               </div>
               <ProjectsView
+                listSlot={projectsSlot}
                 onOpenItem={(repoFullName, number, kind) => {
                   openItem({ repoFullName, number, kind });
                   setIssueExpanded(false);
@@ -818,6 +923,7 @@ export function App() {
                   signedInLogin={status.login}
                   onCreated={(number) => {
                     setCreatingIssue(false);
+                    publishItemCreated(issuesRepo.fullName);
                     openItem({ repoFullName: issuesRepo.fullName, number, kind: 'issue' });
                   }}
                   onCancel={() => setCreatingIssue(false)}
@@ -857,7 +963,7 @@ export function App() {
                 </div>
               ) : (
                 <div className="issue-empty">
-                  <h2>Pick an {pullMode ? 'pull request' : 'issue'} from the list</h2>
+                  <h2>Pick {pullMode ? 'a pull request' : 'an issue'} from the list</h2>
                   <p>It opens here in full, or beside this view, depending on your settings.</p>
                 </div>
               )}
@@ -929,7 +1035,11 @@ export function App() {
                         aria-label={`Open ${repo.fullName}${repo.isArchived ? ', read only' : ''}`}
                         aria-current={selectedRepoId === repo.id ? 'true' : undefined}
                       >
-                        <span className="repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</span>
+                        <RepoMark
+                          letters={markLetters(repo.name)}
+                          color={markColor(repo.fullName)}
+                          size={22}
+                        />
                         <span className="repo-copy">
                           <span className="repo-name">
                             {repo.name}
@@ -967,18 +1077,8 @@ export function App() {
               onCopyDiagnostics={copyDiagnostics}
             />
           )}
-          {toasts.length > 0 && (
-            <div className="action-toast-stack" aria-label="Action notifications">
-              {toasts.map((toast) => (
-                <Toast
-                  key={toast.id}
-                  message={toast.message}
-                  tone={toast.tone}
-                  onDismiss={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}
-                />
-              ))}
-            </div>
-          )}
+          <AppToasts />
+          <OverlayHost />
           <NotificationToasts
             toasts={notificationToasts}
             onOpen={openNotification}
@@ -1042,6 +1142,18 @@ export function App() {
             monospaceFont={settings.monospaceFont}
             monospaceFontSize={settings.monospaceFontSize}
             wordWrap={settings.wordWrap}
+            contrast={settings.contrast}
+            closeToTray={settings.closeToTray}
+            desktopNotifications={settings.desktopNotifications}
+            pollMinutes={settings.pollMinutes}
+            startAtLogin={settings.startAtLogin}
+            onGeneral={(update) =>
+              void updateSettings(update).catch(() => setActionError('Could not save this setting.'))
+            }
+            glassOpacity={settings.glassOpacity}
+            onInterface={(update) =>
+              void updateSettings(update).catch(() => setActionError('Could not save interface settings.'))
+            }
             systemReducedMotion={systemReducedMotion}
             version={info?.version}
             onColorScheme={(colorScheme) =>
@@ -1075,7 +1187,7 @@ export function App() {
               setSettingsOpen(false);
               openUpdates();
             }}
-            onSignOut={() => signOut()}
+            onSignOut={() => void signOut()}
             login={status?.kind === 'signed-in' ? status.login : null}
             onClose={() => setSettingsOpen(false)}
           />
@@ -1111,7 +1223,7 @@ export function App() {
 function RepoDetails({ repo, onViewIssues }: { repo: PersonalRepo; onViewIssues: () => void }) {
   return (
     <div className="repo-details">
-      <span className="detail-repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</span>
+      <RepoMark letters={markLetters(repo.name)} color={markColor(repo.fullName)} size={40} />
       <p className="eyebrow">REPOSITORY</p>
       <h2>{repo.fullName}</h2>
       <p className="detail-description">{repo.description || 'No description provided.'}</p>
@@ -1177,7 +1289,16 @@ function AuthPanel({ status, onStartSignIn, onCancel }: AuthPanelProps) {
           <div className="device-actions">
             <button
               className="secondary-action"
-              onClick={() => void navigator.clipboard.writeText(status.userCode)}
+              onClick={() =>
+                void navigator.clipboard.writeText(status.userCode).then(
+                  () => appToaster('Sign-in code copied.', { type: 'success', duration: TOAST_MS }),
+                  () =>
+                    appToaster('The code could not be copied. Select it and copy it by hand.', {
+                      type: 'error',
+                      duration: TOAST_MS
+                    })
+                )
+              }
             >
               Copy code
             </button>

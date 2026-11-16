@@ -1,3 +1,5 @@
+@layer ui-sdk;
+
 @import '@fontsource-variable/inter';
 @import 'tailwindcss';
 @plugin "daisyui" {
@@ -88,7 +90,7 @@
   --line: #dddde8;
   --text: #292738;
   --muted: #5d5a6e;
-  --subtle: #8c8a9c;
+  --subtle: #6e6c7a;
   --accent: #6850b9;
   --accent-soft: #ece7fa;
   --danger: #b73b56;
@@ -120,7 +122,7 @@
   --line: #d3e2ee;
   --text: #17293a;
   --muted: #46607a;
-  --subtle: #7a93a8;
+  --subtle: #5d7080;
   --accent: #2a6fa8;
   --accent-soft: #dcecf8;
   --danger: #b73b56;
@@ -146,7 +148,7 @@
   --line: #e6d6c9;
   --text: #2e1f16;
   --muted: #6b5346;
-  --subtle: #9a8579;
+  --subtle: #7c6b62;
   --accent: #b8602a;
   --accent-soft: #f7e6d8;
   --danger: #b73b3b;
@@ -172,7 +174,7 @@
   --line: #dcd9ee;
   --text: #22203a;
   --muted: #5a5680;
-  --subtle: #8b87a8;
+  --subtle: #6d6a84;
   --accent: #5a48c4;
   --accent-soft: #e7e3fb;
   --danger: #b73b66;
@@ -198,7 +200,7 @@
   --line: #d0e3d8;
   --text: #14291e;
   --muted: #41604f;
-  --subtle: #748f80;
+  --subtle: #5e7467;
   --accent: #237a52;
   --accent-soft: #dcf0e4;
   --danger: #b73b56;
@@ -281,7 +283,7 @@ input:focus-visible,
   color: var(--text);
 }
 .rail-button.active {
-  background: var(--color-primary, var(--accent));
+  background: var(--accent);
   color: var(--color-primary-content, white);
 }
 .rail-button:disabled {
@@ -608,8 +610,8 @@ input:focus-visible,
 }
 .repo-view-switch .secondary-action[aria-pressed='true'],
 .repo-view-switch .secondary-action[aria-selected='true'] {
-  border-color: var(--color-primary, var(--accent));
-  background: var(--color-primary, var(--accent));
+  border-color: var(--accent);
+  background: var(--accent);
   color: var(--color-primary-content, white);
   font-weight: 600;
 }
@@ -836,77 +838,21 @@ input:focus-visible,
   gap: 0.5rem;
   margin-left: auto;
 }
-.action-toast-stack {
+/* App toasts: one stack at the top right, under the title bar. ui-sdk lays the toasts out with the offset
+   variables; the animation is off under reduced motion. */
+.app-toasts {
   position: fixed;
-  top: 1rem;
+  top: 3rem;
   right: 1rem;
   z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.65rem;
-  pointer-events: none;
+  width: min(24rem, calc(100vw - 2rem));
+  height: var(--toast-stack-height);
 }
-.action-toast {
-  width: min(30rem, calc(100vw - 2rem));
-  pointer-events: auto;
-  z-index: 100;
-  animation: toast-in 180ms ease-out both;
-}
-.action-toast.is-exiting {
-  animation: toast-out 180ms ease-in both;
-}
-.action-toast.alert {
-  border: 1px solid var(--toast-border);
-  background: var(--toast-background);
-  color: var(--toast-foreground);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
-}
-.action-toast.alert-success {
-  --toast-background: color-mix(in srgb, var(--success) 22%, var(--surface));
-  --toast-border: color-mix(in srgb, var(--success) 55%, var(--line));
-  --toast-foreground: var(--text);
-}
-.action-toast.alert-error {
-  --toast-background: color-mix(in srgb, var(--danger) 18%, var(--surface));
-  --toast-border: color-mix(in srgb, var(--danger) 55%, var(--line));
-  --toast-foreground: var(--text);
-}
-.action-toast.alert-info {
-  --toast-background: var(--raised);
-  --toast-border: var(--line);
-  --toast-foreground: var(--text);
-}
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateX(12px) scale(0.98);
-  }
-}
-@keyframes toast-out {
-  to {
-    opacity: 0;
-    transform: translateX(12px) scale(0.98);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .action-toast {
-    animation: none;
-  }
-}
-
-/* Notification toasts: stacked bottom-left, newest last; animation off under reduced motion. */
-.notification-toasts {
-  position: fixed;
-  left: 1rem;
-  bottom: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: 22rem;
-  z-index: 50;
-}
-.notification-toast {
+.app-toast {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: var(--toast-height);
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -916,59 +862,89 @@ input:focus-visible,
   background: var(--raised);
   color: var(--text);
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
-  animation: notification-toast-in 180ms ease-out;
+  translate: var(--toast-swipe-x, 0px) calc(var(--toast-offset) + var(--toast-swipe-y, 0px));
+  transition-property: translate, opacity, height;
+  transition-duration: 220ms;
+  user-select: none;
 }
-.notification-toast-error {
-  border-color: var(--danger);
+.app-toast[data-starting-style],
+.app-toast[data-ending-style] {
+  opacity: 0;
 }
-.notification-toast-body {
+.app-toast[data-swiping] {
+  transition: none;
+}
+/* Tone is shown three ways: a coloured edge, a glyph, and the colour of the glyph. Colour alone is not relied on. */
+.app-toast-success,
+.app-toast-error,
+.app-toast-info {
+  border-left-width: 3px;
+}
+.app-toast-success {
+  border-left-color: var(--success);
+}
+.app-toast-error {
+  border-left-color: var(--danger);
+}
+.app-toast-info {
+  border-left-color: var(--accent);
+}
+.app-toast-success::before,
+.app-toast-error::before,
+.app-toast-info::before {
+  content: '✓';
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: var(--success);
+  color: var(--raised);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.app-toast-error::before {
+  content: '!';
+  background: var(--danger);
+}
+.app-toast-info::before {
+  content: 'i';
+  background: var(--accent);
+}
+.app-toast-body {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
   gap: 0.15rem;
   text-align: left;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  font: inherit;
 }
-.notification-toast-open {
-  cursor: pointer;
-}
-.notification-toast-title {
+.app-toast-title {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
-.notification-toast-text {
+.app-toast-text {
   overflow-wrap: anywhere;
   opacity: 0.85;
 }
-.notification-toast-dismiss {
+.app-toast-action {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.app-toast-close {
   background: none;
   border: 0;
   color: inherit;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   line-height: 1;
 }
-.notification-toast-more {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  padding-left: 0.25rem;
-}
-@keyframes notification-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .notification-toast {
-    animation: none;
+  .app-toast {
+    transition-property: opacity;
   }
 }
 
@@ -2034,7 +2010,9 @@ input:focus-visible,
 .gantt-label {
   position: sticky;
   left: 0;
-  z-index: 2;
+  /* Above the timeline and its bars, which sit in their own layer below. */
+  z-index: 6;
+  isolation: isolate;
   box-sizing: border-box;
   flex: none;
   width: 240px;
@@ -2048,7 +2026,7 @@ input:focus-visible,
   border-right: 1px solid var(--line);
 }
 .gantt-corner {
-  z-index: 4;
+  z-index: 7;
   justify-content: flex-end;
   padding-bottom: 8px;
   color: var(--muted);
@@ -2118,11 +2096,16 @@ input:focus-visible,
   font-weight: 700;
 }
 .gantt-row {
-  height: 44px;
+  /* At least 44px, and taller when the label's two lines need it, so nothing is clipped. */
+  min-height: 44px;
+  height: auto;
   border-top: 1px solid var(--line);
 }
 .gantt-track {
   position: relative;
+  /* Its own layer, below the item column, so bars scrolled under the titles are hidden by them. */
+  z-index: 0;
+  isolation: isolate;
   flex: none;
   display: flex;
   height: 100%;
@@ -2277,11 +2260,17 @@ input:focus-visible,
   background: rgb(4 5 10 / 0.6);
   /* No blur here: blurring what sits behind a dialog is the costly part when the GPU is off (see main/index.ts). */
 }
+/* The panels are portalled to the body, so they are centred here rather than by the backdrop's layout. */
 .modal-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 201;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: min(820px, 100%);
+  width: min(820px, calc(100vw - 48px));
   max-height: min(88vh, 960px);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -2479,7 +2468,7 @@ input:focus-visible,
   color: var(--text);
 }
 .workspace-tab.active {
-  border-bottom-color: var(--color-primary, var(--accent));
+  border-bottom-color: var(--accent);
   color: var(--text);
   font-weight: 650;
 }
@@ -2611,7 +2600,7 @@ input:focus-visible,
   margin: 0 18px 10px;
   padding: 9px 12px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--color-primary, var(--accent));
+  border-left: 3px solid var(--accent);
   border-radius: 6px;
   background: var(--surface);
   color: var(--muted);
@@ -2620,8 +2609,8 @@ input:focus-visible,
 }
 
 .scope-state .secondary-action[aria-pressed='true'] {
-  border-color: var(--color-primary, var(--accent));
-  background: var(--color-primary, var(--accent));
+  border-color: var(--accent);
+  background: var(--accent);
   color: var(--color-primary-content, white);
   font-weight: 600;
 }
@@ -2835,7 +2824,7 @@ input:focus-visible,
 .primary-action {
   min-width: 0;
   border: 1px solid transparent;
-  background: var(--color-primary, var(--accent));
+  background: var(--accent);
   color: var(--color-primary-content, #fff);
   font-weight: 650;
 }
@@ -3123,7 +3112,7 @@ input:focus-visible,
   margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--color-primary, var(--accent));
+  border-left: 3px solid var(--accent);
   border-radius: 10px;
   background: var(--surface);
 }
@@ -4540,12 +4529,10 @@ body.card-dragging * {
   --ease-panel: cubic-bezier(0.65, 0, 0.35, 1);
 }
 .side-panel-stack {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 300px;
-  z-index: 150;
+  /* A split pane: the stack is a column beside the workspace, so the panels share the width with the list instead of covering it. */
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 0;
   display: flex;
   align-items: stretch;
   justify-content: flex-end;
@@ -4558,7 +4545,7 @@ body.card-dragging * {
   display: flex;
   flex: 0 0 auto;
   min-height: 0;
-  max-width: calc(100% - 160px);
+  max-width: 100%;
   pointer-events: auto;
 }
 .item-side-slot.is-open {
@@ -4929,8 +4916,7 @@ body.card-dragging * {
 
 /* Settings layout: a section list on the left, the chosen section on the right. */
 .settings-modal {
-  position: relative;
-  width: min(960px, 100%);
+  width: min(960px, calc(100vw - 48px));
   height: min(88vh, 720px);
 }
 .settings-modal .modal-body {
@@ -6378,9 +6364,14 @@ code {
   backdrop-filter: blur(6px);
 }
 .search-palette {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 61;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  width: min(820px, 100%);
+  width: min(820px, calc(100vw - 48px));
   max-height: 80vh;
   min-height: 0;
   overflow: hidden;
@@ -6515,4 +6506,434 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ui-sdk Tabs wrappers take no box of their own, so the view tabs keep their flex row. */
+.project-view-strip,
+.project-view-strip > [role='tablist'] {
+  display: contents;
+}
+
+/* Glass opacity (Settings > Appearance > Interface). The surfaces are translucent below 100 (App.tsx sets them), so
+   the whole app is glass. The large panels and overlays also blur what is behind them, which keeps text readable. At
+   100 the blur is 0 and nothing changes. */
+.topbar,
+.item-side-panel,
+.details-panel,
+.modal-panel,
+.search-palette,
+.menu-popup,
+.item-menu,
+.comment-menu-popup,
+.project-view-menu,
+.app-toast,
+.connection-banner,
+.scope-bar,
+.setup-banner,
+.theme-sheet,
+.update-progress {
+  -webkit-backdrop-filter: blur(var(--glass-blur, 0px));
+  backdrop-filter: blur(var(--glass-blur, 0px));
+}
+
+/* Settings > Appearance > Interface sliders. */
+.slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) 3.5rem auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+.slider-label p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.slider-value {
+  justify-self: end;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--raised);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.percent-slider {
+  position: relative;
+  width: 100%;
+  touch-action: none;
+}
+.percent-slider-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+.percent-slider-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover);
+}
+.percent-slider-fill {
+  position: absolute;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.percent-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  cursor: grab;
+}
+.percent-slider-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* New issue and new pull request forms: inputs, labels and actions. */
+.new-issue,
+.new-pull {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  padding: 20px 24px;
+}
+.new-issue .field,
+.new-pull .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  font-weight: 600;
+}
+.new-issue input,
+.new-issue textarea,
+.new-issue select,
+.new-pull input,
+.new-pull textarea,
+.new-pull select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 13px);
+  font-weight: 500;
+}
+.new-pull textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+.new-issue input:focus-visible,
+.new-issue textarea:focus-visible,
+.new-issue select:focus-visible,
+.new-pull input:focus-visible,
+.new-pull textarea:focus-visible,
+.new-pull select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.new-issue .form-actions,
+.new-pull .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* The selected segment of a segmented control. ui-sdk marks it with aria-checked; the indicator alone is not enough. */
+.scope-state [role='radio'][aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Dialogs are portalled to the body, outside .app-frame, so the font variables are set on the root as well. */
+:root {
+  font-family: var(--ui-font-family, Inter, system-ui, sans-serif);
+  font-size: var(--ui-font-size, 14px);
+}
+
+/* Prose stays in the interface font. Monospace is for code and source: the editor text, code blocks and file names. */
+.cm-placeholder,
+.comment-editor .cm-placeholder,
+.pull-diff button,
+.pull-review button,
+.pull-review-finish button,
+.pull-review-finish label {
+  font-family: var(--ui-font-family, Inter, system-ui, sans-serif);
+  font-size: var(--ui-font-size, 14px);
+}
+
+/* Edit issue: the title field and the body editor sit in the same column as the new-issue form. */
+.issue-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.issue-editor .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  font-weight: 600;
+}
+.issue-editor .field input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 14px);
+  font-weight: 500;
+}
+.issue-editor .field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Menus: a destructive item reads as destructive, and the view menu keeps each icon beside its label. */
+.menu-item.danger,
+.comment-menu-popup .danger {
+  color: var(--danger);
+}
+.menu-item.danger:hover:not(:disabled),
+.comment-menu-popup .danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.project-view-menu button {
+  white-space: nowrap;
+}
+.project-view-menu button > svg {
+  flex: none;
+}
+
+/* Kanban swimlanes: the board is the one horizontal scroller, so the lanes do not each add a scrollbar. */
+.project-board.kanban {
+  display: block;
+  overflow: auto;
+}
+.kanban-lane-columns {
+  overflow: visible;
+}
+
+/* Diffs: the table sizes to its longest line, and the scroll container above it scrolls. A split view is no longer clipped. */
+.pull-diff-file .diff {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+/* Skip link: hidden until it takes keyboard focus, then shown at the top left. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 300;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--color-primary-content, white);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* Composer keyboard hint, and focus rings for the filter fields that had none. */
+.composer-hint {
+  margin: 0;
+  color: var(--subtle);
+  font-size: calc(var(--ui-font-scale, 1) * 11.5px);
+}
+.project-filter-input input:focus-visible,
+.project-filter-input select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Settings: a label on the left and its switch on the right. */
+.settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+.settings-switch-row .typography-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Diff hint: says how to start a review comment, where the review controls are. */
+.pull-diff-hint {
+  margin: 0;
+  color: var(--subtle);
+  font-size: calc(var(--ui-font-scale, 1) * 11.5px);
+}
+
+/* New custom view: the naming dialog. */
+.custom-view-naming {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0;
+}
+.custom-view-naming .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  font-weight: 600;
+}
+.custom-view-naming .field input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--text);
+  font: inherit;
+}
+.custom-view-naming .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Settings: a label on the left and a control, such as the polling choice, on the right. */
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+.settings-field-row .typography-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The window is fixed: the page never scrolls or bounces. Panes that need to scroll set their own overflow. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.app-frame {
+  overscroll-behavior: none;
+}
+
+/* Gantt: the item column is opaque, so bars scrolled under it are hidden rather than drawn over the item titles. */
+/* The item column is its own opaque part: under glass the surface is see-through, so it uses the solid surface. */
+.gantt-label,
+.gantt-corner {
+  background: var(--surface-solid, var(--surface));
+}
+
+/* Gantt, roadmap style: date groups with a range pill, pill bars with the title beside them, and a today line. */
+.gantt-group-row {
+  display: flex;
+  position: relative;
+  height: 52px;
+  border-top: 1px solid var(--line);
+  background: var(--raised);
+}
+.gantt-group-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: calc(var(--ui-font-scale, 1) * 13px);
+}
+.gantt-range-pill {
+  position: absolute;
+  top: 14px;
+  box-sizing: border-box;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.gantt-label-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.gantt-label-line > svg {
+  flex: none;
+  color: var(--color-success, var(--accent));
+}
+.gantt-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--danger);
+  pointer-events: none;
+  z-index: 4;
+}
+.gantt-bar {
+  top: 13px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  overflow: visible;
+}
+/* The title sits beside the bar, so it is never cut off by a short bar. */
+.gantt-bar-title {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  overflow: visible;
+  color: var(--text);
+  font-size: calc(var(--ui-font-scale, 1) * 12.5px);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Projects: the project list lives in the left panel; the workspace keeps the full width. */
+.projects-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.projects-side-slot .projects-list {
+  flex: 1;
+  min-height: 0;
+  border-right: 0;
+  background: transparent;
+}
+.projects-side-slot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }

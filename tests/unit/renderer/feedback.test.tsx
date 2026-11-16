@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ConnectionBanner, InlineError, Toast } from '../../../src/renderer/src/Feedback';
+import { ConnectionBanner, InlineError } from '../../../src/renderer/src/Feedback';
 import type { ConnectionStatus } from '../../../src/shared/connection';
 
 afterEach(() => cleanup());
@@ -56,17 +56,5 @@ describe('InlineError', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onCopy).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('Toast', () => {
-  it('is announced politely and can be dismissed', async () => {
-    const onDismiss = vi.fn();
-    render(<Toast message="Pinned" onDismiss={onDismiss} />);
-
-    const toast = screen.getByRole('status');
-    expect(toast).toHaveAttribute('aria-live', 'polite');
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(1));
   });
 });

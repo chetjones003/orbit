@@ -25,7 +25,6 @@ const TITLES: Record<UpdateStatus['kind'], string> = {
   available: 'Update available',
   downloading: 'Downloading update',
   ready: 'Ready to install',
-  'mac-opened': 'Update downloaded',
   error: 'Update failed'
 };
 
@@ -162,20 +161,6 @@ export function UpdateDialog({
                 </button>
               </div>
             )}
-          </>
-        )}
-
-        {status.kind === 'mac-opened' && (
-          <>
-            <p role="status">
-              Orbit <strong>{status.version}</strong> is downloaded and open. Drag Orbit into Applications to
-              finish updating.
-            </p>
-            <div className="update-actions">
-              <button type="button" className="secondary-action" onClick={onClose}>
-                Close
-              </button>
-            </div>
           </>
         )}
 

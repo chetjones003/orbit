@@ -15,6 +15,8 @@ export interface PullListQuery {
 
 export interface PullSummary extends IssueSummary {
   draft: boolean;
+  /** Merged, as opposed to closed without merging. */
+  merged: boolean;
   headRef: string;
   baseRef: string;
 }

@@ -1,5 +1,5 @@
-/** Most toasts shown at once. Anything beyond this is summarised, so a burst cannot flood the screen. */
-const MAX_VISIBLE = 3;
+import { useEffect, useRef } from 'react';
+import { appToaster, TOAST_MS } from '../toasts/app-toaster';
 
 export interface NotificationToast {
   id: number;
@@ -30,44 +30,48 @@ interface NotificationToastsProps {
 }
 
 /**
- * Animated in-app toasts for new GitHub notifications. They announce politely to
- * screen readers. Entrance animation is disabled under reduced motion in CSS.
+ * Shows the app's notification queue on the shared toaster (AppToasts renders it). The app owns the queue and its
+ * limits; this pushes each new entry, closes the ones the app dropped, and reports the user's dismissals and opens.
+ * Renders nothing itself.
  */
 export function NotificationToasts({ toasts, onOpen, onDismiss }: NotificationToastsProps) {
-  if (toasts.length === 0) return null;
-  const visible = toasts.slice(0, MAX_VISIBLE);
-  const hidden = toasts.length - visible.length;
+  const shown = useRef(new Map<number, true>());
+  const handlers = useRef({ onOpen, onDismiss });
+  useEffect(() => {
+    handlers.current = { onOpen, onDismiss };
+  });
 
-  return (
-    <div className="notification-toasts" role="status" aria-live="polite">
-      {visible.map((entry) => (
-        <div key={entry.id} className={`notification-toast notification-toast-${entry.tone}`}>
-          {entry.threadId === null ? (
-            <div className="notification-toast-body">
-              <span className="notification-toast-title">{entry.title}</span>
-              <span className="notification-toast-text">{entry.body}</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="notification-toast-body notification-toast-open"
-              onClick={() => onOpen(entry.threadId as string)}
-            >
-              <span className="notification-toast-title">{entry.title}</span>
-              <span className="notification-toast-text">{entry.body}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="notification-toast-dismiss"
-            aria-label="Dismiss notification"
-            onClick={() => onDismiss(entry.id)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-      {hidden > 0 && <div className="notification-toast-more">+{hidden} more notifications</div>}
-    </div>
-  );
+  useEffect(() => {
+    const current = new Set(toasts.map((entry) => entry.id));
+    for (const id of [...shown.current.keys()]) {
+      if (!current.has(id)) {
+        appToaster.dismiss(`notice-${id}`);
+        shown.current.delete(id);
+      }
+    }
+    for (const entry of toasts) {
+      if (shown.current.has(entry.id)) continue;
+      shown.current.set(entry.id, true);
+      appToaster(entry.title, {
+        id: `notice-${entry.id}`,
+        description: entry.body,
+        type: entry.tone === 'error' ? 'error' : 'info',
+        priority: entry.tone === 'error' ? 'assertive' : 'polite',
+        duration: entry.tone === 'error' ? Infinity : TOAST_MS,
+        action:
+          entry.threadId === null
+            ? undefined
+            : {
+                label: 'Open',
+                onAction: () => handlers.current.onOpen(entry.threadId as string)
+              },
+        onDismiss: () => {
+          shown.current.delete(entry.id);
+          handlers.current.onDismiss(entry.id);
+        }
+      });
+    }
+  }, [toasts]);
+
+  return null;
 }
