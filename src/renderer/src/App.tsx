@@ -63,11 +63,22 @@ type ActionToast = { id: number; message: string; tone: 'success' | 'error' | 'i
 function playNotificationSound(tone: ActionToast['tone'] = 'info'): void {
   const audio = new AudioContext();
   const now = audio.currentTime;
-  const notes: ReadonlyArray<readonly [number, number]> = tone === 'success'
-    ? [[0, 587], [0.11, 784], [0.22, 1175]]
-    : tone === 'error'
-      ? [[0, 392], [0.24, 311]]
-      : [[0, 659], [0.14, 880]];
+  const notes: ReadonlyArray<readonly [number, number]> =
+    tone === 'success'
+      ? [
+          [0, 587],
+          [0.11, 784],
+          [0.22, 1175]
+        ]
+      : tone === 'error'
+        ? [
+            [0, 392],
+            [0.24, 311]
+          ]
+        : [
+            [0, 659],
+            [0.14, 880]
+          ];
   for (const [offset, frequency] of notes) {
     const oscillator = audio.createOscillator();
     const gain = audio.createGain();
@@ -366,7 +377,8 @@ export function App() {
   useEffect(() => {
     const timers = toastTimers.current;
     const unsubscribeDelivered = window.orbit.notifications.onDelivered((delivery) => {
-      if (delivery.kind === 'items' || (delivery.kind === 'summary' && delivery.desktop)) playNotificationSound('info');
+      if (delivery.kind === 'items' || (delivery.kind === 'summary' && delivery.desktop))
+        playNotificationSound('info');
       if (delivery.kind === 'items') {
         pushToasts(
           delivery.items.map((item) => ({
@@ -532,7 +544,7 @@ export function App() {
               ? 'GitHub is rate limiting Orbit. Refresh resumes automatically.'
               : result.reason === 'signed-out'
                 ? 'Sign in to refresh your repositories.'
-              : 'A refresh is already running.',
+                : 'A refresh is already running.',
           'info'
         );
       },
@@ -616,16 +628,41 @@ export function App() {
         <section className="workspace" aria-label="Workspace">
           {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
             <div className="scope-bar">
-              {import.meta.env.DEV && <div className="dev-notification-controls">
-                <button className="secondary-action" onClick={() => showToast('This is a simulated success toast.', 'success')}>Success toast</button>
-                <button className="secondary-action" onClick={() => showToast('This is a simulated error toast.', 'error')}>Error toast</button>
-                <button className="secondary-action" onClick={() => showToast('This is a simulated info toast.', 'info')}>Info toast</button>
-                <button className="secondary-action" onClick={() => {
-                  playNotificationSound('info');
-                  if ('Notification' in window) new Notification('Orbit test notification', { body: 'This is a simulated system notification.' });
-                  else showToast('System notifications are unavailable in this environment.', 'info');
-                }}>Simulate system notification</button>
-              </div>}
+              {import.meta.env.DEV && (
+                <div className="dev-notification-controls">
+                  <button
+                    className="secondary-action"
+                    onClick={() => showToast('This is a simulated success toast.', 'success')}
+                  >
+                    Success toast
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={() => showToast('This is a simulated error toast.', 'error')}
+                  >
+                    Error toast
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={() => showToast('This is a simulated info toast.', 'info')}
+                  >
+                    Info toast
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={() => {
+                      playNotificationSound('info');
+                      if ('Notification' in window)
+                        new Notification('Orbit test notification', {
+                          body: 'This is a simulated system notification.'
+                        });
+                      else showToast('System notifications are unavailable in this environment.', 'info');
+                    }}
+                  >
+                    Simulate system notification
+                  </button>
+                </div>
+              )}
               <label className="scope-field">
                 <span>Repository</span>
                 <select
@@ -916,10 +953,18 @@ export function App() {
               onCopyDiagnostics={copyDiagnostics}
             />
           )}
-          {toasts.length > 0 && <div className="action-toast-stack" aria-label="Action notifications">
-            {toasts.map((toast) => <Toast key={toast.id} message={toast.message} tone={toast.tone}
-              onDismiss={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} />)}
-          </div>}
+          {toasts.length > 0 && (
+            <div className="action-toast-stack" aria-label="Action notifications">
+              {toasts.map((toast) => (
+                <Toast
+                  key={toast.id}
+                  message={toast.message}
+                  tone={toast.tone}
+                  onDismiss={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}
+                />
+              ))}
+            </div>
+          )}
           <NotificationToasts
             toasts={notificationToasts}
             onOpen={openNotification}

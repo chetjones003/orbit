@@ -65,8 +65,8 @@ export function IssueDetailView({
   signedInLogin,
   onOpenIssue,
   variant = 'panel',
-  kind = 'issue'
-  , onActionNotice
+  kind = 'issue',
+  onActionNotice
 }: IssueDetailViewProps) {
   const [detail, setDetail] = useState<IssueDetailData | null>(null);
   // Sub-issues can run to dozens, so the list opens on request and the header always shows the progress.
@@ -141,8 +141,15 @@ export function IssueDetailView({
         ? window.orbit.issues.setState(repoFullName, number, state)
         : window.orbit.issues.setState(repoFullName, number, state, reason);
     request.then(
-      (summary) => { applySummary(summary); onActionNotice?.(`Issue #${number} ${state === 'closed' ? 'closed' : 'reopened'}.`); },
-      () => { const message = 'Could not change the state of this issue. Try again.'; setActionError(message); onActionNotice?.(message, true); }
+      (summary) => {
+        applySummary(summary);
+        onActionNotice?.(`Issue #${number} ${state === 'closed' ? 'closed' : 'reopened'}.`);
+      },
+      () => {
+        const message = 'Could not change the state of this issue. Try again.';
+        setActionError(message);
+        onActionNotice?.(message, true);
+      }
     );
   };
 

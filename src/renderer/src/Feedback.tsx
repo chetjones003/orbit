@@ -77,9 +77,15 @@ export function Toast({ message, tone = 'info', onDismiss }: ToastProps) {
     return () => window.clearTimeout(timer);
   }, []);
   return (
-    <div className={`alert alert-${tone} action-toast${exiting ? ' is-exiting' : ''}`} role="status" aria-live="polite">
+    <div
+      className={`alert alert-${tone} action-toast${exiting ? ' is-exiting' : ''}`}
+      role="status"
+      aria-live="polite"
+    >
       <span>{message}</span>
-      <button className="btn btn-ghost btn-sm" onClick={dismiss} aria-label="Dismiss">✕</button>
+      <button className="btn btn-ghost btn-sm" onClick={dismiss} aria-label="Dismiss">
+        ✕
+      </button>
     </div>
   );
 }
