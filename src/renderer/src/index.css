@@ -73,6 +73,7 @@
   --accent: #b5a4ff;
   --accent-soft: #2c2452;
   --danger: #ef9eaa;
+  --success: color-mix(in srgb, #21864a 55%, var(--accent));
 }
 
 :root[data-theme='light'],
@@ -90,6 +91,7 @@
   --accent: #6850b9;
   --accent-soft: #ece7fa;
   --danger: #b73b56;
+  --success: color-mix(in srgb, #21864a 60%, var(--accent));
 }
 
 /*
@@ -817,7 +819,7 @@ input:focus-visible,
 
 .connection-banner,
 .inline-error,
-.toast {
+.connection-banner {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -840,21 +842,61 @@ input:focus-visible,
   gap: 0.5rem;
   margin-left: auto;
 }
-.toast {
+.action-toast-stack {
   position: fixed;
+  top: 1rem;
   right: 1rem;
-  bottom: 1rem;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
-  animation: toast-in 180ms ease-out;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.65rem;
+  pointer-events: none;
+}
+.action-toast {
+  width: min(30rem, calc(100vw - 2rem));
+  pointer-events: auto;
+  z-index: 100;
+  animation: toast-in 180ms ease-out both;
+}
+.action-toast.is-exiting {
+  animation: toast-out 180ms ease-in both;
+}
+.action-toast.alert {
+  border: 1px solid var(--toast-border);
+  background: var(--toast-background);
+  color: var(--toast-foreground);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
+}
+.action-toast.alert-success {
+  --toast-background: color-mix(in srgb, var(--success) 22%, var(--surface));
+  --toast-border: color-mix(in srgb, var(--success) 55%, var(--line));
+  --toast-foreground: var(--text);
+}
+.action-toast.alert-error {
+  --toast-background: color-mix(in srgb, var(--danger) 18%, var(--surface));
+  --toast-border: color-mix(in srgb, var(--danger) 55%, var(--line));
+  --toast-foreground: var(--text);
+}
+.action-toast.alert-info {
+  --toast-background: var(--raised);
+  --toast-border: var(--line);
+  --toast-foreground: var(--text);
 }
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateX(12px) scale(0.98);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.98);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .action-toast {
     animation: none;
   }
 }
