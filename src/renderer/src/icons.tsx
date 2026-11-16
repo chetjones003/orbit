@@ -19,6 +19,12 @@ const PATHS = {
       <circle cx="12" cy="12" r="1.6" fill="currentColor" />
     </>
   ),
+  commit: (
+    <>
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M3 12h5.5M15.5 12H21" />
+    </>
+  ),
   pull: (
     <>
       <circle cx="6" cy="6" r="2.5" />

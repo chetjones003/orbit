@@ -18,6 +18,7 @@ import { PullCi } from './PullCi';
 import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 import { IssueLabelChip } from './IssueLabelChip';
+import { IssueLinks } from './IssueLinks';
 
 /** Reader-facing names for a review's state. */
 function reviewStateLabel(state: string): string {
@@ -421,6 +422,16 @@ export function IssueDetailView({
           onTaskToggle={editable ? toggleTask : undefined}
         />
       </section>
+
+      {kind === 'issue' && (
+        <section className="detail-card" aria-label="Pull requests and commits">
+          <IssueLinks
+            repoFullName={repoFullName}
+            number={number}
+            onOpenPull={(pullNumber) => onOpenIssue(repoFullName, pullNumber, 'pull')}
+          />
+        </section>
+      )}
 
       {kind === 'pull' && (
         <section className="detail-card" aria-label="Changed files">

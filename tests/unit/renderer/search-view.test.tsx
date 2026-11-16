@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SearchField } from '../../../src/renderer/src/search/SearchField';
+import { SearchPalette } from '../../../src/renderer/src/search/SearchPalette';
 import { SearchView } from '../../../src/renderer/src/search/SearchView';
 import { ListResizeHandle } from '../../../src/renderer/src/shell/ListResizeHandle';
 import {
@@ -208,15 +208,54 @@ describe('SearchView states', () => {
   });
 });
 
-describe('title bar search field', () => {
-  it('opens the search when focused and closes on Escape', () => {
-    const onFocus = vi.fn();
+describe('search dialog', () => {
+  function Dialog({
+    onClose,
+    onOpenItem = vi.fn()
+  }: {
+    onClose: () => void;
+    onOpenItem?: (item: InboxItem) => void;
+  }) {
+    const [text, setText] = useState('ship');
+    return (
+      <SearchPalette
+        text={text}
+        onTextChange={setText}
+        repos={repos}
+        selected={null}
+        onOpenItem={onOpenItem}
+        onClose={onClose}
+      />
+    );
+  }
+
+  it('is a dialog with the input focused, and Escape closes it', () => {
+    installApi(async () => page());
     const onClose = vi.fn();
-    render(<SearchField value="" onChange={vi.fn()} onFocus={onFocus} onClose={onClose} />);
-    const input = screen.getByRole('searchbox', { name: 'Search issues and pull requests' });
-    fireEvent.focus(input);
-    expect(onFocus).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(input, { key: 'Escape' });
+    render(<Dialog onClose={onClose} />);
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search issues and pull requests' })).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes on a click outside the dialog, but not on a click inside it', () => {
+    installApi(async () => page());
+    const onClose = vi.fn();
+    render(<Dialog onClose={onClose} />);
+    fireEvent.mouseDown(screen.getByRole('dialog', { name: 'Search' }));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(document.querySelector('.search-palette-backdrop') as HTMLElement);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a chosen result and closes the dialog', async () => {
+    installApi(async () => page());
+    const onOpenItem = vi.fn();
+    const onClose = vi.fn();
+    render(<Dialog onClose={onClose} onOpenItem={onOpenItem} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Ship the search/ }));
+    expect(onOpenItem).toHaveBeenCalledWith(expect.objectContaining({ number: 7 }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

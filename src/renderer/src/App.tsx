@@ -39,8 +39,7 @@ import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
 import { OrbitMark } from './brand/OrbitMark';
 import { TitleBar } from './chrome/TitleBar';
-import { SearchField } from './search/SearchField';
-import { SearchView } from './search/SearchView';
+import { SearchPalette } from './search/SearchPalette';
 import { ListResizeHandle } from './shell/ListResizeHandle';
 import { clampListWidth, readStoredListWidth, storeListWidth } from './shell/side-list-width';
 
@@ -129,9 +128,9 @@ export function App() {
   const [sideWidth, setSideWidth] = useState(440);
   // The left panel's width, kept between launches. The window can shrink, so the width is clamped when drawn too.
   const [listWidth, setListWidth] = useState(readStoredListWidth);
-  /** The title bar search text. Typing shows the search view; clearing it returns to the section that was open. */
+  /** The search text. Ctrl+K opens the search dialog; closing it clears the text. */
   const [searchText, setSearchText] = useState('');
-  const [searchReturnView, setSearchReturnView] = useState<WorkspaceView>('repos');
+  const [searchOpen, setSearchOpen] = useState(false);
   const systemReducedMotion = useSystemReducedMotion();
   const [itemMenu, setItemMenu] = useState<{ item: ItemRef; x: number; y: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -285,6 +284,7 @@ export function App() {
       setIssueRef(null);
       setIssueExpanded(false);
       setSearchText('');
+      setSearchOpen(false);
     }
   }, [status, loadRepos]);
 
@@ -507,21 +507,30 @@ export function App() {
       ? (view as RailTarget)
       : null;
 
-  /** Focusing or typing in the title bar opens the search view, remembering the section it came from. */
-  const openSearch = (): void => {
-    if (view === 'search') return;
-    setSearchReturnView(view);
-    setView('search');
-  };
-  const changeSearch = (next: string): void => {
-    setSearchText(next);
-    openSearch();
-  };
-  /** Escape or Close search clears the text and returns to the section that was open. */
+  const signedIn = status?.kind === 'signed-in';
+  const changeSearch = (next: string): void => setSearchText(next);
+  /** Escape, a click outside, or choosing a result closes the dialog and clears the text. */
   const closeSearch = (): void => {
+    setSearchOpen(false);
     setSearchText('');
-    if (view === 'search') setView(searchReturnView);
   };
+  // Ctrl+K (Cmd+K on macOS) opens the search dialog from anywhere in the window, while signed in.
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'k' ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      event.preventDefault();
+      setSearchOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [signedIn]);
 
   const selectRail = (target: RailTarget): void => {
     if (target === 'settings') return setSettingsOpen(true);
@@ -610,16 +619,6 @@ export function App() {
         onToggleTheme={toggleTheme}
         onCheckUpdates={openUpdates}
         onSignOut={signOut}
-        search={
-          status?.kind === 'signed-in' ? (
-            <SearchField
-              value={searchText}
-              onChange={changeSearch}
-              onFocus={openSearch}
-              onClose={closeSearch}
-            />
-          ) : undefined
-        }
       />
       <main
         className="orbit-shell"
@@ -775,20 +774,6 @@ export function App() {
                 }}
               />
             </div>
-          ) : view === 'search' ? (
-            <div className="issues-view search-page">
-              <SearchView
-                text={searchText}
-                onTextChange={changeSearch}
-                repos={repos}
-                selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
-                onOpenItem={(item) => {
-                  openItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind });
-                  setIssueExpanded(false);
-                }}
-                onClose={closeSearch}
-              />
-            </div>
           ) : view === 'projects' ? (
             <div className="issues-view projects-page">
               <div className="repo-toolbar">
@@ -814,7 +799,7 @@ export function App() {
                 number={issueRef.number}
                 signedInLogin={status.login}
                 kind={issueRef.kind}
-                onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+                onOpenIssue={(repoFullName, number, kind) => pickItem({ repoFullName, number, kind })}
                 onActionNotice={(message, failed) => showToast(message, failed ? 'error' : 'success')}
                 variant="expanded"
               />
@@ -1104,6 +1089,18 @@ export function App() {
             onDownload={() => void window.orbit.updates.download().then(setUpdateStatus, () => undefined)}
             onInstall={() => window.orbit.updates.install()}
             hasUnsavedDrafts={() => drafts.hasDrafts()}
+          />
+        )}
+        {searchOpen && signedIn && (
+          <SearchPalette
+            text={searchText}
+            onTextChange={changeSearch}
+            repos={repos}
+            selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
+            onOpenItem={(item) =>
+              pickItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind })
+            }
+            onClose={closeSearch}
           />
         )}
       </main>

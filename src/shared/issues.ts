@@ -371,3 +371,36 @@ export interface WorkflowGraphJob {
   name: string;
   needs: string[];
 }
+
+/** A pull request linked to an issue: it references the issue, or GitHub connected it. */
+export interface LinkedPull {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  merged: boolean;
+  htmlUrl: string;
+  /** `ghost` when the author account no longer exists. */
+  authorLogin: string;
+}
+
+/** A commit whose message refers to or closes an issue. */
+export interface LinkedCommit {
+  sha: string;
+  /** The first line of the commit message. */
+  message: string;
+  /** The GitHub login of the commit's author, or null when GitHub cannot match the commit to an account. */
+  authorLogin: string | null;
+  /** The name the commit was written with. */
+  authorName: string;
+  /** ISO time of the author's commit. */
+  committedAt: string;
+  htmlUrl: string;
+}
+
+/** Pull requests and commits linked to one issue, newest first. */
+export interface IssueLinks {
+  pulls: LinkedPull[];
+  commits: LinkedCommit[];
+  /** True when some links could not be read, so the lists may be incomplete. */
+  partial: boolean;
+}

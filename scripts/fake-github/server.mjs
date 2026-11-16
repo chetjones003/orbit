@@ -230,6 +230,45 @@ export function createFakeGitHub() {
     if (!item.parent) throw new HttpError(404, 'Not Found');
     return { body: issueList(repo, itemBy(repo, item.parent, 'issue'), ctx) };
   });
+  // Timeline: pull requests whose title or body names this issue, and commits of those pull requests.
+  route('GET', /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/timeline$/, (ctx) => {
+    const repo = repoBy(ctx.params[1], ctx.params[2]);
+    const number = Number(ctx.params[3]);
+    const mention = new RegExp(`#${number}(?!\\d)`);
+    const linked = repo.items.filter(
+      (i) => i.kind === 'pull' && (mention.test(i.title) || mention.test(i.body ?? ''))
+    );
+    const events = [];
+    for (const pull of linked) {
+      events.push({
+        event: 'cross-referenced',
+        created_at: pull.created_at,
+        source: { type: 'issue', issue: issueList(repo, pull, ctx) }
+      });
+      if (pull.head?.sha)
+        events.push({ event: 'referenced', created_at: pull.created_at, commit_id: pull.head.sha });
+    }
+    return { body: events };
+  });
+  route('GET', /^\/repos\/([^/]+)\/([^/]+)\/commits\/([0-9a-f]{7,40})$/, (ctx) => {
+    const repo = repoBy(ctx.params[1], ctx.params[2]);
+    const sha = ctx.params[3];
+    const pull = repo.items.find(
+      (i) => i.kind === 'pull' && (i.head?.sha === sha || i.merge_commit_sha === sha)
+    );
+    if (!pull) throw new HttpError(404, 'Not Found');
+    return {
+      body: {
+        sha,
+        html_url: `https://github.com/${repo.owner}/${repo.name}/commit/${sha}`,
+        commit: {
+          message: `${pull.title}\n\nFake commit for the issue links view.`,
+          author: { name: pull.user, date: pull.created_at }
+        },
+        author: { login: pull.user }
+      }
+    };
+  });
   route('PATCH', /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)$/, (ctx) => {
     const repo = repoBy(ctx.params[1], ctx.params[2]);
     const item = itemBy(repo, Number(ctx.params[3]));

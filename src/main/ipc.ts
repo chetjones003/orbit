@@ -52,6 +52,7 @@ import type {
   IssueDetail,
   IssueEditResult,
   IssueFieldsInput,
+  IssueLinks,
   IssueListPage,
   IssueListQuery,
   IssueRepoOptions,
@@ -123,6 +124,7 @@ export interface IpcOptions {
       IssueService,
       | 'listIssues'
       | 'getIssueDetail'
+      | 'getIssueLinks'
       | 'getPullDetail'
       | 'createIssue'
       | 'updateIssue'
@@ -286,6 +288,13 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
       (event, repoFullName: string, number: number): Promise<IssueDetail> => {
         assertTrustedSender(event, devServerOrigin);
         return issues.getIssueDetail(repoFullName, number);
+      }
+    );
+    ipcMain.handle(
+      IpcChannels.issuesLinks,
+      (event, repoFullName: string, number: number): Promise<IssueLinks> => {
+        assertTrustedSender(event, devServerOrigin);
+        return issues.getIssueLinks(repoFullName, number);
       }
     );
     ipcMain.handle(

@@ -86,6 +86,7 @@ describe('IssueDetailView comments', () => {
     api = {
       projects: projectsStub(),
       issues: {
+        links: vi.fn(async () => ({ pulls: [], commits: [], partial: false })),
         detail: vi.fn(async () => detail()),
         repoOptions: vi.fn(async () => ({ labels: [], assignees: [], milestones: [] }))
       },
