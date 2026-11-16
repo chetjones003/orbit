@@ -1058,5 +1058,12 @@ export function createSeed() {
     }
   );
 
+  // Sub-issues: Docs (#1) is the parent of three items, so the counts and the links have data to show.
+  const atlasRepo = store.repos.find((r) => r.name === 'atlas-cad');
+  for (const child of [2, 3, 9]) {
+    const item = atlasRepo?.items.find((i) => i.number === child && i.kind === 'issue');
+    if (item) item.parent = 1;
+  }
+
   return store;
 }

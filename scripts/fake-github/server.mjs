@@ -218,6 +218,18 @@ export function createFakeGitHub() {
     const repo = repoBy(ctx.params[1], ctx.params[2]);
     return { body: issueList(repo, itemBy(repo, Number(ctx.params[3])), ctx) };
   });
+  route('GET', /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/sub_issues$/, (ctx) => {
+    const repo = repoBy(ctx.params[1], ctx.params[2]);
+    const parent = itemBy(repo, Number(ctx.params[3]), 'issue');
+    const children = repo.items.filter((i) => i.kind === 'issue' && i.parent === parent.number);
+    return { body: children.map((child) => issueList(repo, child, ctx)) };
+  });
+  route('GET', /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/parent$/, (ctx) => {
+    const repo = repoBy(ctx.params[1], ctx.params[2]);
+    const item = itemBy(repo, Number(ctx.params[3]), 'issue');
+    if (!item.parent) throw new HttpError(404, 'Not Found');
+    return { body: issueList(repo, itemBy(repo, item.parent, 'issue'), ctx) };
+  });
   route('PATCH', /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)$/, (ctx) => {
     const repo = repoBy(ctx.params[1], ctx.params[2]);
     const item = itemBy(repo, Number(ctx.params[3]));

@@ -15,7 +15,9 @@ import type {
   ReviewAnchor,
   ReviewCommentResult,
   ReviewEvent,
-  ReviewSubmitResult
+  ReviewSubmitResult,
+  SubIssueCount,
+  SubIssueRef
 } from '../../shared/issues';
 import { anchorInPatch } from './review-anchor';
 import {
@@ -225,6 +227,8 @@ interface GitHubIssueResponse {
   body?: string | null;
   body_html?: string | null;
   pull_request?: unknown;
+  sub_issues_summary?: { total?: unknown; completed?: unknown } | null;
+  parent_issue_url?: string | null;
 }
 
 interface GitHubCommentResponse {
@@ -785,7 +789,35 @@ export class IssueService {
     if (!summary) throw new Error('GitHub returned an invalid issue.');
     const bodyHtml = (issueBody as GitHubIssueResponse).body_html ?? '';
     const { comments, commentsPartial } = await this.fetchComments(base, token, scope);
-    return { summary, body: rawBody(issueBody), bodyHtml, comments, commentsPartial };
+    const subIssues =
+      summary.subIssues && summary.subIssues.total > 0 ? await this.fetchSubIssues(base, token, scope) : [];
+    const parent = (issueBody as GitHubIssueResponse).parent_issue_url
+      ? await this.fetchParent(base, token, scope)
+      : null;
+    return { summary, body: rawBody(issueBody), bodyHtml, comments, commentsPartial, subIssues, parent };
+  }
+
+  /** An issue's sub-issues, first page of 100 (GitHub's maximum per page). A failed read is shown as none. */
+  private async fetchSubIssues(base: string, token: string, scope: string): Promise<SubIssueRef[]> {
+    try {
+      const body = await this.client.get<unknown>(`${base}/sub_issues?per_page=100`, { token, scope });
+      if (!Array.isArray(body)) return [];
+      return body.flatMap((entry) => {
+        const ref = toSubIssueRef(entry);
+        return ref ? [ref] : [];
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /** The parent issue. A failed read is shown as none, so the rest of the issue still loads. */
+  private async fetchParent(base: string, token: string, scope: string): Promise<SubIssueRef | null> {
+    try {
+      return toSubIssueRef(await this.client.get<unknown>(`${base}/parent`, { token, scope }));
+    } catch {
+      return null;
+    }
   }
 
   /** A pull request conversation, read with the same shape as an issue. */
@@ -2074,8 +2106,30 @@ function toSummary(raw: unknown): IssueSummary | null {
     commentCount: item.comments,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
-    htmlUrl: item.html_url
+    htmlUrl: item.html_url,
+    subIssues: toSubIssueCount(item.sub_issues_summary)
   };
+}
+
+function toSubIssueCount(raw: unknown): SubIssueCount | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const { total, completed } = raw as { total?: unknown; completed?: unknown };
+  return typeof total === 'number' && typeof completed === 'number' ? { total, completed } : null;
+}
+
+/** A sub-issue or parent issue as GitHub reports it. Anything malformed is dropped. */
+function toSubIssueRef(raw: unknown): SubIssueRef | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const item = raw as Record<string, unknown>;
+  const state = item['state'];
+  if (
+    typeof item['number'] !== 'number' ||
+    typeof item['title'] !== 'string' ||
+    typeof item['html_url'] !== 'string'
+  )
+    return null;
+  if (state !== 'open' && state !== 'closed') return null;
+  return { number: item['number'], title: item['title'], state, htmlUrl: item['html_url'] };
 }
 
 function toPullSummary(raw: unknown): PullSummary | null {

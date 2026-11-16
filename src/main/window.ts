@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, dialog, shell, session, type Event as ElectronEvent } from 'electron';
+import { app, BrowserWindow, Menu, dialog, shell, session, type Event as ElectronEvent } from 'electron';
 import { join } from 'node:path';
 import { parseExternalUrl } from '../shared/ipc';
 import { buildContentSecurityPolicy, isAppUrl } from './security';
@@ -52,6 +52,8 @@ export function createMainWindow(options: WindowOptions = {}): BrowserWindow {
     minWidth: 800,
     minHeight: 540,
     show: options.show ?? true,
+    // The taskbar shows the window's icon. Without this, a dev run (Electron's own binary) shows Electron's logo.
+    icon: join(app.getAppPath(), 'build', 'icon.png'),
     ...(ownChrome ? { frame: false } : { titleBarStyle: 'hidden' as const }),
     webPreferences: {
       ...HARDENED_WEB_PREFERENCES,

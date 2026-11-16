@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type {
   IssueCloseReason,
   IssueDetail as IssueDetailData,
+  SubIssueRef,
   IssueSnapshot,
   IssueSummary
 } from '../../../shared/issues';
@@ -66,6 +67,8 @@ export function IssueDetailView({
   kind = 'issue'
 }: IssueDetailViewProps) {
   const [detail, setDetail] = useState<IssueDetailData | null>(null);
+  // Sub-issues can run to dozens, so the list opens on request and the header always shows the progress.
+  const [subIssuesOpen, setSubIssuesOpen] = useState(false);
   const [pullDetail, setPullDetail] = useState<PullDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -304,45 +307,97 @@ export function IssueDetailView({
         </section>
       )}
 
-      {editable && (
-        <section className="detail-card" aria-label="Assignees, labels, and milestone">
-          <h3 className="detail-card-title">{editing ? 'Edit details' : 'Details'}</h3>
-          {editing ? (
-            <IssueFields
-              repoFullName={repoFullName}
-              number={number}
-              summary={summary}
-              onChange={applySummary}
-              onError={setActionError}
-            />
-          ) : (
-            <dl className="detail-facts">
-              <div>
-                <dt>Assignees</dt>
-                <dd>
-                  {summary.assignees.length
-                    ? summary.assignees.map((login) => (
-                        <span key={login} className="person-chip">
-                          @{login}
-                        </span>
-                      ))
-                    : 'No one assigned'}
-                </dd>
-              </div>
-              <div>
-                <dt>Milestone</dt>
-                <dd>{summary.milestone ? summary.milestone.title : 'No milestone'}</dd>
-              </div>
-            </dl>
-          )}
-        </section>
-      )}
+      <div className="detail-trio">
+        {editable && (
+          <section className="detail-card" aria-label="Assignees, labels, and milestone">
+            <h3 className="detail-card-title">{editing ? 'Edit details' : 'Details'}</h3>
+            {editing ? (
+              <IssueFields
+                repoFullName={repoFullName}
+                number={number}
+                summary={summary}
+                onChange={applySummary}
+                onError={setActionError}
+              />
+            ) : (
+              <dl className="detail-facts">
+                <div>
+                  <dt>Assignees</dt>
+                  <dd>
+                    {summary.assignees.length
+                      ? summary.assignees.map((login) => (
+                          <span key={login} className="person-chip">
+                            @{login}
+                          </span>
+                        ))
+                      : 'No one assigned'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Milestone</dt>
+                  <dd>{summary.milestone ? summary.milestone.title : 'No milestone'}</dd>
+                </div>
+                {detail.parent && (
+                  <div>
+                    <dt>Parent</dt>
+                    <dd>
+                      <SubIssueLink
+                        issue={detail.parent}
+                        onOpen={(number) => onOpenIssue(repoFullName, number, 'issue')}
+                      />
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </section>
+        )}
 
-      {kind === 'issue' && (
-        <section className="detail-card" aria-label="Projects">
-          <ItemProjects repoFullName={repoFullName} number={number} />
-        </section>
-      )}
+        {kind === 'issue' && detail.subIssues && detail.subIssues.length > 0 && (
+          <section className="detail-card" aria-label="Sub-issues">
+            <h3 className="sub-issues-head">
+              <button
+                type="button"
+                className="sub-issues-toggle"
+                aria-expanded={subIssuesOpen}
+                onClick={() => setSubIssuesOpen((open) => !open)}
+              >
+                <span className="sub-issues-name">Sub-issues</span>
+                <span className="sub-progress" aria-hidden="true">
+                  <span style={{ width: `${subProgressPercent(summary, detail.subIssues)}%` }} />
+                </span>
+                <span className="sub-issues-progress">
+                  {summary.subIssues
+                    ? `${summary.subIssues.completed} of ${summary.subIssues.total} done`
+                    : `${detail.subIssues.filter((entry) => entry.state === 'closed').length} of ${detail.subIssues.length} done`}
+                </span>
+                <span className={`item-project-chevron ${subIssuesOpen ? 'open' : ''}`} aria-hidden="true">
+                  <Icon name="chevronDown" size={14} />
+                </span>
+              </button>
+            </h3>
+            {subIssuesOpen && (
+              <ul className="sub-issues-list">
+                {detail.subIssues.map((entry) => (
+                  <li key={entry.number} className={`sub-issue-row ${entry.state}`}>
+                    <Icon name={entry.state === 'closed' ? 'check' : 'issue'} size={12} />
+                    <SubIssueLink
+                      issue={entry}
+                      onOpen={(number) => onOpenIssue(repoFullName, number, 'issue')}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {kind === 'issue' && (
+          <section className="detail-card" aria-label="Projects">
+            <ItemProjects repoFullName={repoFullName} number={number} />
+          </section>
+        )}
+      </div>
 
       <section className="detail-card" aria-label="Description">
         <h3 className="detail-card-title">Description</h3>
@@ -378,6 +433,7 @@ export function IssueDetailView({
           viewOnGitHubUrl={summary.htmlUrl}
           onLink={routeLink}
           canWrite={editable}
+          issueAuthorLogin={summary.authorLogin}
         />
       </div>
 
@@ -392,5 +448,23 @@ export function IssueDetailView({
         View on GitHub <Icon name="external" size={12} />
       </a>
     </article>
+  );
+}
+
+/** A parent or sub-issue, shown as a link. Opening it replaces the current item, like any other pick. */
+/** The share of sub-issues that are done, as a whole percentage. GitHub's count wins when it is there. */
+function subProgressPercent(summary: IssueSummary, children: SubIssueRef[]): number {
+  const total = summary.subIssues?.total ?? children.length;
+  const done = summary.subIssues
+    ? summary.subIssues.completed
+    : children.filter((entry) => entry.state === 'closed').length;
+  return total > 0 ? Math.round((done / total) * 100) : 0;
+}
+
+function SubIssueLink({ issue, onOpen }: { issue: SubIssueRef; onOpen(number: number): void }) {
+  return (
+    <button type="button" className="sub-issue-link" onClick={() => onOpen(issue.number)}>
+      #{issue.number} {issue.title}
+    </button>
   );
 }

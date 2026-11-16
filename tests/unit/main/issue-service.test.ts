@@ -80,6 +80,7 @@ describe('IssueService.listIssues', () => {
         title: 'Issue 4',
         state: 'open',
         stateReason: null,
+        subIssues: null,
         authorLogin: 'someone',
         labels: [{ name: 'bug', color: 'd73a4a' }],
         assignees: [],
