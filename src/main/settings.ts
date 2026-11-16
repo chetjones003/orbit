@@ -18,6 +18,11 @@ const DEFAULTS: OrbitSettings = {
   palette: 'orbit',
   openItemsIn: 'side',
   motion: 'always',
+  interfaceFont: 'inter',
+  interfaceFontSize: 18,
+  monospaceFont: 'code-new-roman',
+  monospaceFontSize: 13,
+  wordWrap: true,
   windowState: null,
   publicUploadNoticeAcknowledged: false
 };
@@ -54,6 +59,11 @@ export class SettingsStore {
         palette: preferenceUpdate.palette ?? current.palette,
         openItemsIn: preferenceUpdate.openItemsIn ?? current.openItemsIn,
         motion: preferenceUpdate.motion ?? current.motion,
+        interfaceFont: preferenceUpdate.interfaceFont ?? current.interfaceFont,
+        interfaceFontSize: preferenceUpdate.interfaceFontSize ?? current.interfaceFontSize,
+        monospaceFont: preferenceUpdate.monospaceFont ?? current.monospaceFont,
+        monospaceFontSize: preferenceUpdate.monospaceFontSize ?? current.monospaceFontSize,
+        wordWrap: preferenceUpdate.wordWrap ?? current.wordWrap,
         windowState: current.windowState,
         // Set only by acknowledgePublicUploadNotice, never by a general update from the renderer.
         publicUploadNoticeAcknowledged: current.publicUploadNoticeAcknowledged
@@ -121,9 +131,34 @@ function normalizeSettings(value: unknown): OrbitSettings {
     palette: paletteExists(value['palette'], customThemes) ? value['palette'] : 'orbit',
     openItemsIn: value['openItemsIn'] === 'full' ? 'full' : 'side',
     motion: value['motion'] === 'system' ? 'system' : 'always',
+    interfaceFont: isInterfaceFont(value['interfaceFont']) ? value['interfaceFont'] : DEFAULTS.interfaceFont,
+    interfaceFontSize: isInterfaceFontSize(value['interfaceFontSize'])
+      ? value['interfaceFontSize']
+      : DEFAULTS.interfaceFontSize,
+    monospaceFont: isMonospaceFont(value['monospaceFont']) ? value['monospaceFont'] : DEFAULTS.monospaceFont,
+    monospaceFontSize: isMonospaceFontSize(value['monospaceFontSize'])
+      ? value['monospaceFontSize']
+      : DEFAULTS.monospaceFontSize,
+    wordWrap: value['wordWrap'] !== false,
     windowState,
     publicUploadNoticeAcknowledged: value['publicUploadNoticeAcknowledged'] === true
   };
+}
+
+function isInterfaceFont(value: unknown): value is OrbitSettings['interfaceFont'] {
+  return value === 'inter' || value === 'system' || value === 'segoe' || value === 'arial';
+}
+
+function isInterfaceFontSize(value: unknown): value is OrbitSettings['interfaceFontSize'] {
+  return value === 12 || value === 13 || value === 14 || value === 15 || value === 16 || value === 18;
+}
+
+function isMonospaceFont(value: unknown): value is OrbitSettings['monospaceFont'] {
+  return value === 'cascadia' || value === 'consolas' || value === 'courier' || value === 'code-new-roman';
+}
+
+function isMonospaceFontSize(value: unknown): value is OrbitSettings['monospaceFontSize'] {
+  return value === 11 || value === 12 || value === 13 || value === 14 || value === 15;
 }
 
 /** Older settings stored only light or dark in 'theme'; those still read as they were. */

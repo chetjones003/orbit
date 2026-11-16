@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { AppInfo, OpenItemsIn, OrbitSettings, PersonalRepo, SettingsUpdate } from '../../shared/ipc';
 import type { AuthStatus } from '../../shared/auth';
 import type { ConnectionStatus } from '../../shared/connection';
@@ -53,6 +54,18 @@ const NOTIFICATION_TOAST_MS = 6000;
 const NOTIFICATION_QUEUE_LIMIT = 20;
 /** Focus refetches only when the last successful refresh is at least this old. */
 const FOCUS_REFRESH_MS = 60_000;
+const INTERFACE_FONTS = {
+  inter: 'Inter Variable, Inter, ui-sans-serif, system-ui, sans-serif',
+  system: 'system-ui, sans-serif',
+  segoe: 'Segoe UI, system-ui, sans-serif',
+  arial: 'Arial, sans-serif'
+} satisfies Record<OrbitSettings['interfaceFont'], string>;
+const MONOSPACE_FONTS = {
+  cascadia: 'Cascadia Code, Consolas, monospace',
+  consolas: 'Consolas, monospace',
+  courier: 'Courier New, monospace',
+  'code-new-roman': 'Code New Roman, Consolas, monospace'
+} satisfies Record<OrbitSettings['monospaceFont'], string>;
 
 /** Single-window Orbit shell. GitHub data stays in memory and is fetched through main. */
 export function App() {
@@ -503,7 +516,21 @@ export function App() {
   };
 
   return (
-    <div className="app-frame">
+    <div
+      className="app-frame"
+      data-word-wrap={settings?.wordWrap === false ? 'off' : 'on'}
+      style={
+        {
+          '--ui-font-family': INTERFACE_FONTS[settings?.interfaceFont ?? 'inter'],
+          '--ui-font-size': `${settings?.interfaceFontSize ?? 14}px`,
+          '--ui-font-scale': String((settings?.interfaceFontSize ?? 14) / 14),
+          '--mono-font-family': MONOSPACE_FONTS[settings?.monospaceFont ?? 'code-new-roman'],
+          '--mono-font-size': `${settings?.monospaceFontSize ?? 13}px`,
+          fontFamily: 'var(--ui-font-family)',
+          fontSize: 'var(--ui-font-size)'
+        } as CSSProperties
+      }
+    >
       <TitleBar
         platform={info?.platform}
         signedIn={status?.kind === 'signed-in'}
@@ -878,6 +905,11 @@ export function App() {
             systemPrefersDark={systemPrefersDark}
             openItemsIn={settings.openItemsIn}
             motion={settings.motion}
+            interfaceFont={settings.interfaceFont}
+            interfaceFontSize={settings.interfaceFontSize}
+            monospaceFont={settings.monospaceFont}
+            monospaceFontSize={settings.monospaceFontSize}
+            wordWrap={settings.wordWrap}
             systemReducedMotion={systemReducedMotion}
             version={info?.version}
             onColorScheme={(colorScheme) =>
@@ -903,6 +935,9 @@ export function App() {
             }
             onMotion={(motion) =>
               void updateSettings({ motion }).catch(() => setActionError('Could not save this setting.'))
+            }
+            onTypography={(update) =>
+              void updateSettings(update).catch(() => setActionError('Could not save typography settings.'))
             }
             onCheckUpdates={() => {
               setSettingsOpen(false);

@@ -178,6 +178,11 @@ export interface OrbitSettings {
   openItemsIn: OpenItemsIn;
   /** Whether the side panels animate when Windows has animations off. */
   motion: MotionSetting;
+  interfaceFont: InterfaceFont;
+  interfaceFontSize: InterfaceFontSize;
+  monospaceFont: MonospaceFont;
+  monospaceFontSize: MonospaceFontSize;
+  wordWrap: boolean;
   windowState: WindowState | null;
   /** The user has accepted that uploads to public repos are public as soon as they upload. */
   publicUploadNoticeAcknowledged: boolean;
@@ -192,10 +197,26 @@ export type OpenItemsIn = 'full' | 'side';
  */
 export type MotionSetting = 'system' | 'always';
 
+export type InterfaceFont = 'inter' | 'system' | 'segoe' | 'arial';
+export type InterfaceFontSize = 12 | 13 | 14 | 15 | 16 | 18;
+export type MonospaceFont = 'cascadia' | 'consolas' | 'courier' | 'code-new-roman';
+export type MonospaceFontSize = 11 | 12 | 13 | 14 | 15;
+
 export type SettingsUpdate = Partial<
   Pick<
     OrbitSettings,
-    'pinnedRepoIds' | 'customViews' | 'colorScheme' | 'palette' | 'customThemes' | 'openItemsIn' | 'motion'
+    | 'pinnedRepoIds'
+    | 'customViews'
+    | 'colorScheme'
+    | 'palette'
+    | 'customThemes'
+    | 'openItemsIn'
+    | 'motion'
+    | 'interfaceFont'
+    | 'interfaceFontSize'
+    | 'monospaceFont'
+    | 'monospaceFontSize'
+    | 'wordWrap'
   >
 > & {
   detailsWidth?: number;
