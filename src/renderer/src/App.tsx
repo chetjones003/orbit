@@ -53,6 +53,32 @@ const NOTIFICATION_TOAST_MS = 6000;
 const NOTIFICATION_QUEUE_LIMIT = 20;
 /** Focus refetches only when the last successful refresh is at least this old. */
 const FOCUS_REFRESH_MS = 60_000;
+type ActionToast = { id: number; message: string; tone: 'success' | 'error' | 'info' };
+
+/** Short synthesized Orbit cues: a rising chime, descending alert, or soft neutral ping. */
+function playNotificationSound(tone: ActionToast['tone'] = 'info'): void {
+  const audio = new AudioContext();
+  const now = audio.currentTime;
+  const notes: ReadonlyArray<readonly [number, number]> = tone === 'success'
+    ? [[0, 587], [0.11, 784], [0.22, 1175]]
+    : tone === 'error'
+      ? [[0, 392], [0.24, 311]]
+      : [[0, 659], [0.14, 880]];
+  for (const [offset, frequency] of notes) {
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.frequency.value = frequency;
+    oscillator.type = tone === 'error' ? 'triangle' : 'sine';
+    gain.gain.setValueAtTime(0.0001, now + offset);
+    gain.gain.exponentialRampToValueAtTime(tone === 'error' ? 0.38 : 0.16, now + offset + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + (tone === 'error' ? 0.3 : 0.22));
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
+    oscillator.start(now + offset);
+    oscillator.stop(now + offset + (tone === 'error' ? 0.31 : 0.19));
+  }
+  window.setTimeout(() => void audio.close(), tone === 'error' ? 800 : 700);
+}
 
 /** Single-window Orbit shell. GitHub data stays in memory and is fetched through main. */
 export function App() {
@@ -99,7 +125,13 @@ export function App() {
     if (offeredVersion !== null) setUpdateDialogOpen(true);
   }, [offeredVersion]);
   const [now, setNow] = useState(() => Date.now());
-  const [toast, setToast] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ActionToast[]>([]);
+  const actionToastIds = useRef(0);
+  const showToast = (message: string, tone: ActionToast['tone'] = 'info'): void => {
+    const toast = { id: ++actionToastIds.current, message, tone };
+    setToasts((current) => [toast, ...current]);
+    playNotificationSound(tone);
+  };
   const [notificationToasts, setNotificationToasts] = useState<NotificationToast[]>([]);
   const reposRef = useRef<PersonalRepo[]>([]);
   useEffect(() => {
@@ -320,6 +352,7 @@ export function App() {
   useEffect(() => {
     const timers = toastTimers.current;
     const unsubscribeDelivered = window.orbit.notifications.onDelivered((delivery) => {
+      if (delivery.kind === 'items' || (delivery.kind === 'summary' && delivery.desktop)) playNotificationSound('info');
       if (delivery.kind === 'items') {
         pushToasts(
           delivery.items.map((item) => ({
@@ -340,12 +373,6 @@ export function App() {
       timers.clear();
     };
   }, [pushToasts, applyOpenResult]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   // Refetch when the user returns to Orbit and the data is older than FOCUS_REFRESH_MS, and when the
   // network comes back. Focus uses wake(), not the manual refresh, so it never uses up the cooldown.
@@ -468,14 +495,15 @@ export function App() {
     void window.orbit.repos.refresh().then(
       (result) => {
         if (result.started) return;
-        setToast(
+        showToast(
           result.reason === 'cooldown'
             ? 'Refresh is cooling down. Try again in a moment.'
             : result.reason === 'rate-limited'
               ? 'GitHub is rate limiting Orbit. Refresh resumes automatically.'
               : result.reason === 'signed-out'
                 ? 'Sign in to refresh your repositories.'
-                : 'A refresh is already running.'
+              : 'A refresh is already running.',
+          'info'
         );
       },
       () => setActionError('Could not start a refresh. Try again.')
@@ -487,8 +515,8 @@ export function App() {
       .getReport()
       .then((text) => navigator.clipboard.writeText(text))
       .then(
-        () => setToast('Diagnostics copied. Nothing was uploaded.'),
-        () => setToast('Could not copy diagnostics.')
+        () => showToast('Diagnostics copied. Nothing was uploaded.', 'success'),
+        () => showToast('Could not copy diagnostics.', 'error')
       );
   };
 
@@ -544,6 +572,16 @@ export function App() {
         <section className="workspace" aria-label="Workspace">
           {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
             <div className="scope-bar">
+              {import.meta.env.DEV && <div className="dev-notification-controls">
+                <button className="secondary-action" onClick={() => showToast('This is a simulated success toast.', 'success')}>Success toast</button>
+                <button className="secondary-action" onClick={() => showToast('This is a simulated error toast.', 'error')}>Error toast</button>
+                <button className="secondary-action" onClick={() => showToast('This is a simulated info toast.', 'info')}>Info toast</button>
+                <button className="secondary-action" onClick={() => {
+                  playNotificationSound('info');
+                  if ('Notification' in window) new Notification('Orbit test notification', { body: 'This is a simulated system notification.' });
+                  else showToast('System notifications are unavailable in this environment.', 'info');
+                }}>Simulate system notification</button>
+              </div>}
               <label className="scope-field">
                 <span>Repository</span>
                 <select
@@ -653,6 +691,7 @@ export function App() {
                 signedInLogin={status.login}
                 kind={issueRef.kind}
                 onOpenIssue={(repoFullName, number, kind) => setIssueRef({ repoFullName, number, kind })}
+                onActionNotice={(message, failed) => showToast(message, failed ? 'error' : 'success')}
                 variant="expanded"
               />
             </div>
@@ -819,7 +858,10 @@ export function App() {
               onCopyDiagnostics={copyDiagnostics}
             />
           )}
-          {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+          {toasts.length > 0 && <div className="action-toast-stack" aria-label="Action notifications">
+            {toasts.map((toast) => <Toast key={toast.id} message={toast.message} tone={toast.tone}
+              onDismiss={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} />)}
+          </div>}
           <NotificationToasts
             toasts={notificationToasts}
             onOpen={openNotification}
