@@ -70,5 +70,8 @@
     "typescript-eslint": "8.46.2",
     "vitest": "4.1.12",
     "yaml": "2.9.1"
+  },
+  "allowScripts": {
+    "electron@45.3.2": true
   }
 }
