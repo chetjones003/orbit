@@ -2,6 +2,7 @@ import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
+import type { SearchPage, SearchRequest } from './search';
 import type { WorkflowGraphJob, WorkflowJob } from './issues';
 import type {
   ColorScheme,
@@ -106,6 +107,8 @@ export const IpcChannels = {
   actionsWorkflowGraph: 'actions:workflow-graph',
   pullsCreate: 'pulls:create',
   inboxList: 'inbox:list',
+  /** Cross-repo search of issues and pull requests in the signed-in account's personal repos. */
+  searchQuery: 'search:query',
   projectsList: 'projects:list',
   projectsDetail: 'projects:detail',
   projectsItems: 'projects:items',
@@ -426,6 +429,10 @@ export interface OrbitApi {
   inbox: {
     /** One fixed inbox tab across the signed-in account's personal repos. */
     list(query: InboxQuery): Promise<InboxPage>;
+  };
+  search: {
+    /** Issues and pull requests across the signed-in account's personal repos, filtered and paged. */
+    query(request: SearchRequest): Promise<SearchPage>;
   };
   projects: {
     /** Projects the signed-in account owns. */

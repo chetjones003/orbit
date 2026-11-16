@@ -12,6 +12,7 @@ import { debugMediaOrigin, resolveGitHubEndpoints } from './github/endpoints';
 import { RepoService } from './github/repo-service';
 import { IssueService } from './github/issue-service';
 import { InboxService } from './github/inbox-service';
+import { SearchService } from './github/search-service';
 import { ProjectsService } from './github/projects-service';
 import { GitHubClient } from './github/github-client';
 import { RefreshEngine } from './github/refresh-engine';
@@ -98,6 +99,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     const repos = new RepoService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
     const inbox = new InboxService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client });
+    const search = new SearchService({ auth, apiBaseUrl: endpoints.apiBaseUrl, client, repos });
     // Writes are refused while the engine reports offline or rate limiting, so outcomes stay certain.
     const issues = new IssueService({
       auth,
@@ -180,6 +182,7 @@ if (!app.requestSingleInstanceLock()) {
       repos,
       issues,
       inbox,
+      search,
       projects,
       comments: issues,
       settings,
