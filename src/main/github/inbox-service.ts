@@ -12,7 +12,7 @@ import { GitHubClient } from './github-client';
 /** Results per search page. */
 const INBOX_PER_PAGE = 30;
 /** GitHub's search API returns at most this many results for one query. */
-const SEARCH_RESULT_CAP = 1000;
+export const SEARCH_RESULT_CAP = 1000;
 const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const MAX_PAGE = Math.ceil(SEARCH_RESULT_CAP / INBOX_PER_PAGE);
 
@@ -30,7 +30,7 @@ export function buildInboxSearchQuery(tab: InboxTab, login: string): string {
   return `${TAB_QUALIFIERS[tab](login)} user:${login}`;
 }
 
-interface SearchResponse {
+export interface SearchResponse {
   total_count: number;
   incomplete_results: boolean;
   items: unknown[];
@@ -99,7 +99,7 @@ export class InboxService {
   }
 }
 
-function isSearchResponse(value: unknown): value is SearchResponse {
+export function isSearchResponse(value: unknown): value is SearchResponse {
   if (!value || typeof value !== 'object') return false;
   const body = value as Partial<SearchResponse>;
   return (
@@ -110,7 +110,7 @@ function isSearchResponse(value: unknown): value is SearchResponse {
 }
 
 /** Returns null for a result that is malformed or outside the account's own repos. */
-function toInboxItem(raw: unknown, login: string): InboxItem | null {
+export function toInboxItem(raw: unknown, login: string): InboxItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const item = raw as Record<string, unknown>;
   const repoFullName = repoFromUrl(item['repository_url']);

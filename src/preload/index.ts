@@ -151,6 +151,9 @@ const api: OrbitApi = {
   inbox: {
     list: (query) => ipcRenderer.invoke(IpcChannels.inboxList, query)
   },
+  search: {
+    query: (request) => ipcRenderer.invoke(IpcChannels.searchQuery, request)
+  },
   projects: {
     list: () => ipcRenderer.invoke(IpcChannels.projectsList),
     detail: (projectId: string) => ipcRenderer.invoke(IpcChannels.projectsDetail, projectId),

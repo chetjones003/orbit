@@ -31,6 +31,8 @@ import type { NotificationOpenResult } from '../shared/notifications';
 import type { Diagnostics } from './diagnostics';
 import type { IssueService } from './github/issue-service';
 import type { InboxService } from './github/inbox-service';
+import type { SearchService } from './github/search-service';
+import type { SearchPage, SearchRequest } from '../shared/search';
 import type { InboxPage, InboxQuery } from '../shared/inbox';
 import type { ProjectsService } from './github/projects-service';
 import {
@@ -161,6 +163,7 @@ export interface IpcOptions {
     };
   comments?: Pick<IssueService, 'previewMarkdown' | 'createComment' | 'updateComment' | 'deleteComment'>;
   inbox?: Pick<InboxService, 'list'>;
+  search?: Pick<SearchService, 'search'>;
   projects?: Pick<
     ProjectsService,
     | 'listProjects'
@@ -196,6 +199,7 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     issues,
     comments,
     inbox,
+    search,
     projects
   } = options;
 
@@ -252,6 +256,12 @@ export function registerIpcHandlers(options: IpcOptions = {}): void {
     ipcMain.handle(IpcChannels.inboxList, (event, query: InboxQuery): Promise<InboxPage> => {
       assertTrustedSender(event, devServerOrigin);
       return inbox.list(query);
+    });
+  }
+  if (search) {
+    ipcMain.handle(IpcChannels.searchQuery, (event, request: SearchRequest): Promise<SearchPage> => {
+      assertTrustedSender(event, devServerOrigin);
+      return search.search(request);
     });
   }
   if (projects) registerProjectHandlers(projects, devServerOrigin);

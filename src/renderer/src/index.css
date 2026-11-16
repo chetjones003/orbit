@@ -6051,3 +6051,177 @@ body.card-dragging * {
 .detail-trio .detail-facts > div {
   padding: 6px 0;
 }
+
+/* Left panel: resizable from its right edge. The rail buttons shrink so all of them fit a narrow panel. */
+.side-list {
+  position: relative;
+  /* A flex item's default minimum is its content, which would stop the panel from narrowing. */
+  min-width: 0;
+}
+.side-list-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -6px;
+  z-index: 4;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.side-list-resize::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.side-list-resize:hover::after,
+.side-list-resize:focus-visible::after {
+  background: var(--accent);
+}
+.bottom-rail .rail-button {
+  flex: 0 1 36px;
+  min-width: 28px;
+}
+
+/* Title bar search: a field between the menus and the window controls. */
+.titlebar-search-slot {
+  display: flex;
+  flex: 0 1 380px;
+  align-items: center;
+  min-width: 160px;
+  margin: 4px 8px;
+  -webkit-app-region: no-drag;
+}
+.titlebar-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.titlebar-search:focus-within {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.titlebar-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.titlebar-search-input::placeholder {
+  color: var(--muted);
+}
+
+/* Search results: the same rows as the inbox, with a summary and count above them. */
+.search-page {
+  min-height: 0;
+  overflow: auto;
+}
+.search-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.search-view .scope-field select {
+  min-width: 180px;
+}
+.search-summary,
+.search-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.search-error {
+  padding: 0 18px;
+}
+
+/* Search filters: chips for each filter in effect, the controls that match them, and the examples to start from. */
+.search-controls {
+  align-items: flex-end;
+}
+.search-close {
+  align-self: center;
+  margin-left: auto;
+}
+.search-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 18px;
+  list-style: none;
+}
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+.search-chip-remove {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.search-chip-remove:hover,
+.search-chip-remove:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+}
+.search-start {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.search-start p {
+  margin: 0;
+}
+.search-start em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 600;
+}
+.search-examples-label {
+  font-size: 12px;
+}
+.search-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -1,7 +1,7 @@
 import { Icon } from '../icons';
 
 /** The sections of the workspace. `repos` is where the user chooses which repositories Orbit tracks. */
-export type WorkspaceView = 'issues' | 'pulls' | 'inbox' | 'projects' | 'repos';
+export type WorkspaceView = 'issues' | 'pulls' | 'inbox' | 'projects' | 'repos' | 'search';
 
 const TABS: Array<{ view: WorkspaceView; label: string }> = [
   { view: 'inbox', label: 'Inbox' },
