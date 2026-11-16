@@ -110,6 +110,16 @@ export function issueJson(store, item, origin, { html = true } = {}) {
       url: `https://api.github.com${base}/pulls/${item.number}`,
       merged_at: item.merged_at
     };
+  } else {
+    // Sub-issues, as GitHub reports them on every issue: a count, and the parent when there is one.
+    const children = repo.items.filter((i) => i.kind === 'issue' && i.parent === item.number);
+    const completed = children.filter((i) => i.state === 'closed').length;
+    json.sub_issues_summary = {
+      total: children.length,
+      completed,
+      percent_completed: children.length ? Math.round((completed / children.length) * 100) : 0
+    };
+    if (item.parent) json.parent_issue_url = `https://api.github.com${base}/issues/${item.parent}`;
   }
   return json;
 }

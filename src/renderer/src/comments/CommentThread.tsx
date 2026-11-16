@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { CommentUpdateResult, IssueComment } from '../../../shared/issues';
 import { RichBody } from '../issues/RichBody';
 import { Icon } from '../icons';
+import { RepoMark } from '../shell/RepoMark';
+import { markColor, markLetters } from '../shell/repo-mark';
 import { Composer } from './Composer';
 import { drafts, type DraftKey } from './draft-store';
 
@@ -19,6 +21,8 @@ export interface CommentThreadProps {
   onLink: (href: string) => void;
   /** Writes are offered only where comment support exists (issues in this slice). */
   canWrite: boolean;
+  /** The login of the issue's author, shown as an Author badge on their comments. */
+  issueAuthorLogin?: string;
 }
 
 interface Conflict {
@@ -35,6 +39,7 @@ interface Conflict {
  */
 export function CommentThread({
   repoFullName,
+  issueAuthorLogin,
   number,
   signedInLogin,
   commentCount,
@@ -163,12 +168,30 @@ export function CommentThread({
       {comments.map((comment) => {
         const mine = canWrite && comment.authorLogin === signedInLogin;
         const editing = editingId === comment.id;
+        // GitHub marks the repo owner's comments Owner, and the issue author's comments Author.
+        const isOwner = comment.authorLogin === repoFullName.split('/')[0];
+        const isAuthor = issueAuthorLogin !== undefined && comment.authorLogin === issueAuthorLogin;
         return (
           <div className="issue-comment" key={comment.id}>
             <div className="comment-head">
-              <p className="issue-meta">
-                @{comment.authorLogin} · {new Date(comment.createdAt).toLocaleString()}
-              </p>
+              <div className="comment-byline">
+                <RepoMark
+                  letters={markLetters(comment.authorLogin)}
+                  color={markColor(comment.authorLogin)}
+                  size={24}
+                />
+                <strong className="comment-author">@{comment.authorLogin}</strong>
+                {isOwner && <span className="comment-role">Owner</span>}
+                {isAuthor && <span className="comment-role">Author</span>}
+                <span className="comment-action">commented</span>
+                <time
+                  className="comment-time"
+                  dateTime={comment.createdAt}
+                  title={new Date(comment.createdAt).toLocaleString()}
+                >
+                  {relativeTime(comment.createdAt)}
+                </time>
+              </div>
               {mine && (
                 <CommentMenu
                   onEdit={() => {
@@ -348,4 +371,17 @@ function CommentMenu({ onEdit, onDelete }: { onEdit(): void; onDelete(): void })
       )}
     </div>
   );
+}
+
+/** How long ago a comment was written, in the words a person would use. Older than a month, the date. */
+function relativeTime(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 }

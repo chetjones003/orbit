@@ -8,8 +8,9 @@ import type {
   ProjectListPage,
   ProjectMembership
 } from '../../../shared/projects';
+import { Icon } from '../icons';
 import { ProjectFieldEditor } from './ProjectFieldEditor';
-import { withFieldValue } from './project-model';
+import { describeValue, withFieldValue } from './project-model';
 
 export interface ItemProjectsProps {
   repoFullName: string;
@@ -29,6 +30,8 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
   const pendingRef = useRef(new Set<string>());
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
+  // Each project is a disclosure: collapsed by default, so an issue with several projects stays compact.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -162,10 +165,29 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
         const { project, item } = membership;
         const detail = details[project.id];
         const pending = pendingIds.has(item.id);
+        const isOpen = expanded[project.id] === true;
+        const statusField = detail?.fields.find((field) => field.name === 'Status');
+        const statusText = statusField ? describeValue(item.fieldValues[statusField.id]) : '';
         return (
           <div className="item-project" key={project.id} aria-busy={pending || undefined}>
             <div className="item-project-header">
-              <strong>{project.title}</strong>
+              <button
+                type="button"
+                className="item-project-toggle"
+                aria-expanded={isOpen}
+                onClick={() => setExpanded((current) => ({ ...current, [project.id]: !isOpen }))}
+              >
+                <span className="item-project-title">
+                  <span className="item-project-mark" aria-hidden="true">
+                    <Icon name="projects" size={13} />
+                  </span>
+                  <strong>{project.title}</strong>
+                </span>
+                {statusText && <span className="item-project-summary">Status: {statusText}</span>}
+                <span className={`item-project-chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
+                  <Icon name="chevronDown" size={14} />
+                </span>
+              </button>
               <button
                 type="button"
                 className="secondary-action"
@@ -175,22 +197,23 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
                 Remove from project
               </button>
             </div>
-            {detail ? (
-              detail.fields.map((field) => (
-                <label className="item-project-field" key={field.id}>
-                  <span>{field.name}</span>
-                  <ProjectFieldEditor
-                    field={field}
-                    value={item.fieldValues[field.id]}
-                    itemLabel={`${repoFullName}#${number} in ${project.title}`}
-                    disabled={pending}
-                    onChange={(value) => void editField(membership, field, value)}
-                  />
-                </label>
-              ))
-            ) : (
-              <p>Loading fields…</p>
-            )}
+            {isOpen &&
+              (detail ? (
+                detail.fields.map((field) => (
+                  <label className="item-project-field" key={field.id}>
+                    <span>{field.name}</span>
+                    <ProjectFieldEditor
+                      field={field}
+                      value={item.fieldValues[field.id]}
+                      itemLabel={`${repoFullName}#${number} in ${project.title}`}
+                      disabled={pending}
+                      onChange={(value) => void editField(membership, field, value)}
+                    />
+                  </label>
+                ))
+              ) : (
+                <p>Loading fields…</p>
+              ))}
           </div>
         );
       })}

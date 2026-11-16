@@ -5,9 +5,6 @@ import { Icon } from '../icons';
 import { markColor, markLetters } from './repo-mark';
 import { RepoMark } from './RepoMark';
 
-/** Rows loaded per repo in the list. The full list of a repo opens from the Repositories section. */
-const ROWS_PER_REPO = 25;
-
 /**
  * How long a single click waits for a second one. A double click then opens full screen, and does not open a side
  * panel first. Keep it near Windows' double-click time, so a deliberate double click lands inside it.
@@ -142,6 +139,28 @@ interface RepoGroupProps {
 
 type Row = IssueSummary & { draft?: boolean };
 
+interface ListPage {
+  items: Row[];
+  hasNextPage: boolean;
+  partial: boolean;
+}
+
+/** One page of a repository's issues or pull requests. */
+function listPage(
+  kind: 'issue' | 'pull',
+  repoFullName: string,
+  state: IssueStateFilter,
+  page: number
+): Promise<ListPage> {
+  return kind === 'pull'
+    ? window.orbit.pulls.list({ repoFullName, state, page })
+    : window.orbit.issues.list({ repoFullName, state, page });
+}
+
+/**
+ * One repository's rows. The first page loads at once; Load more fetches the next page, so a repository with
+ * hundreds of items can be read all the way through.
+ */
 function RepoGroup({
   kind,
   repo,
@@ -153,19 +172,23 @@ function RepoGroup({
   onContextMenu
 }: RepoGroupProps) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [partial, setPartial] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setRows(null);
+    setPage(1);
     setError(null);
-    const request: Promise<{ items: Row[] }> =
-      kind === 'pull'
-        ? window.orbit.pulls.list({ repoFullName: repo.fullName, state, page: 1 })
-        : window.orbit.issues.list({ repoFullName: repo.fullName, state, page: 1 });
-    void request.then(
-      (page) => {
-        if (!cancelled) setRows(page.items.slice(0, ROWS_PER_REPO));
+    void listPage(kind, repo.fullName, state, 1).then(
+      (result) => {
+        if (cancelled) return;
+        setRows(result.items);
+        setHasNext(result.hasNextPage);
+        setPartial(result.partial);
       },
       (failure: unknown) => {
         if (!cancelled)
@@ -177,12 +200,35 @@ function RepoGroup({
     };
   }, [kind, repo.fullName, state, refreshKey]);
 
+  const loadMore = (): void => {
+    const next = page + 1;
+    setLoadingMore(true);
+    void listPage(kind, repo.fullName, state, next)
+      .then(
+        (result) => {
+          setRows((current) => [...(current ?? []), ...result.items]);
+          setPage(next);
+          setHasNext(result.hasNextPage);
+          setPartial(result.partial);
+        },
+        (failure: unknown) => {
+          setError(failure instanceof Error ? failure.message : 'More items could not be loaded.');
+        }
+      )
+      .finally(() => setLoadingMore(false));
+  };
+
   return (
     <section className="side-group" aria-label={repo.fullName}>
       <header className="side-group-head">
         <RepoMark letters={markLetters(repo.name)} color={markColor(repo.fullName)} size={18} />
         <span className="side-group-name">{repo.fullName}</span>
-        {rows && <span className="side-group-count">{rows.length}</span>}
+        {rows && (
+          <span className="side-group-count">
+            {rows.length}
+            {hasNext ? '+' : ''}
+          </span>
+        )}
       </header>
       {error && (
         <p className="issue-error" role="alert">
@@ -219,6 +265,15 @@ function RepoGroup({
                       <Icon name="comment" size={12} />
                       {row.commentCount}
                     </span>
+                    {row.subIssues && row.subIssues.total > 0 && (
+                      <span
+                        className={`side-row-stat side-row-subs ${row.subIssues.completed === row.subIssues.total ? 'complete' : ''}`}
+                        title="Sub-issues done"
+                      >
+                        <Icon name="check" size={12} />
+                        {row.subIssues.completed}/{row.subIssues.total}
+                      </span>
+                    )}
                     {row.draft === true && <span className="side-row-draft">Draft</span>}
                   </span>
                 </button>
@@ -227,6 +282,18 @@ function RepoGroup({
           })}
         </ul>
       )}
+      {rows && hasNext && (
+        <button
+          type="button"
+          className="side-load-more"
+          disabled={loadingMore}
+          aria-label={`Load more from ${repo.fullName}`}
+          onClick={loadMore}
+        >
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
+      {partial && <p className="side-group-partial">Some items could not be loaded.</p>}
     </section>
   );
 }

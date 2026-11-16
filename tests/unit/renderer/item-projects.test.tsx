@@ -78,11 +78,15 @@ describe('ItemProjects', () => {
     render(<ItemProjects repoFullName="orbit-owner/app" number={12} />);
     expect(await screen.findByText('Roadmap')).toBeInTheDocument();
     expect(api.projects.itemMemberships).toHaveBeenCalledWith('orbit-owner/app', 12);
+    // Projects are collapsed until opened; the summary still shows the status.
+    expect(screen.getByText(/^Status:/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Roadmap/ }));
     expect(screen.getByLabelText('Status for orbit-owner/app#12 in Roadmap')).toHaveValue('todo');
   });
 
   it('edits a project field from the sidebar, in the project the item belongs to', async () => {
     render(<ItemProjects repoFullName="orbit-owner/app" number={12} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Roadmap/ }));
     const select = await screen.findByLabelText('Status for orbit-owner/app#12 in Roadmap');
     api.projects.setField.mockResolvedValue({ kind: 'saved', item: item('PVTI_1', 'done') });
     fireEvent.change(select, { target: { value: 'done' } });

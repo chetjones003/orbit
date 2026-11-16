@@ -148,6 +148,22 @@ export interface IssueSummary {
   createdAt: string;
   updatedAt: string;
   htmlUrl: string;
+  /** Sub-issues of this issue, from GitHub. Null when GitHub did not report them. */
+  subIssues?: SubIssueCount | null;
+}
+
+/** How many sub-issues an issue has, and how many of them are closed. */
+export interface SubIssueCount {
+  total: number;
+  completed: number;
+}
+
+/** A sub-issue or parent issue, shown as a link with its state. */
+export interface SubIssueRef {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  htmlUrl: string;
 }
 
 export interface IssueMilestone {
@@ -200,6 +216,10 @@ export interface IssueDetail {
   comments: IssueComment[];
   /** True when more comments exist than the first page returned. */
   commentsPartial: boolean;
+  /** Sub-issues, in GitHub order. Empty when there are none. */
+  subIssues?: SubIssueRef[];
+  /** The parent issue, when this one is a sub-issue. */
+  parent?: SubIssueRef | null;
 }
 
 /** An issue as GitHub holds it after a read or write: its summary plus the body in both forms. */

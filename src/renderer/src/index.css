@@ -5275,3 +5275,779 @@ body.card-dragging * {
   border-radius: 8px;
   object-fit: contain;
 }
+
+/* Left list: its own surface, a clear edge, and a shadow that lifts it off the workspace. */
+/* The left list sits darker than the workspace in either scheme, so the two read as separate areas. Surface
+   and canvas are close in value, which is why a surface background alone did not separate them. */
+.side-list {
+  background: color-mix(in srgb, var(--canvas) 80%, #000);
+  border-right: 1px solid color-mix(in srgb, var(--line) 60%, #000);
+  box-shadow: 10px 0 28px -14px rgb(0 0 0 / 0.5);
+  z-index: 3;
+}
+.side-list-head {
+  background: color-mix(in srgb, var(--canvas) 80%, #000);
+  border-bottom: 1px solid var(--line);
+}
+.bottom-rail {
+  background: color-mix(in srgb, var(--canvas) 80%, #000);
+  border-top: 1px solid var(--line);
+}
+
+/* Right panel: a lifted card with a stronger edge and shadow, and a header that reads as its own bar. */
+.item-side-panel {
+  border: 1px solid color-mix(in srgb, var(--line) 55%, var(--text) 45%);
+  box-shadow:
+    -10px 0 30px -12px rgb(0 0 0 / 0.5),
+    0 18px 48px rgb(0 0 0 / 0.35);
+}
+.item-side-head {
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Load more under a repository, and the note when some items could not be read. */
+.side-load-more {
+  margin: 2px 12px 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.side-load-more:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.side-load-more:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.side-group-partial {
+  margin: 0 12px 8px;
+  color: var(--subtle);
+  font-size: 11.5px;
+}
+
+/* Sub-issues: the list badge, the card in an issue, and the parent and child links. */
+.side-row-subs {
+  color: var(--accent);
+}
+.sub-issues-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.sub-issues-progress {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sub-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sub-issue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sub-issue-row.open :is(svg) {
+  color: var(--subtle);
+}
+.sub-issue-row.closed :is(svg) {
+  color: var(--accent);
+}
+.sub-issue-row.closed .sub-issue-link {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.sub-issue-link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sub-issue-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* List rows: each item is a card that stands off the list, with a title that reads at a glance and a clear
+   selected state. Later rules win over the earlier row styles above. */
+.side-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 8px 10px;
+}
+.side-row {
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.side-row:hover {
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.side-row.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 1px 2px rgb(0 0 0 / 0.18);
+}
+.side-row-title {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+.side-row-meta {
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.side-row-ref {
+  color: var(--subtle);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+.side-row-subs {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.side-row-draft {
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.side-group-head {
+  padding: 12px 12px 6px;
+}
+.side-group-name {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.side-group-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Project fields on an issue: one control width so the column lines up, native controls styled like the rest of
+   the app, and rows that respond to the pointer. Later rules win over the earlier card styles. */
+.item-project {
+  padding: 12px 14px;
+  border-left-width: 3px;
+  background: var(--raised);
+}
+.item-project-header {
+  padding-bottom: 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.item-project-field {
+  grid-template-columns: 112px minmax(0, 1fr);
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+.item-project-field:hover {
+  background: var(--hover);
+}
+.item-project-field > :is(select, input) {
+  width: 220px;
+  max-width: 100%;
+  height: 30px;
+  border-color: color-mix(in srgb, var(--line) 80%, var(--text) 20%);
+  background-color: var(--surface);
+  transition: border-color 120ms ease;
+}
+.item-project-field > :is(select, input):hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.item-project-field > :is(select, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.item-project-field select {
+  appearance: none;
+  padding-right: 26px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 9px) 50%;
+  background-size:
+    4px 4px,
+    4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.item-project-field .project-field-clear {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  border-radius: 6px;
+  color: var(--subtle);
+}
+.item-project-field .project-field-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.item-project-field .project-field-input {
+  width: 100%;
+}
+
+/* The project card in an issue. A header with an identity mark and a quiet remove action, uppercase field labels,
+   controls on one width, and an add row that reads as an invitation. Later rules win over the earlier card styles. */
+.item-project {
+  position: relative;
+  margin-top: 12px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, var(--text) 10%);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 8%, var(--raised)) 0,
+    var(--raised) 64px
+  );
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 12px 28px -20px rgb(0 0 0 / 0.7);
+}
+.item-project-header {
+  margin: 0;
+  padding: 14px 16px 12px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  font-size: 13px;
+}
+.item-project-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.item-project-title strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-project-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.item-project-header > .secondary-action {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.item-project-header > .secondary-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+}
+.item-project-field {
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding: 10px 16px 10px 18px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 0;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.item-project-field:hover {
+  background: color-mix(in srgb, var(--hover) 65%, transparent);
+}
+.item-project-field > span:first-child {
+  color: var(--subtle);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.item-project-field > :is(select, input) {
+  width: 200px;
+  max-width: 100%;
+  height: 30px;
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--line) 75%, var(--text) 15%);
+  background-color: var(--surface);
+  font-size: 12.5px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.item-project-field > :is(select, input):hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+.item-project-field > :is(select, input):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.item-project-field .project-field-clear {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  border-radius: 999px;
+  color: var(--subtle);
+}
+.item-project-field .project-field-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.item-project-add {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.item-project-add label {
+  color: var(--subtle);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The Details, Sub-issues and Projects row. Three cards side by side at full width, stacked in a narrow side
+   panel. Every card shares one padding, one header style and one surface, and the project block sits flat inside
+   its card instead of as a card within a card. */
+.detail-trio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.detail-trio > section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: none;
+}
+.detail-trio .detail-card-title,
+.detail-trio .sub-issues-head,
+.detail-trio .item-projects > h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.detail-trio .sub-issues-progress {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.detail-trio .detail-facts {
+  margin: 0;
+}
+.detail-trio .detail-facts > div {
+  padding: 8px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.detail-trio .detail-facts > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* Projects: the project block is a plain section of its card, with a header and rows, not a card inside one. */
+.detail-trio .item-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.detail-trio .item-project {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.detail-trio .item-project-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.detail-trio .item-project-field {
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 12px 8px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.detail-trio .item-project-field:first-of-type {
+  border-top: 0;
+}
+.detail-trio .item-project-field > :is(select, input) {
+  width: 100%;
+  max-width: 100%;
+}
+.detail-trio .item-project-add {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+/* Colour with meaning, as GitHub uses it: green for open and done, purple for closed, the accent for what
+   matters most. Colour is never the only signal; each state also has its word or icon. */
+.issue-state-pill.open {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 45%, transparent);
+}
+.issue-state-pill.closed {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.sub-progress {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 72px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 85%, transparent);
+  overflow: hidden;
+  vertical-align: middle;
+}
+.sub-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--color-success),
+    color-mix(in srgb, var(--color-success) 65%, var(--accent))
+  );
+  transition: width 300ms ease;
+}
+.sub-issue-row.open > svg {
+  color: var(--color-success);
+}
+.sub-issue-row.closed > svg {
+  color: var(--accent);
+}
+.side-row-subs.complete {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+/* Comments: a card per comment with a header band (avatar, author, time), a body, and a connector that ties each
+   comment to the next, as GitHub's timeline does. */
+.issue-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.issue-comments > h3 {
+  margin: 0 0 4px;
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.issue-comment {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.14);
+}
+.issue-comment:not(:last-of-type)::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 25px;
+  width: 2px;
+  height: 12px;
+  background: var(--line);
+}
+.issue-comment .comment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px 9px 14px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  background: color-mix(in srgb, var(--hover) 55%, transparent);
+}
+.comment-byline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.comment-author {
+  color: var(--text);
+  font-weight: 650;
+}
+.comment-you {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.comment-time {
+  color: var(--subtle);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.issue-comment > :not(.comment-head) {
+  padding: 12px 14px 14px;
+}
+
+/* Comments, drawn like GitHub's: a bordered card with a header band (round avatar, author, Owner and Author badges,
+   the time), a body with generous padding, and a visible line that joins each comment to the next. */
+.issue-comments {
+  gap: 16px;
+}
+.issue-comment {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.issue-comment:not(:last-of-type)::after {
+  left: 27px;
+  height: 16px;
+  width: 2px;
+  background: color-mix(in srgb, var(--line) 35%, var(--text) 30%);
+}
+.issue-comment .comment-head {
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--surface) 86%, var(--text) 7%);
+}
+.comment-byline {
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.comment-byline .repo-mark {
+  border-radius: 999px;
+}
+.comment-author {
+  color: var(--text);
+  font-weight: 600;
+}
+.comment-role {
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+}
+.comment-action {
+  color: var(--muted);
+}
+.comment-time {
+  color: var(--subtle);
+  font-size: 12px;
+}
+.issue-comment > :not(.comment-head) {
+  padding: 14px 16px 16px;
+}
+
+/* Earlier rules gave comment cards a left border and inset padding, which pushed the header band off the card's
+   edge, and clipped the connector line that joins one comment to the next. Reset both here. */
+.issue-comment {
+  padding: 0;
+  border-left: 1px solid var(--line);
+  overflow: visible;
+}
+
+/* Projects on an issue are disclosures: a summary row (identity mark, name, status, and a chevron that turns when
+   the project opens), with the fields below only when it is open. */
+.item-project-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.item-project-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.item-project-toggle .item-project-title {
+  min-width: 0;
+}
+.item-project-summary {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-project-chevron {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--subtle);
+  transition: transform 160ms var(--ease-panel);
+}
+.item-project-chevron.open {
+  transform: rotate(180deg);
+}
+.item-project-header {
+  gap: 12px;
+}
+
+/* The row's three cards share one height, so they read as a set. */
+.detail-trio {
+  align-items: stretch;
+}
+.detail-trio > section {
+  height: auto;
+}
+
+/* Sub-issues fold like Projects: a header that shows the progress, and the list below only when it is open. Long
+   lists scroll inside their own height rather than pushing the row taller. */
+.sub-issues-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sub-issues-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.sub-issues-name {
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.detail-trio .sub-issues-list {
+  max-height: 280px;
+  margin-top: 12px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+/* The row is compact: tighter padding and headings, and a slimmer project row. Equal heights now come from the
+   content, so the cards read as a set without empty space. */
+.detail-trio > section {
+  padding: 12px 14px;
+}
+.detail-trio .detail-card-title,
+.detail-trio .sub-issues-head,
+.detail-trio .item-projects > h3 {
+  margin-bottom: 8px;
+}
+.detail-trio .item-projects {
+  gap: 8px;
+}
+.detail-trio .item-project-header {
+  padding: 8px 10px;
+}
+.detail-trio .item-project-field {
+  padding: 6px 10px;
+}
+.detail-trio .detail-facts > div {
+  padding: 6px 0;
+}
