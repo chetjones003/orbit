@@ -61,6 +61,7 @@ type ActionToast = { id: number; message: string; tone: 'success' | 'error' | 'i
 
 /** Short synthesized Orbit cues: a rising chime, descending alert, or soft neutral ping. */
 function playNotificationSound(tone: ActionToast['tone'] = 'info'): void {
+  if (typeof AudioContext === 'undefined') return;
   const audio = new AudioContext();
   const now = audio.currentTime;
   const notes: ReadonlyArray<readonly [number, number]> =
