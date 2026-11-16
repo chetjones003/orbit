@@ -242,7 +242,22 @@ test.describe('projects flow (unpacked build)', () => {
 
       await window.getByRole('button', { name: 'Projects' }).click();
       await window.getByRole('button', { name: 'Roadmap' }).click();
-      await window.getByRole('tab', { name: /Sprint board/ }).click();
+      const customViewTab = window.getByRole('tab', { name: /Sprint board/ });
+      const moreViews = window.getByRole('button', { name: /More views/ });
+      await expect
+        .poll(async () => (await customViewTab.count()) > 0 || (await moreViews.count()) > 0)
+        .toBe(true);
+      if (await customViewTab.count()) {
+        await customViewTab.click();
+      } else {
+        await moreViews.click();
+        const customViewMenuItem = window.getByRole('menuitem', { name: /Sprint board/ });
+        await expect
+          .poll(async () => (await customViewMenuItem.count()) > 0 || (await customViewTab.count()) > 0)
+          .toBe(true);
+        if (await customViewMenuItem.count()) await customViewMenuItem.click();
+        else await customViewTab.click();
+      }
 
       const todo = window.getByRole('listitem', { name: /^Todo,/ });
       const done = window.getByRole('listitem', { name: /^Done,/ });
