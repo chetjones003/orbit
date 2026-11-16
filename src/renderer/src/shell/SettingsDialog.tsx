@@ -308,7 +308,7 @@ export function SettingsDialog({
                     <span className="terminal-ready">VITE v8.3.8</span> ready in 1.24s
                     {'\n\n'}➜ Local: <span className="terminal-link">http://localhost:5173/</span>
                     {'\n'}➜ Network: <span className="terminal-link">http://192.168.1.24:5173/</span>
-                    {'\n\n'}✓ 85 passed　△ 2 warnings　× 0 failed
+                    {'\n\n'}✓ 85 passed △ 2 warnings × 0 failed
                     {'\n\n'}
                     <span className="terminal-badge">READY</span> watching for changes
                   </code>
