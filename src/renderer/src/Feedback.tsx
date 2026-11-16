@@ -1,5 +1,4 @@
 import { describeConnection, type ConnectionStatus } from '../../shared/connection';
-import { useEffect, useRef, useState } from 'react';
 
 interface ConnectionBannerProps {
   status: ConnectionStatus;
@@ -52,40 +51,6 @@ export function InlineError({ message, onRetry, onCopyDiagnostics }: InlineError
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-interface ToastProps {
-  message: string;
-  tone?: 'success' | 'error' | 'info';
-  onDismiss: () => void;
-}
-
-/** A brief, non-blocking confirmation. Motion is disabled by the reduced-motion CSS rule. */
-export function Toast({ message, tone = 'info', onDismiss }: ToastProps) {
-  const [exiting, setExiting] = useState(false);
-  const dismissed = useRef(false);
-  const dismiss = (): void => {
-    if (dismissed.current) return;
-    dismissed.current = true;
-    setExiting(true);
-    window.setTimeout(onDismiss, 180);
-  };
-  useEffect(() => {
-    const timer = window.setTimeout(dismiss, 6000);
-    return () => window.clearTimeout(timer);
-  }, []);
-  return (
-    <div
-      className={`alert alert-${tone} action-toast${exiting ? ' is-exiting' : ''}`}
-      role="status"
-      aria-live="polite"
-    >
-      <span>{message}</span>
-      <button className="btn btn-ghost btn-sm" onClick={dismiss} aria-label="Dismiss">
-        ✕
-      </button>
     </div>
   );
 }

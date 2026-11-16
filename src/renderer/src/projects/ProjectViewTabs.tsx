@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ComponentProps } from 'react';
+import { useLayoutEffect, useEffect, useRef, useState, type ComponentProps } from 'react';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@ui-sdk/react/menu';
+import { Tabs, TabsList, TabsTab } from '@ui-sdk/react/tabs';
 import { Icon } from '../icons';
 
 type IconName = ComponentProps<typeof Icon>['name'];
@@ -41,10 +43,8 @@ export function ProjectViewTabs({ tabs, onNew }: ProjectViewTabsProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const measureRef = useRef<HTMLDivElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
-  const moreRef = useRef<HTMLButtonElement | null>(null);
   const moreWrapRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(tabs.length);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   // Re-measures the tabs against the row. The measuring strip always holds every tab, so widths never change.
   const recalc = (): void => {
@@ -60,7 +60,7 @@ export function ProjectViewTabs({ tabs, onNew }: ProjectViewTabsProps) {
     const style = getComputedStyle(row);
     const inner = row.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const reserved = newRef.current?.offsetWidth ?? 0;
-    const moreWidth = (moreRef.current?.offsetWidth ?? 44) + 8;
+    const moreWidth = (moreWrapRef.current?.offsetWidth ?? 44) + 8;
     setFit(
       fitCount(
         every.map((el) => el.offsetWidth),
@@ -85,29 +85,13 @@ export function ProjectViewTabs({ tabs, onNew }: ProjectViewTabsProps) {
     // `recalc` only reads refs and the DOM, so one observer for the row's life is enough.
   }, []);
 
-  // The More menu closes on Escape and on any press outside it.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPress = (event: MouseEvent): void => {
-      if (!moreWrapRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onPress);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPress);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen]);
-
   const visible = tabs.slice(0, fit);
   const hidden = tabs.slice(fit);
   const hiddenSelected = hidden.some((tab) => tab.selected);
+  const selectedKey = tabs.find((tab) => tab.selected)?.key ?? null;
 
   return (
-    <div className="project-view-tabs" role="tablist" aria-label="Views" ref={rowRef}>
+    <div className="project-view-tabs" ref={rowRef}>
       <div className="project-view-measure" ref={measureRef} aria-hidden="true">
         {tabs.map((tab) => (
           <span key={tab.key} className="project-view-tab">
@@ -117,54 +101,48 @@ export function ProjectViewTabs({ tabs, onNew }: ProjectViewTabsProps) {
           </span>
         ))}
       </div>
-      {visible.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          role="tab"
-          aria-selected={tab.selected}
-          className={`project-view-tab ${tab.selected ? 'active' : ''}`}
-          onClick={tab.onSelect}
-        >
-          <Icon name={tab.icon} size={13} />
-          {tab.name}
-          <span className="project-view-kind">{tab.kind}</span>
-        </button>
-      ))}
+      <Tabs
+        className="project-view-strip"
+        value={selectedKey}
+        onValueChange={(key) => {
+          const tab = tabs.find((candidate) => candidate.key === key);
+          if (tab) tab.onSelect();
+        }}
+      >
+        <TabsList aria-label="Views">
+          {visible.map((tab) => (
+            <TabsTab
+              key={tab.key}
+              value={tab.key}
+              className={`project-view-tab ${tab.selected ? 'active' : ''}`}
+            >
+              <Icon name={tab.icon} size={13} />
+              {tab.name}
+              <span className="project-view-kind">{tab.kind}</span>
+            </TabsTab>
+          ))}
+        </TabsList>
+      </Tabs>
       {hidden.length > 0 && (
         <div className="project-view-more" ref={moreWrapRef}>
-          <button
-            ref={moreRef}
-            type="button"
-            className={`project-view-tab project-view-more-button ${hiddenSelected ? 'active' : ''}`}
-            aria-label={`More views, ${hidden.length} not shown`}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <Icon name="dots" size={14} />
-            <span>{hidden.length}</span>
-          </button>
-          {menuOpen && (
-            <div className="project-view-menu" role="menu">
+          <Menu onAction={(key) => tabs.find((tab) => tab.key === key)?.onSelect()}>
+            <MenuTrigger
+              className={`project-view-tab project-view-more-button ${hiddenSelected ? 'active' : ''}`}
+              aria-label={`More views, ${hidden.length} not shown`}
+            >
+              <Icon name="dots" size={14} />
+              <span>{hidden.length}</span>
+            </MenuTrigger>
+            <MenuContent className="project-view-menu">
               {hidden.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  role="menuitem"
-                  className={tab.selected ? 'active' : ''}
-                  onClick={() => {
-                    tab.onSelect();
-                    setMenuOpen(false);
-                  }}
-                >
+                <MenuItem key={tab.key} value={tab.key} className={tab.selected ? 'active' : ''}>
                   <Icon name={tab.icon} size={13} />
                   {tab.name}
                   <span className="project-view-kind">{tab.kind}</span>
-                </button>
+                </MenuItem>
               ))}
-            </div>
-          )}
+            </MenuContent>
+          </Menu>
         </div>
       )}
       <button ref={newRef} type="button" className="project-view-tab project-view-new" onClick={onNew}>

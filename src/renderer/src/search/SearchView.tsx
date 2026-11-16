@@ -15,6 +15,11 @@ import {
   type SearchRequest,
   type SearchState
 } from '../../../shared/search';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem
+} from '@ui-sdk/react/segmented-control';
 import { Icon } from '../icons';
 import { IssueLabelChip } from '../issues/IssueLabelChip';
 
@@ -145,35 +150,39 @@ export function SearchView({ text, onTextChange, repos, selected, onOpenItem, on
       <div className="scope-bar search-controls">
         <div className="scope-field">
           <span>Show</span>
-          <div className="scope-state" role="group" aria-label="Show">
+          <SegmentedControl
+            className="scope-state"
+            aria-label="Show"
+            value={resolved.kind}
+            onValueChange={(next) => {
+              if (next !== null) chooseKind(next as SearchKind);
+            }}
+          >
+            <SegmentedControlIndicator />
             {SEARCH_KINDS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className="secondary-action"
-                aria-pressed={resolved.kind === option}
-                onClick={() => chooseKind(option)}
-              >
+              <SegmentedControlItem key={option} value={option} className="secondary-action">
                 {KIND_LABELS[option]}
-              </button>
+              </SegmentedControlItem>
             ))}
-          </div>
+          </SegmentedControl>
         </div>
         <div className="scope-field">
           <span>Status</span>
-          <div className="scope-state" role="group" aria-label="Status">
+          <SegmentedControl
+            className="scope-state"
+            aria-label="Status"
+            value={resolved.state}
+            onValueChange={(next) => {
+              if (next !== null) chooseState(next as SearchState);
+            }}
+          >
+            <SegmentedControlIndicator />
             {SEARCH_STATES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className="secondary-action"
-                aria-pressed={resolved.state === option}
-                onClick={() => chooseState(option)}
-              >
+              <SegmentedControlItem key={option} value={option} className="secondary-action">
                 {STATE_LABELS[option]}
-              </button>
+              </SegmentedControlItem>
             ))}
-          </div>
+          </SegmentedControl>
         </div>
         <label className="scope-field">
           <span>Repository</span>

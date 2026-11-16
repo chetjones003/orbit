@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { indentMore } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
@@ -25,6 +25,8 @@ export interface CodeEditorProps {
   placeholder?: string;
   /** Files pasted or dropped into the editor, with the offset they landed at. Without it, files are ignored. */
   onFiles?: (files: File[], at: number) => void;
+  /** True while the text must not change, such as while it is being sent. The text stays visible. */
+  readOnly?: boolean;
 }
 
 /**
@@ -32,11 +34,13 @@ export interface CodeEditorProps {
  * Ctrl/Cmd+Enter submits; Enter continues lists; Esc then Tab leaves the editor.
  */
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
-  { value, onChange, onSubmit, ariaLabel, placeholder: hint, onFiles },
+  { value, onChange, onSubmit, ariaLabel, placeholder: hint, onFiles, readOnly = false },
   ref
 ) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // Read-only is a compartment, so it can change after the editor exists without rebuilding it.
+  const editable = useRef(new Compartment());
   // Latest callbacks, so the editor is created once and never rebuilt on each render.
   const callbacks = useRef({ onChange, onSubmit, onFiles });
   callbacks.current = { onChange, onSubmit, onFiles };
@@ -50,6 +54,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       state: EditorState.create({
         doc: value,
         extensions: [
+          editable.current.of(EditorState.readOnly.of(readOnly)),
           markdown({ extensions: GFM }),
           EditorView.lineWrapping,
           placeholder(hint ?? ''),
@@ -146,6 +151,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
   }, []);
 
   // Text changed from outside (for example a cleared box after save). Skip when it already matches.
+  useEffect(() => {
+    view.current?.dispatch({ effects: editable.current.reconfigure(EditorState.readOnly.of(readOnly)) });
+  }, [readOnly]);
+
   useEffect(() => {
     const editor = view.current;
     if (!editor || editor.state.doc.toString() === value) return;

@@ -7,3 +7,9 @@ test-results/
 .DS_Store
 *.log
 release*/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Local review screenshots and scratch captures
+.review-screenshots/

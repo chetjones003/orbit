@@ -105,7 +105,8 @@ describe('ProjectsView', () => {
   afterEach(() => cleanup());
 
   async function openProject(view = 'Backlog') {
-    render(<ProjectsView onOpenItem={onOpenItem} />);
+    const slot = document.body.appendChild(document.createElement('div'));
+    render(<ProjectsView onOpenItem={onOpenItem} listSlot={slot} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Roadmap' }));
     fireEvent.click(await screen.findByRole('tab', { name: new RegExp(`^${view}`) }));
   }

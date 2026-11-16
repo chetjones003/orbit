@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PullListPage, PullListQuery, PullStateFilter, PullSummary } from '../../../shared/issues';
 import { NewPullForm } from './NewPullForm';
+import { publishItemCreated } from '../shell/list-events';
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
 
@@ -58,6 +59,7 @@ export function PullList({
         onCreated={(number) => {
           setCreating(false);
           setRefreshVersion((version) => version + 1);
+          publishItemCreated(repoFullName);
           onOpenPull(number);
         }}
       />
@@ -122,8 +124,14 @@ export function PullList({
               className={`issue-row ${selectedNumber === pull.number ? 'selected' : ''}`}
               onClick={() => onOpenPull(pull.number)}
             >
-              <span className={`issue-state ${pull.state}`} aria-hidden="true">
-                <Icon name={pull.state === 'open' ? 'pull' : 'check'} size={15} />
+              <span
+                className={`issue-state ${pull.merged ? 'merged' : pull.state}`}
+                title={pull.merged ? 'Merged' : pull.state === 'open' ? 'Open' : 'Closed'}
+              >
+                <Icon name={pull.merged ? 'merge' : pull.state === 'open' ? 'pull' : 'close'} size={15} />
+                <span className="sr-only">
+                  {pull.merged ? 'Merged' : pull.state === 'open' ? 'Open' : 'Closed'}
+                </span>
               </span>
               <span className="issue-copy">
                 <span className="issue-title">

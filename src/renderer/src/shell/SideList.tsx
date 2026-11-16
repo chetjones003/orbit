@@ -4,6 +4,7 @@ import type { IssueStateFilter, IssueSummary } from '../../../shared/issues';
 import { Icon } from '../icons';
 import { markColor, markLetters } from './repo-mark';
 import { RepoMark } from './RepoMark';
+import { subscribeItemChanges, subscribeItemCreated } from './list-events';
 
 /**
  * How long a single click waits for a second one. A double click then opens full screen, and does not open a side
@@ -29,9 +30,11 @@ export interface SideListProps {
   onContextMenu(item: ItemRef, x: number, y: number): void;
   /** Asks GitHub for the latest repositories. */
   onRefreshRepos(): void;
+  /** Opens the search dialog (also Ctrl+K). */
+  onSearch?(): void;
+  /** The state filter chosen in the scope bar. The side list and the scope bar always agree. */
+  state: IssueStateFilter;
 }
-
-const STATE_LABEL: Record<IssueStateFilter, string> = { open: 'Open', closed: 'Closed', all: 'All' };
 
 /**
  * The left panel's list: the issues or pull requests of every tracked repository, grouped by repository. Each
@@ -44,9 +47,10 @@ export function SideList({
   onOpen,
   onOpenFull,
   onContextMenu,
-  onRefreshRepos
+  onRefreshRepos,
+  onSearch,
+  state
 }: SideListProps) {
-  const [state, setState] = useState<IssueStateFilter>('open');
   const [refreshKey, setRefreshKey] = useState(0);
   const pendingPick = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noun = kind === 'pull' ? 'Pull requests' : 'Issues';
@@ -74,17 +78,6 @@ export function SideList({
     <section className="side-list-body" aria-label={noun}>
       <header className="side-list-head">
         <h2>{noun}</h2>
-        <select
-          aria-label={`${noun} state`}
-          value={state}
-          onChange={(event) => setState(event.target.value as IssueStateFilter)}
-        >
-          {(Object.keys(STATE_LABEL) as IssueStateFilter[]).map((value) => (
-            <option key={value} value={value}>
-              {STATE_LABEL[value]}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           className="icon-button"
@@ -101,8 +94,19 @@ export function SideList({
           title="Refresh repositories"
           onClick={onRefreshRepos}
         >
-          <Icon name="repos" size={14} />
+          <Icon name="refresh" size={14} />
         </button>
+        {onSearch && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Search (Ctrl+K)"
+            title="Search (Ctrl+K)"
+            onClick={onSearch}
+          >
+            <Icon name="search" size={14} />
+          </button>
+        )}
       </header>
       {repos.length === 0 && (
         <p className="side-list-empty">Track repositories in Repositories to see them here.</p>
@@ -177,6 +181,31 @@ function RepoGroup({
   const [partial, setPartial] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped when an item is created here, so this repository reads its first page again.
+  const [createdCount, setCreatedCount] = useState(0);
+
+  // Edits made elsewhere patch the row in place. A row the state filter no longer matches leaves the list.
+  useEffect(() => {
+    const stopChanges = subscribeItemChanges((change) => {
+      if (change.repoFullName !== repo.fullName) return;
+      setRows((current) => {
+        if (!current) return current;
+        const index = current.findIndex((row) => row.number === change.number);
+        if (index === -1) return current;
+        const patched: Row = { ...current[index], ...change.summary };
+        if (state !== 'all' && patched.state !== state)
+          return current.filter((_, position) => position !== index);
+        return current.map((row, position) => (position === index ? patched : row));
+      });
+    });
+    const stopCreated = subscribeItemCreated((name) => {
+      if (name === repo.fullName) setCreatedCount((count) => count + 1);
+    });
+    return () => {
+      stopChanges();
+      stopCreated();
+    };
+  }, [repo.fullName, state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +227,7 @@ function RepoGroup({
     return () => {
       cancelled = true;
     };
-  }, [kind, repo.fullName, state, refreshKey]);
+  }, [kind, repo.fullName, state, refreshKey, createdCount]);
 
   const loadMore = (): void => {
     const next = page + 1;

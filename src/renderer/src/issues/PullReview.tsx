@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Composer } from '../comments/Composer';
 import { drafts, type DraftKey } from '../comments/draft-store';
 import type { PullReviewState, ReviewCommentResult, ReviewEvent } from '../../../shared/issues';
 
@@ -14,6 +15,7 @@ export function describeAnchor(path: string, side: 'LEFT' | 'RIGHT', line: numbe
 
 /** Text the user writes into a review: a comment on a line, or a reply to a thread. Text is kept on failure. */
 export function ReviewTextBox({
+  repoFullName,
   draftKey,
   label,
   submitLabel,
@@ -24,6 +26,7 @@ export function ReviewTextBox({
   onCancel,
   failureMessage = COMMENT_ERROR
 }: {
+  repoFullName: string;
   /** Where unsent text is kept, so it survives leaving the pull request and is dropped only when sent. */
   draftKey: DraftKey;
   label: string;
@@ -38,11 +41,7 @@ export function ReviewTextBox({
   onCancel?: () => void;
   failureMessage?: string;
 }) {
-  const [text, setText] = useState(() => drafts.get(draftKey) ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const blocked = disabled || busy || text.trim() === '';
-  // False once the box is unmounted, so a save that finishes later does not act on a newer box for the same slot.
+  // False once this box is unmounted. A save that finishes after that must not act on a newer box for the same line.
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -50,59 +49,39 @@ export function ReviewTextBox({
       alive.current = false;
     };
   }, []);
-
-  async function send() {
-    if (blocked) return;
-    const sent = text;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await onSubmit(sent);
-      if (result.kind === 'saved') {
-        // The draft is cleared only while it still holds what was sent; newer text in it is kept.
-        if (drafts.get(draftKey) === sent) drafts.set(draftKey, '');
-        if (alive.current) {
-          setText('');
-          onSaved();
-        } else {
-          onStale();
-        }
-      } else {
-        if (alive.current) setError(NEW_COMMITS_MESSAGE);
-        onStale();
-      }
-    } catch {
-      if (alive.current) setError(failureMessage);
-    } finally {
-      if (alive.current) setBusy(false);
-    }
-  }
-
+  // The same editor as issue comments: toolbar, Markdown preview, drafts, and uploads. The composer keeps the text
+  // when a send is refused, so a stale head or a failure leaves it in place for the user to retry.
   return (
-    <div className="pull-review-box">
-      <textarea
-        aria-label={label}
-        rows={3}
-        value={text}
-        // Read-only while a save is in flight, so text typed then is never cleared unsent.
-        disabled={disabled || busy}
-        onChange={(event) => {
-          setText(event.target.value);
-          drafts.set(draftKey, event.target.value);
-        }}
-      />
-      {error && <p role="alert">{error}</p>}
-      <div className="pull-review-actions">
-        <button className="primary-action" disabled={blocked} onClick={() => void send()}>
-          {submitLabel}
-        </button>
-        {onCancel && (
-          <button className="secondary-action" disabled={busy} onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-      </div>
-    </div>
+    <Composer
+      draftKey={draftKey}
+      placeholder="Leave a review comment"
+      ariaLabel={label}
+      submitLabel={submitLabel}
+      submitDisabled={disabled}
+      previewText={(text) => window.orbit.markdown.preview(repoFullName, text)}
+      onExternalLink={(href) => void window.orbit.app.openExternal(href)}
+      viewOnGitHubUrl={`https://github.com/${repoFullName}/pulls`}
+      attachTo={{ repoFullName }}
+      onSubmit={async (text) => {
+        let result: ReviewCommentResult;
+        try {
+          result = await onSubmit(text);
+        } catch {
+          throw new Error(failureMessage);
+        }
+        if (result.kind === 'saved' && alive.current) {
+          onSaved();
+          return;
+        }
+        if (result.kind === 'saved') {
+          onStale();
+          return;
+        }
+        onStale();
+        throw new Error(NEW_COMMITS_MESSAGE);
+      }}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -121,10 +100,13 @@ export interface ReviewPanelProps {
   onAcknowledge: () => void;
   onRefresh: () => void;
   onSubmitted: () => void;
+  /** False once the pull request is merged or closed. The review controls are hidden then. */
+  open?: boolean;
 }
 
 /** The user's pending review: its comments, the new-commits pause, and finishing the review. */
 export function ReviewPanel({
+  open = true,
   repoFullName,
   signedInLogin,
   number,
@@ -218,13 +200,15 @@ export function ReviewPanel({
             Refresh
           </button>
         )}
-        <button
-          className="secondary-action"
-          onClick={() => setFinishing((open) => !open)}
-          disabled={review === null}
-        >
-          Finish review
-        </button>
+        {open && (
+          <button
+            className="secondary-action"
+            onClick={() => setFinishing((shown) => !shown)}
+            disabled={review === null}
+          >
+            Finish review
+          </button>
+        )}
       </div>
       {finishing && review && (
         <div className="pull-review-finish">

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import type { CustomViewDefinition } from '../../../shared/custom-views';
 import type {
@@ -8,6 +9,7 @@ import type {
   ProjectListPage
 } from '../../../shared/projects';
 import { Icon } from '../icons';
+import { Modal } from '../chrome/Modal';
 import { CustomViewPanel } from './CustomViewPanel';
 import { ProjectFilterBar } from './ProjectFilterBar';
 import { ProjectViewTabs, type ProjectViewTabItem } from './ProjectViewTabs';
@@ -27,6 +29,8 @@ const LAYOUT_LABELS: Record<string, string> = {
 export interface ProjectsViewProps {
   /** Opens an issue or pull request in Orbit's details panel. */
   onOpenItem: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
+  /** The left panel's slot for the project list. The list is drawn there, so the workspace keeps the full width. */
+  listSlot: HTMLElement | null;
 }
 
 /**
@@ -34,7 +38,7 @@ export interface ProjectsViewProps {
  * items each view shows. Edits save one at a time per item; GitHub's version of an item replaces the
  * local copy whenever a save answers, so a failed save shows what is actually stored.
  */
-export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
+export function ProjectsView({ onOpenItem, listSlot }: ProjectsViewProps) {
   const [list, setList] = useState<ProjectListPage | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -43,6 +47,8 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
   // Orbit's own custom views of every project. Only definitions are kept here, never item data.
   const [customViews, setCustomViews] = useState<CustomViewDefinition[]>([]);
   const [customId, setCustomId] = useState<string | null>(null);
+  // The naming dialog for a new custom view: null when closed, otherwise the name being typed.
+  const [naming, setNaming] = useState<string | null>(null);
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [itemsPartial, setItemsPartial] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -237,9 +243,14 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
 
   const addCustomView = () => {
     if (!projectId) return;
+    setNaming(`Custom view ${projectViews.length + 1}`);
+  };
+
+  const createCustomView = (name: string) => {
+    if (!projectId) return;
     const created: CustomViewDefinition = {
       id: crypto.randomUUID(),
-      name: `Custom view ${projectViews.length + 1}`,
+      name: name.trim() || `Custom view ${projectViews.length + 1}`,
       projectId,
       layout: 'kanban',
       advancedFilter: '',
@@ -256,6 +267,7 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
       calendarScale: 'month'
     };
     saveCustomViews([...customViews, created]);
+    setNaming(null);
     setCustomId(created.id);
     setViewId(null);
     setFreshViewId(created.id);
@@ -313,26 +325,63 @@ export function ProjectsView({ onOpenItem }: ProjectsViewProps) {
 
   return (
     <div className="projects-layout">
-      <aside className="projects-list" aria-label="Your projects">
-        <h3>Your projects</h3>
-        {list && list.projects.length > 0 && <p>{list.projects.length} total</p>}
-        {listError && <p role="alert">{listError}</p>}
-        {!list && !listError && <p>Loading projects…</p>}
-        {list && list.projects.length === 0 && <p>You have no projects yet.</p>}
-        {list?.projects.map((project) => (
-          <button
-            key={project.id}
-            type="button"
-            className={`projects-list-item ${project.id === projectId ? 'active' : ''}`}
-            aria-pressed={project.id === projectId}
-            onClick={() => setProjectId(project.id)}
+      {naming !== null && (
+        <Modal
+          title="New custom view"
+          subtitle="Name it now. You can change the name later."
+          onClose={() => setNaming(null)}
+        >
+          <form
+            className="custom-view-naming"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createCustomView(naming);
+            }}
           >
-            {project.title}
-            {project.closed && <span className="project-closed"> (closed)</span>}
-          </button>
-        ))}
-        {list?.partial && <p className="project-note">Only some projects are listed.</p>}
-      </aside>
+            <label className="field">
+              <span>Name</span>
+              <input
+                autoFocus
+                maxLength={80}
+                value={naming}
+                onChange={(event) => setNaming(event.target.value)}
+              />
+            </label>
+            <div className="form-actions">
+              <button type="button" className="secondary-action" onClick={() => setNaming(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="primary-action" disabled={naming.trim() === ''}>
+                Create view
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {listSlot &&
+        createPortal(
+          <aside className="projects-list" aria-label="Your projects">
+            <h3>Your projects</h3>
+            {list && list.projects.length > 0 && <p>{list.projects.length} total</p>}
+            {listError && <p role="alert">{listError}</p>}
+            {!list && !listError && <p>Loading projects…</p>}
+            {list && list.projects.length === 0 && <p>You have no projects yet.</p>}
+            {list?.projects.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                className={`projects-list-item ${project.id === projectId ? 'active' : ''}`}
+                aria-pressed={project.id === projectId}
+                onClick={() => setProjectId(project.id)}
+              >
+                {project.title}
+                {project.closed && <span className="project-closed"> (closed)</span>}
+              </button>
+            ))}
+            {list?.partial && <p className="project-note">Only some projects are listed.</p>}
+          </aside>,
+          listSlot
+        )}
 
       <section className="projects-main" aria-label="Project items">
         {!selectedProject && <p>Choose a project to see its saved views and items.</p>}

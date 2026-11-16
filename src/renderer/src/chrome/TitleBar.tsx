@@ -1,31 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@ui-sdk/react/menu';
+import { Menubar } from '@ui-sdk/react/menubar';
 import type { ShellAction, ShellState } from '../../../shared/ipc';
 import { OrbitMark } from '../brand/OrbitMark';
 import { Icon } from '../icons';
 
-interface MenuItem {
+interface MenuItemSpec {
   label: string;
   /** Shown at the right of the item. Matches a shortcut this title bar handles. */
   accelerator?: string;
-  /** Runs in the window through main. */
+  /** Runs in the window through the backend. */
   action?: ShellAction;
   /** Runs in the renderer, for commands that belong to the app's own state. */
   onSelect?: () => void;
   disabled?: boolean;
-  separator?: false;
 }
 
-interface MenuSeparator {
-  separator: true;
-}
+type MenuEntry = MenuItemSpec | { separator: true };
 
 interface MenuGroup {
   label: string;
-  items: Array<MenuItem | MenuSeparator>;
+  items: MenuEntry[];
 }
 
 export interface TitleBarProps {
-  /** `process.platform` from the main process. macOS keeps its native menu bar and traffic lights. */
+  /** The platform the app runs on. macOS keeps its native menu bar and traffic lights. */
   platform: string | undefined;
   signedIn: boolean;
   /** The theme the toggle switches to, for the View menu's label. */
@@ -45,9 +44,11 @@ const SHORTCUTS: Array<{ key: string; ctrl?: boolean; shift?: boolean; action: S
   { key: 'F11', action: 'toggle-fullscreen' }
 ];
 
+const isSeparator = (entry: MenuEntry): entry is { separator: true } => 'separator' in entry;
+
 /**
- * Orbit's own title bar and menu bar, drawn in the app's palette. Windows and Linux use it in place of
- * the native frame; macOS keeps its menu bar and gets only the brand and room for its traffic lights.
+ * Orbit's own title bar and menu bar, drawn in the app's palette. Windows and Linux use it in place of the native
+ * frame; macOS keeps its menu bar and gets only the brand and room for its traffic lights.
  */
 export function TitleBar({
   platform,
@@ -57,9 +58,7 @@ export function TitleBar({
   onCheckUpdates,
   onSignOut
 }: TitleBarProps) {
-  const [open, setOpen] = useState<string | null>(null);
   const [shell, setShell] = useState<ShellState>({ maximized: false, fullscreen: false });
-  const barRef = useRef<HTMLDivElement>(null);
   const mac = platform === 'darwin';
 
   const groups: MenuGroup[] = [
@@ -108,6 +107,20 @@ export function TitleBar({
     }
   ];
 
+  // Each item is addressed by a stable value, so the menubar routes its action back to the item it chose.
+  const byValue = new Map<string, MenuItemSpec>();
+  groups.forEach((group) =>
+    group.items.forEach((entry, index) => {
+      if (!isSeparator(entry)) byValue.set(`${group.label}:${index}`, entry);
+    })
+  );
+
+  const run = (item: MenuItemSpec): void => {
+    if (item.disabled) return;
+    if (item.onSelect) item.onSelect();
+    else if (item.action) void window.orbit.shell.control(item.action);
+  };
+
   useEffect(() => {
     if (mac) return;
     let active = true;
@@ -118,23 +131,6 @@ export function TitleBar({
       unsubscribe();
     };
   }, [mac]);
-
-  // Close an open menu on an outside click or Escape.
-  useEffect(() => {
-    if (open === null) return;
-    const onPointer = (event: MouseEvent): void => {
-      if (!barRef.current?.contains(event.target as Node)) setOpen(null);
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(null);
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   useEffect(() => {
     if (mac) return;
@@ -153,13 +149,6 @@ export function TitleBar({
     return () => window.removeEventListener('keydown', onKey);
   }, [mac]);
 
-  const run = (item: MenuItem): void => {
-    setOpen(null);
-    if (item.disabled) return;
-    if (item.onSelect) item.onSelect();
-    else if (item.action) void window.orbit.shell.control(item.action);
-  };
-
   return (
     <header className="titlebar" data-platform={platform ?? 'unknown'}>
       <div className="titlebar-brand">
@@ -167,49 +156,36 @@ export function TitleBar({
         <span>Orbit</span>
       </div>
       {!mac && (
-        <div className="menubar" role="menubar" aria-label="Application menu" ref={barRef}>
-          {groups.map((group) => {
-            const expanded = open === group.label;
-            return (
-              <div className="menu" key={group.label}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`menu-trigger ${expanded ? 'open' : ''}`}
-                  aria-haspopup="menu"
-                  aria-expanded={expanded}
-                  onClick={() => setOpen(expanded ? null : group.label)}
-                  onMouseEnter={() => {
-                    if (open !== null && open !== group.label) setOpen(group.label);
-                  }}
-                >
-                  {group.label}
-                </button>
-                {expanded && (
-                  <div className="menu-popup" role="menu" aria-label={group.label}>
-                    {group.items.map((item, index) =>
-                      'separator' in item && item.separator ? (
-                        <div className="menu-separator" role="separator" key={`sep-${index}`} />
-                      ) : (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="menu-item"
-                          key={item.label}
-                          disabled={'disabled' in item && item.disabled}
-                          onClick={() => run(item as MenuItem)}
-                        >
-                          <span>{item.label}</span>
-                          {'accelerator' in item && item.accelerator && <kbd>{item.accelerator}</kbd>}
-                        </button>
-                      )
-                    )}
-                  </div>
+        <Menubar className="menubar" aria-label="Application menu">
+          {groups.map((group) => (
+            <Menu
+              key={group.label}
+              onAction={(value) => {
+                const item = byValue.get(value);
+                if (item) run(item);
+              }}
+            >
+              <MenuTrigger className="menu-trigger">{group.label}</MenuTrigger>
+              <MenuContent className="menu-popup">
+                {group.items.map((entry, index) =>
+                  isSeparator(entry) ? (
+                    <MenuSeparator className="menu-separator" key={`${group.label}-sep-${index}`} />
+                  ) : (
+                    <MenuItem
+                      key={`${group.label}:${index}`}
+                      value={`${group.label}:${index}`}
+                      disabled={entry.disabled}
+                      className="menu-item"
+                    >
+                      <span>{entry.label}</span>
+                      {entry.accelerator && <kbd>{entry.accelerator}</kbd>}
+                    </MenuItem>
+                  )
                 )}
-              </div>
-            );
-          })}
-        </div>
+              </MenuContent>
+            </Menu>
+          ))}
+        </Menubar>
       )}
       <div className="titlebar-spacer" />
       {!mac && (

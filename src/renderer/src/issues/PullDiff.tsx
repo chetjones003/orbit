@@ -33,6 +33,8 @@ export interface PullDiffViewProps {
   onLink: (href: string) => void;
   /** The signed-in account, which keys unsent review text. */
   signedInLogin: string;
+  /** False once the pull request is merged or closed: reviews can no longer be submitted. */
+  open?: boolean;
 }
 
 const LOAD_ERROR = 'The changed files could not be loaded. Try again later.';
@@ -43,6 +45,8 @@ const REPLY_FAILURE = 'Your reply was not saved. Your text is kept; try again.';
 /** The review actions the file views need. Writes are off until the reviewed commit is current. */
 interface ReviewActions {
   enabled: boolean;
+  /** The repository the pull request belongs to, for the comment previews. */
+  repoFullName: string;
   /** Draft key for unsent review text in one slot of this pull request. */
   draftKey: (slot: string) => DraftKey;
   composing: ReviewAnchor | null;
@@ -63,7 +67,8 @@ export function PullDiffView({
   number,
   variant = 'panel',
   onLink,
-  signedInLogin
+  signedInLogin,
+  open = true
 }: PullDiffViewProps) {
   const [filesPage, setFilesPage] = useState<PullFilesPage | null>(null);
   const [threadsPage, setThreadsPage] = useState<PullReviewThreadsPage | null>(null);
@@ -176,6 +181,7 @@ export function PullDiffView({
   };
   const actions: ReviewActions = {
     enabled,
+    repoFullName,
     draftKey: (slot) => ({
       login: signedInLogin,
       repoFullName,
@@ -240,6 +246,7 @@ export function PullDiffView({
         onAcknowledge={() => setReviewedHeadSha(review?.headSha ?? null)}
         onRefresh={refreshReview}
         onSubmitted={refreshReview}
+        open={open}
       />
       <div className="pull-diff-layout">
         <nav aria-label="File navigator">
@@ -276,6 +283,9 @@ export function PullDiffView({
             )}
           </div>
           {note && <p className="pull-diff-note">{note}</p>}
+          {actions.enabled && (
+            <p className="pull-diff-hint">Click a line number to start a review comment on that line.</p>
+          )}
           <FileBody
             file={file}
             viewType={viewType}
@@ -417,6 +427,7 @@ function threadWidgets(
     const anchor = actions.composing;
     const composer = (
       <ReviewTextBox
+        repoFullName={actions.repoFullName}
         draftKey={actions.draftKey(`comment:${anchor.path}:${anchor.side}:${anchor.line}`)}
         label={`Comment on ${describeAnchor(anchor.path, anchor.side, anchor.line)}`}
         submitLabel="Add comment"
@@ -524,6 +535,7 @@ function ThreadCard({
       </div>
       {actions.enabled && replying && (
         <ReviewTextBox
+          repoFullName={actions.repoFullName}
           draftKey={actions.draftKey(`reply:${thread.id}`)}
           label={`Reply to thread on ${thread.path}`}
           submitLabel="Send reply"

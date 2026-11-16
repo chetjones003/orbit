@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { confirm } from '@ui-sdk/react/alert-dialog';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@ui-sdk/react/menu';
 import type { CommentUpdateResult, IssueComment } from '../../../shared/issues';
 import { RichBody } from '../issues/RichBody';
 import { Icon } from '../icons';
 import { RepoMark } from '../shell/RepoMark';
 import { markColor, markLetters } from '../shell/repo-mark';
 import { Composer } from './Composer';
+import { appToaster, TOAST_MS } from '../toasts/app-toaster';
 import { drafts, type DraftKey } from './draft-store';
 
 export interface CommentThreadProps {
@@ -68,6 +71,7 @@ export function CommentThread({
     setComments((list) => [...list, saved]);
     setCount((n) => n + 1);
     setAnnouncement('Comment posted.');
+    appToaster('Comment posted.', { type: 'success', duration: TOAST_MS });
   };
 
   const saveEdit = async (comment: IssueComment, text: string): Promise<'keep' | void> => {
@@ -126,14 +130,19 @@ export function CommentThread({
     setEditingId(null);
     setConflict(null);
     setAnnouncement(message);
+    appToaster(message, { type: 'success', duration: TOAST_MS });
   };
 
-  const cancelEdit = (comment: IssueComment): void => {
+  const cancelEdit = async (comment: IssueComment): Promise<void> => {
     const pending = drafts.get(editKey(comment.id));
     if (
       pending !== undefined &&
       pending !== comment.body &&
-      !window.confirm('Discard your edit? Your changes will be lost.')
+      !(await confirm({
+        title: 'Discard your edit?',
+        description: 'Your changes will be lost.',
+        confirmLabel: 'Discard'
+      }))
     ) {
       return;
     }
@@ -143,7 +152,12 @@ export function CommentThread({
   };
 
   const remove = async (comment: IssueComment): Promise<void> => {
-    if (!window.confirm('Delete this comment? This cannot be undone.')) return;
+    const agreed = await confirm({
+      title: 'Delete this comment?',
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete'
+    });
+    if (!agreed) return;
     setActionError(null);
     try {
       await window.orbit.comments.delete(repoFullName, comment.id);
@@ -155,6 +169,7 @@ export function CommentThread({
     setCount((n) => Math.max(0, n - 1));
     drafts.set(editKey(comment.id), '');
     setAnnouncement('Comment deleted.');
+    appToaster('Comment deleted.', { type: 'success', duration: TOAST_MS });
   };
 
   return (
@@ -213,7 +228,7 @@ export function CommentThread({
                   submitLabel="Save edit"
                   previewText={previewText}
                   onSubmit={(text) => saveEdit(comment, text)}
-                  onCancel={() => cancelEdit(comment)}
+                  onCancel={() => void cancelEdit(comment)}
                   onExternalLink={onLink}
                   viewOnGitHubUrl={viewOnGitHubUrl}
                   attachTo={{ repoFullName }}
@@ -315,60 +330,19 @@ function ConflictPanel({
 
 /** The comment's options, behind a menu at its top right. Closes on an outside click or Escape. */
 function CommentMenu({ onEdit, onDelete }: { onEdit(): void; onDelete(): void }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: MouseEvent): void => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
   return (
-    <div className="comment-menu" ref={rootRef}>
-      <button
-        type="button"
-        className="comment-menu-trigger"
-        aria-label="Comment options"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Icon name="menu" size={16} />
-      </button>
-      {open && (
-        <div className="comment-menu-popup" role="menu" aria-label="Comment options">
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger"
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
+    <div className="comment-menu">
+      <Menu onAction={(value) => (value === 'edit' ? onEdit() : onDelete())}>
+        <MenuTrigger className="comment-menu-trigger" aria-label="Comment options">
+          <Icon name="kebab" size={16} />
+        </MenuTrigger>
+        <MenuContent className="comment-menu-popup" aria-label="Comment options">
+          <MenuItem value="edit">Edit</MenuItem>
+          <MenuItem value="delete" className="danger">
             Delete
-          </button>
-        </div>
-      )}
+          </MenuItem>
+        </MenuContent>
+      </Menu>
     </div>
   );
 }

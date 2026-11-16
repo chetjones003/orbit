@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { confirm } from '@ui-sdk/react/alert-dialog';
 import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
@@ -68,8 +69,17 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     }
   };
 
-  const merge = (): Promise<void> => {
-    if (!actions || method === '') return Promise.resolve();
+  const merge = async (): Promise<void> => {
+    if (!actions || method === '') return;
+    // Merging changes the base branch, so it needs an explicit yes, not a single click.
+    const agreed = await confirm({
+      title: 'Merge this pull request?',
+      description: deleteBranch
+        ? 'The pull request merges into its base branch, and the head branch is deleted.'
+        : 'The pull request merges into its base branch.',
+      confirmLabel: 'Merge'
+    });
+    if (!agreed) return;
     return run(async () => {
       const result = await window.orbit.pulls.merge(repoFullName, number, {
         method,
@@ -136,14 +146,16 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     <section aria-label="Pull request actions" className="detail-card pull-actions">
       <div className="pull-actions-head">
         <h3 className="detail-card-title">Merge</h3>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={busy || !open}
-          onClick={() => void toggleDraft()}
-        >
-          {actions.draft ? 'Mark ready for review' : 'Convert to draft'}
-        </button>
+        {open && (
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={busy}
+            onClick={() => void toggleDraft()}
+          >
+            {actions.draft ? 'Mark ready for review' : 'Convert to draft'}
+          </button>
+        )}
       </div>
       {!open ? (
         <p className="detail-muted">

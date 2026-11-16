@@ -1,17 +1,21 @@
-// Starts the fake GitHub and launches Orbit against it, with its own profile so a real install of Orbit
-// and its saved sign-in are left alone. Run after `electron-vite build` (`npm run fake-app` does both).
+// Starts the fake GitHub and runs Orbit's dev build (`tauri dev`) against it, with its own profile so a real install
+// of Orbit and its saved sign-in are left alone.
 //
-//   node scripts/fake-github/launch.mjs [--port 4010]
-import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+//   npm run fake-dev                  the app against the fake, on 127.0.0.1:4010
+//   npm run fake-dev -- --cdp 9222    also expose WebView2 DevTools on 127.0.0.1:9222, for scripted checks
+//   npm run fake-dev -- --port 4011   use another port for the fake
+//
+// The profile is kept in your temp folder between runs, so repositories you track are remembered. Set
+// ORBIT_USER_DATA to use another folder.
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startFakeGitHub } from './server.mjs';
 import { DEMO_CUSTOM_VIEWS } from './demo-views.mjs';
 
-const require = createRequire(import.meta.url);
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Adds the demo custom views to the profile's settings, keeping everything already there. */
 function seedDemoViews(profileDir) {
@@ -30,36 +34,46 @@ function seedDemoViews(profileDir) {
   writeFileSync(path, JSON.stringify(settings, null, 2));
   console.log(`Added ${missing.length} demo custom views to the profile.`);
 }
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const portArg = process.argv.indexOf('--port');
-const port = portArg > 0 ? Number(process.argv[portArg + 1]) : 4010;
+
+const argValue = (flag, fallback) => {
+  const at = process.argv.indexOf(flag);
+  return at > 0 ? process.argv[at + 1] : fallback;
+};
+const port = Number(argValue('--port', 4010));
+const cdpPort = argValue('--cdp', null);
 
 const fake = await startFakeGitHub({ port });
-// One profile for the fake account, so the repositories you track survive restarts, as they do for a real account.
-const profile = join(tmpdir(), 'orbit-fake-profile');
+const profile = process.env.ORBIT_USER_DATA ?? join(tmpdir(), 'orbit-fake-profile');
 mkdirSync(profile, { recursive: true });
-// The demo views are added when missing, so views you edit or add in this profile are kept.
 seedDemoViews(profile);
-// `electron` exports the path to the Electron binary when required from Node.
-const electronBinary = require('electron');
-const env = { ...process.env, ORBIT_GITHUB_URL: fake.origin };
-delete env['ELECTRON_RUN_AS_NODE'];
+
+// Tauri needs cargo. rustup adds it to the user PATH, but terminals opened before that do not see it, so add it here.
+const cargoBin = join(homedir(), '.cargo', 'bin');
+const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+const env = {
+  ...process.env,
+  ORBIT_GITHUB_URL: fake.origin,
+  ORBIT_USER_DATA: profile,
+  [pathKey]: existsSync(cargoBin)
+    ? `${cargoBin}${process.platform === 'win32' ? ';' : ':'}${process.env[pathKey] ?? ''}`
+    : process.env[pathKey]
+};
+if (cdpPort) env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${Number(cdpPort)}`;
 
 console.log(`Fake GitHub for demo-dev at ${fake.origin}`);
 console.log(`Orbit profile: ${profile}`);
+if (cdpPort) console.log(`WebView2 DevTools on http://127.0.0.1:${cdpPort}`);
 
-// `--cdp <port>` exposes Chromium DevTools on that loopback port, for scripted checks.
-const cdpArg = process.argv.indexOf('--cdp');
-const cdp = cdpArg > 0 ? [`--remote-debugging-port=${Number(process.argv[cdpArg + 1])}`] : [];
-const app = spawn(electronBinary, [repoRoot, `--user-data-dir=${profile}`, ...cdp], {
-  env,
-  stdio: 'inherit'
-});
-const stop = async () => {
-  app.kill();
-  await fake.close();
+const dev = spawn('npx tauri dev', { cwd: repoRoot, env, shell: true, stdio: 'inherit' });
+
+let stopping = false;
+const stop = (code) => {
+  if (stopping) return;
+  stopping = true;
+  // The dev command starts Orbit as a child, so the whole tree goes.
+  if (dev.pid && process.platform === 'win32') spawnSync('taskkill', ['/pid', String(dev.pid), '/T', '/F']);
+  else if (dev.pid) dev.kill('SIGTERM');
+  void fake.close().then(() => process.exit(code));
 };
-process.on('SIGINT', () => void stop().then(() => process.exit(0)));
-app.on('exit', (code) => {
-  void fake.close().then(() => process.exit(code ?? 0));
-});
+process.on('SIGINT', () => stop(0));
+dev.on('exit', (code) => stop(code ?? 0));

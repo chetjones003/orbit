@@ -188,15 +188,17 @@ function RunBlock({ run, repoFullName, headSha, now, onChanged }: RunBlockProps)
           )}
           {!runActive && (
             <>
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={busy}
-                aria-label={`Re-run failed jobs for ${run.name}`}
-                onClick={() => void rerun('failed')}
-              >
-                Re-run failed jobs
-              </button>
+              {run.conclusion !== 'success' && (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={busy}
+                  aria-label={`Re-run failed jobs for ${run.name}`}
+                  onClick={() => void rerun('failed')}
+                >
+                  Re-run failed jobs
+                </button>
+              )}
               <button
                 type="button"
                 className="secondary-action"

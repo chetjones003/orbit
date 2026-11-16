@@ -19,6 +19,7 @@ import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 import { IssueLabelChip } from './IssueLabelChip';
 import { IssueLinks } from './IssueLinks';
+import { publishItemChange } from '../shell/list-events';
 
 /** Reader-facing names for a review's state. */
 function reviewStateLabel(state: string): string {
@@ -73,6 +74,10 @@ export function IssueDetailView({
   // Sub-issues can run to dozens, so the list opens on request and the header always shows the progress.
   const [subIssuesOpen, setSubIssuesOpen] = useState(false);
   const [pullDetail, setPullDetail] = useState<PullDetail | null>(null);
+  // Every edit updates the detail's summary, so the side list's row follows it: title, state, and comment count.
+  useEffect(() => {
+    if (detail) publishItemChange({ repoFullName, number, summary: detail.summary });
+  }, [detail, repoFullName, number]);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -441,6 +446,7 @@ export function IssueDetailView({
             variant={variant}
             onLink={routeLink}
             signedInLogin={signedInLogin}
+            open={pullDetail ? pullDetail.summary.state === 'open' && !pullDetail.merged : true}
           />
         </section>
       )}

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Switch } from '@ui-sdk/react/switch';
+import { ChoiceGroup } from './ChoiceGroup';
 import {
   CUSTOM_THEME_NAME_LENGTH,
   derivedColor,
@@ -110,20 +112,15 @@ export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEdit
 
         <div className="theme-sheet-field">
           <span>Appearance</span>
-          <div className="settings-choice" role="radiogroup" aria-label="Appearance to edit">
-            {(['light', 'dark'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={variant === value}
-                className={variant === value ? 'active' : ''}
-                onClick={() => setVariant(value)}
-              >
-                {value === 'light' ? 'Light' : 'Dark'}
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup
+            label="Appearance to edit"
+            value={variant}
+            options={[
+              ['light', 'Light'],
+              ['dark', 'Dark']
+            ]}
+            onChange={(next) => setVariant(next as Variant)}
+          />
         </div>
 
         <div className="theme-sheet-colors-head">
@@ -134,16 +131,14 @@ export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEdit
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
-          <button
-            type="button"
-            role="switch"
-            aria-checked={advanced}
+          <Switch
             className={`theme-advanced ${advanced ? 'on' : ''}`}
-            onClick={() => setAdvanced((value) => !value)}
+            checked={advanced}
+            onCheckedChange={(checked) => setAdvanced(checked)}
           >
             Advanced
             <span className="theme-advanced-track" aria-hidden="true" />
-          </button>
+          </Switch>
         </div>
 
         <ColorGroup

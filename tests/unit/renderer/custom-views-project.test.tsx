@@ -106,7 +106,8 @@ describe('ProjectsView custom views', () => {
   });
 
   async function openProject() {
-    render(<ProjectsView onOpenItem={vi.fn()} />);
+    const slot = document.body.appendChild(document.createElement('div'));
+    render(<ProjectsView onOpenItem={vi.fn()} listSlot={slot} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Roadmap' }));
     await screen.findByRole('tab', { name: /Backlog/ });
   }
@@ -153,10 +154,12 @@ describe('ProjectsView custom views', () => {
     );
   });
 
-  it('creates a view and saves its definition straight away, without any item data', async () => {
+  it('creates a view, after naming it, and saves its definition without any item data', async () => {
     stored = [];
     await openProject();
     fireEvent.click(screen.getByRole('button', { name: 'New custom view' }));
+    const naming = await screen.findByRole('dialog', { name: 'New custom view' });
+    fireEvent.click(within(naming).getByRole('button', { name: 'Create view' }));
     await waitFor(() => expect(api.settings.update).toHaveBeenCalled());
     const [payload] = api.settings.update.mock.calls[0] as [{ customViews: CustomViewDefinition[] }];
     expect(payload.customViews).toEqual([
@@ -170,9 +173,11 @@ describe('ProjectsView custom views', () => {
     expect(JSON.stringify(payload)).not.toContain('Fix crash');
   });
 
-  it('opens the settings of a new custom view at once', async () => {
+  it('opens the settings of a new custom view once it is named', async () => {
     await openProject();
     fireEvent.click(await screen.findByRole('button', { name: /New custom view/ }));
+    const naming = await screen.findByRole('dialog', { name: 'New custom view' });
+    fireEvent.click(within(naming).getByRole('button', { name: 'Create view' }));
     expect(await screen.findByRole('dialog', { name: 'View settings' })).toBeInTheDocument();
   });
 

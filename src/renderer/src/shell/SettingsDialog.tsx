@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Switch } from '@ui-sdk/react/switch';
+import { ChoiceGroup } from './ChoiceGroup';
+import { PercentSlider } from './PercentSlider';
 import type {
   InterfaceFont,
   InterfaceFontSize,
@@ -37,6 +40,21 @@ export interface SettingsDialogProps {
   monospaceFont: MonospaceFont;
   monospaceFontSize: MonospaceFontSize;
   wordWrap: boolean;
+  /** 0 to 200. 100 is the theme as designed. */
+  contrast: number;
+  /** 0 to 100. 100 keeps menus, dialogs and the composer solid. */
+  glassOpacity: number;
+  onInterface(update: { contrast?: number; glassOpacity?: number }): void;
+  closeToTray: boolean;
+  desktopNotifications: boolean;
+  pollMinutes: number;
+  startAtLogin: boolean;
+  onGeneral(update: {
+    closeToTray?: boolean;
+    desktopNotifications?: boolean;
+    pollMinutes?: number;
+    startAtLogin?: boolean;
+  }): void;
   /** True while Windows has animations off. */
   systemReducedMotion: boolean;
   version: string | undefined;
@@ -73,6 +91,14 @@ export function SettingsDialog({
   monospaceFont,
   monospaceFontSize,
   wordWrap,
+  contrast,
+  closeToTray,
+  desktopNotifications,
+  pollMinutes,
+  startAtLogin,
+  onGeneral,
+  glassOpacity,
+  onInterface,
   systemReducedMotion,
   version,
   login,
@@ -125,25 +151,15 @@ export function SettingsDialog({
                   With nothing open, a single click opens an issue or pull request full screen. Choose where
                   the next one opens once something is open. Double-click always opens full screen.
                 </p>
-                <div className="settings-choice" role="radiogroup" aria-label="Open items in">
-                  {(
-                    [
-                      ['side', 'Side panel'],
-                      ['full', 'Full screen']
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={openItemsIn === value}
-                      className={openItemsIn === value ? 'active' : ''}
-                      onClick={() => onOpenItemsIn(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup
+                  label="Open items in"
+                  value={openItemsIn}
+                  options={[
+                    ['side', 'Side panel'],
+                    ['full', 'Full screen']
+                  ]}
+                  onChange={onOpenItemsIn}
+                />
               </section>
               <section className="settings-section" aria-labelledby="settings-motion">
                 <h3 id="settings-motion">Animations</h3>
@@ -152,24 +168,85 @@ export function SettingsDialog({
                     ? 'Windows has animations turned off, so panels fade instead of sliding. Always animate shows the slides anyway.'
                     : 'Panels slide and grow when they open, close and expand. Windows has animations on, so these follow it.'}
                 </p>
-                <div className="settings-choice" role="radiogroup" aria-label="Animations">
-                  {(
-                    [
-                      ['system', 'Match Windows'],
-                      ['always', 'Always animate']
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={motion === value}
-                      className={motion === value ? 'active' : ''}
-                      onClick={() => onMotion(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <ChoiceGroup
+                  label="Animations"
+                  value={motion}
+                  options={[
+                    ['system', 'Match Windows'],
+                    ['always', 'Always animate']
+                  ]}
+                  onChange={onMotion}
+                />
+              </section>
+              <section className="settings-section" aria-labelledby="settings-windows">
+                <h3 id="settings-windows">Window and notifications</h3>
+                <div className="settings-switch-row">
+                  <div className="typography-label">
+                    <strong id="settings-close-to-tray">Keep running in the tray when closed</strong>
+                    <p>
+                      Closing the window hides Orbit to the tray, so it keeps watching for activity. Quit from
+                      the tray.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={closeToTray}
+                    onCheckedChange={(checked) => onGeneral({ closeToTray: checked })}
+                    aria-labelledby="settings-close-to-tray"
+                  >
+                    <span className="settings-switch-track" aria-hidden="true" />
+                  </Switch>
+                </div>
+                <div className="settings-switch-row">
+                  <div className="typography-label">
+                    <strong id="settings-desktop-notifications">Desktop notifications</strong>
+                    <p>
+                      Show a Windows notification for new GitHub activity while Orbit is hidden or in the
+                      background.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={desktopNotifications}
+                    onCheckedChange={(checked) => onGeneral({ desktopNotifications: checked })}
+                    aria-labelledby="settings-desktop-notifications"
+                  >
+                    <span className="settings-switch-track" aria-hidden="true" />
+                  </Switch>
+                </div>
+                <div className="settings-switch-row">
+                  <div className="typography-label">
+                    <strong id="settings-start-at-login">Start Orbit when I sign in to Windows</strong>
+                    <p>
+                      Orbit opens in the tray, so it is watching for activity from the moment you sign in.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={startAtLogin}
+                    onCheckedChange={(checked) => onGeneral({ startAtLogin: checked })}
+                    aria-labelledby="settings-start-at-login"
+                  >
+                    <span className="settings-switch-track" aria-hidden="true" />
+                  </Switch>
+                </div>
+                <div className="settings-field-row">
+                  <div className="typography-label">
+                    <strong id="settings-poll-label">Check GitHub every</strong>
+                    <p>
+                      How often Orbit looks for new activity. Shorter times show changes sooner and use more
+                      of your GitHub limit.
+                    </p>
+                  </div>
+                  <ChoiceGroup
+                    label="Check GitHub every"
+                    value={String(pollMinutes)}
+                    options={[
+                      ['1', '1 minute'],
+                      ['2', '2 minutes'],
+                      ['5', '5 minutes'],
+                      ['10', '10 minutes'],
+                      ['15', '15 minutes']
+                    ]}
+                    onChange={(value) => onGeneral({ pollMinutes: Number(value) })}
+                  />
                 </div>
               </section>
             </div>
@@ -188,6 +265,24 @@ export function SettingsDialog({
                   onPalette={onPalette}
                   onSaveCustomTheme={onSaveCustomTheme}
                   onDeleteCustomTheme={onDeleteCustomTheme}
+                />
+              </section>
+              <section className="settings-section" aria-labelledby="settings-interface">
+                <h3 id="settings-interface">Interface</h3>
+                <PercentSlider
+                  label="Contrast"
+                  description="Adjust the contrast of colors and borders across the interface."
+                  value={contrast}
+                  max={200}
+                  defaultValue={100}
+                  onCommit={(next) => onInterface({ contrast: next })}
+                />
+                <PercentSlider
+                  label="Glass opacity"
+                  description="Higher values make menus, dialogs, and the composer more solid."
+                  value={glassOpacity}
+                  defaultValue={100}
+                  onCommit={(next) => onInterface({ glassOpacity: next })}
                 />
               </section>
               <section className="settings-section typography-settings" aria-labelledby="settings-typography">
@@ -225,7 +320,7 @@ export function SettingsDialog({
                     type="button"
                     aria-label="Reset interface typography"
                     title="Reset interface typography"
-                    onClick={() => onTypography({ interfaceFont: 'inter', interfaceFontSize: 18 })}
+                    onClick={() => onTypography({ interfaceFont: 'inter', interfaceFontSize: 14 })}
                   >
                     ↶
                   </button>

@@ -15,13 +15,15 @@ export const FakeCodeEditor = React.forwardRef(function FakeCodeEditor(
     onChange,
     onSubmit,
     ariaLabel,
-    onFiles
+    onFiles,
+    readOnly = false
   }: {
     value: string;
     onChange: (t: string) => void;
     onSubmit: () => void;
     ariaLabel: string;
     onFiles?: (files: File[], at: number) => void;
+    readOnly?: boolean;
   },
   ref: React.Ref<{
     apply: (e: TextEdit) => void;
@@ -51,6 +53,7 @@ export const FakeCodeEditor = React.forwardRef(function FakeCodeEditor(
     <textarea
       ref={area}
       aria-label={ariaLabel}
+      disabled={readOnly}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {

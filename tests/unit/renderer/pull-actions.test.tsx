@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { OverlayHost } from '@ui-sdk/react/overlays';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PullCi } from '../../../src/renderer/src/issues/PullCi';
 import { PullActionsPanel } from '../../../src/renderer/src/issues/PullActions';
@@ -61,11 +62,17 @@ describe('PullActionsPanel', () => {
 
   it('merges with the chosen method, pinned to the head the user is looking at', async () => {
     const pulls = installApi();
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
+    render(
+      <>
+        <PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />
+        <OverlayHost />
+      </>
+    );
     await screen.findByRole('button', { name: 'Merge' });
 
     fireEvent.change(screen.getByLabelText('Merge method'), { target: { value: 'squash' } });
     fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Merge' }));
 
     await waitFor(() =>
       expect(pulls.merge).toHaveBeenCalledWith('orbit-owner/app', 7, {
@@ -82,8 +89,14 @@ describe('PullActionsPanel', () => {
       merge: vi.fn(async () => ({ kind: 'new-commits', headSha: 'head-2' }))
     });
     const onChanged = vi.fn();
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={onChanged} />);
+    render(
+      <>
+        <PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={onChanged} />
+        <OverlayHost />
+      </>
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Merge' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/changed since you opened it/i);
     expect(onChanged).toHaveBeenCalled();

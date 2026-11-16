@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectsStub } from './fakes/projects';
 // Parallel test runs can slow the first render; allow more time than the 1s default before failing.
@@ -196,16 +196,19 @@ describe('App', () => {
       const { api } = installBridge({
         status: { kind: 'signed-in', sessionId: 1, login: 'chetjones003', persistent: true }
       });
-      vi.mocked(window.confirm).mockReturnValueOnce(false);
       render(<App />);
       fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
-      expect(window.confirm).toHaveBeenCalled();
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
       expect(api.auth.signOut).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-      expect(api.auth.signOut).toHaveBeenCalledOnce();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      fireEvent.click(
+        within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Sign out' })
+      );
+      await waitFor(() => expect(api.auth.signOut).toHaveBeenCalledOnce());
     });
 
     it('warns when sign-in will not survive quitting', async () => {
@@ -547,7 +550,6 @@ describe('unsent comment text', () => {
   it('warns before signing out that unsent text will be discarded, and discards it when confirmed', async () => {
     const { api } = installBridge({ status: SIGNED_IN, repos: [] });
     drafts.set(DRAFT, 'Still writing this reply');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
@@ -555,9 +557,9 @@ describe('unsent comment text', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('Unsent comment text will be discarded')
-    );
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Unsent comment text will be discarded');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(api.auth.signOut).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(drafts.hasDrafts()).toBe(false));
   });
@@ -588,7 +590,6 @@ describe('unsent comment text', () => {
   it('keeps the text and the session when the user declines the sign-out warning', async () => {
     const { api } = installBridge({ status: SIGNED_IN, repos: [] });
     drafts.set(DRAFT, 'Still writing this reply');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
@@ -596,6 +597,8 @@ describe('unsent comment text', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
 
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(api.auth.signOut).not.toHaveBeenCalled();
     expect(drafts.get(DRAFT)).toBe('Still writing this reply');
   });

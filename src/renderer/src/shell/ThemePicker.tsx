@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { Radio, RadioGroup } from '@ui-sdk/react/radio';
 import {
   newCustomThemeId,
   ORBIT_CORE_COLORS,
@@ -56,15 +57,19 @@ export function ThemePicker({
 
   return (
     <div className="theme-picker">
-      <div className="theme-scheme-grid" role="radiogroup" aria-label="Color scheme">
+      <RadioGroup
+        className="theme-scheme-grid"
+        aria-label="Color scheme"
+        value={colorScheme}
+        onValueChange={(next) => {
+          if (next !== null) onColorScheme(next as ColorScheme);
+        }}
+      >
         {SCHEMES.map((scheme) => (
-          <button
+          <Radio
             key={scheme.id}
-            type="button"
-            role="radio"
-            aria-checked={colorScheme === scheme.id}
+            value={scheme.id}
             className={`theme-scheme ${colorScheme === scheme.id ? 'active' : ''}`}
-            onClick={() => onColorScheme(scheme.id)}
           >
             <span className="theme-scheme-preview">
               {scheme.id === 'system' ? (
@@ -81,9 +86,9 @@ export function ThemePicker({
               )}
             </span>
             <span className="theme-scheme-label">{scheme.label}</span>
-          </button>
+          </Radio>
         ))}
-      </div>
+      </RadioGroup>
       <p className="theme-note">
         {colorScheme === 'system'
           ? `Follows Windows: ${systemPrefersDark ? 'dark' : 'light'} now.`
@@ -123,7 +128,14 @@ export function ThemePicker({
           }}
         />
       )}
-      <div className="theme-palette-grid" role="radiogroup" aria-label="Themes">
+      <RadioGroup
+        className="theme-palette-grid"
+        aria-label="Themes"
+        value={palette}
+        onValueChange={(next) => {
+          if (next !== null) onPalette(next as PaletteId);
+        }}
+      >
         {PALETTES.map((item) => (
           <ThemeCard
             key={item.id}
@@ -149,7 +161,7 @@ export function ThemePicker({
             }}
           />
         ))}
-      </div>
+      </RadioGroup>
     </div>
   );
 }
@@ -173,19 +185,13 @@ function ThemeCard({
 }) {
   return (
     <div className={`theme-palette ${active ? 'active' : ''}`}>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={active}
-        className="theme-palette-pick"
-        onClick={onPick}
-      >
+      <Radio value={id} className="theme-palette-pick" onClick={onPick}>
         <span className="theme-palette-swatches">
           <ThemeSwatch palette={id} variant="light" vars={colorsFor(id, 'light')} />
           <ThemeSwatch palette={id} variant="dark" vars={colorsFor(id, 'dark')} />
         </span>
         <span className="theme-palette-name">{name}</span>
-      </button>
+      </Radio>
       {(onEdit || onDelete) && (
         <span className="theme-palette-actions">
           {onEdit && (

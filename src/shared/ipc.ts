@@ -188,6 +188,18 @@ export interface OrbitSettings {
   monospaceFont: MonospaceFont;
   monospaceFontSize: MonospaceFontSize;
   wordWrap: boolean;
+  /** Closing the window hides Orbit to the tray, when the tray is available. */
+  closeToTray: boolean;
+  /** Windows notifications for new GitHub activity while the window is hidden or unfocused. */
+  desktopNotifications: boolean;
+  /** Minutes between checks of GitHub: 1, 2, 5, 10 or 15. */
+  pollMinutes: number;
+  /** Opens Orbit when the person signs in to Windows. */
+  startAtLogin: boolean;
+  /** 0 to 200. 100 is the theme as designed. */
+  contrast: number;
+  /** 0 to 100. 100 keeps menus, dialogs and the composer solid. */
+  glassOpacity: number;
   windowState: WindowState | null;
   /** The user has accepted that uploads to public repos are public as soon as they upload. */
   publicUploadNoticeAcknowledged: boolean;
@@ -222,6 +234,12 @@ export type SettingsUpdate = Partial<
     | 'monospaceFont'
     | 'monospaceFontSize'
     | 'wordWrap'
+    | 'closeToTray'
+    | 'desktopNotifications'
+    | 'pollMinutes'
+    | 'startAtLogin'
+    | 'contrast'
+    | 'glassOpacity'
   >
 > & {
   detailsWidth?: number;

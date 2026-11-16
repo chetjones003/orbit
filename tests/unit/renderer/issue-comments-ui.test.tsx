@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { OverlayHost } from '@ui-sdk/react/overlays';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueDetailView } from '../../../src/renderer/src/issues/IssueDetail';
 import { drafts } from '../../../src/renderer/src/comments/draft-store';
@@ -53,14 +54,31 @@ function detail(): IssueDetail {
 
 function renderView(kind: 'issue' | 'pull' = 'issue') {
   render(
-    <IssueDetailView
-      repoFullName="orbit-owner/app"
-      number={4}
-      signedInLogin="orbit-owner"
-      kind={kind}
-      onOpenIssue={vi.fn()}
-    />
+    <>
+      <IssueDetailView
+        repoFullName="orbit-owner/app"
+        number={4}
+        signedInLogin="orbit-owner"
+        kind={kind}
+        onOpenIssue={vi.fn()}
+      />
+      <OverlayHost />
+    </>
   );
+}
+
+/** The text of every alert region. The overlay host adds its own, so a single role query can match more than one. */
+function alertTexts(): string {
+  return screen
+    .queryAllByRole('alert')
+    .map((node) => node.textContent ?? '')
+    .join(' ');
+}
+
+/** Answers the confirmation dialog that ui-sdk's confirm() opens. */
+async function answerConfirm(answer: 'Delete' | 'Cancel'): Promise<void> {
+  const dialog = await screen.findByRole('alertdialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: answer }));
 }
 
 let api: {
@@ -145,7 +163,7 @@ describe('IssueDetailView comments', () => {
 
     expect(await screen.findByText('Thanks!')).toBeInTheDocument();
     expect(api.comments.create).toHaveBeenCalledWith('orbit-owner/app', 4, 'Thanks!');
-    expect(screen.getByRole('status')).toHaveTextContent('Comment posted');
+    expect(screen.getAllByText('Comment posted.').length).toBeGreaterThan(0);
   });
 
   it("offers Edit and Delete only on the signed-in user's own comments", async () => {
@@ -206,7 +224,7 @@ describe('IssueDetailView comments', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('changed on GitHub');
+    await waitFor(() => expect(alertTexts()).toContain('changed on GitHub'));
     expect(screen.getByRole('textbox', { name: 'Edit comment' })).toHaveValue('Fixed text');
 
     fireEvent.click(screen.getByRole('button', { name: 'View theirs' }));
@@ -241,7 +259,7 @@ describe('IssueDetailView comments', () => {
       target: { value: 'Mine only' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
-    await screen.findByRole('alert');
+    await waitFor(() => expect(alertTexts().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy mine' }));
 
@@ -251,23 +269,24 @@ describe('IssueDetailView comments', () => {
   });
 
   it('deletes an own comment after the user confirms', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderView();
     await screen.findByText('Original text');
 
     clickCommentAction('Delete');
+    await answerConfirm('Delete');
 
     await waitFor(() => expect(screen.queryByText('Original text')).not.toBeInTheDocument());
     expect(api.comments.delete).toHaveBeenCalledWith('orbit-owner/app', 9);
-    expect(screen.getByRole('status')).toHaveTextContent('Comment deleted');
+    expect(screen.getAllByText('Comment deleted.').length).toBeGreaterThan(0);
   });
 
   it('does not delete when the user declines the confirmation', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderView();
     await screen.findByText('Original text');
 
     clickCommentAction('Delete');
+    await answerConfirm('Cancel');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
 
     expect(api.comments.delete).not.toHaveBeenCalled();
     expect(screen.getByText('Original text')).toBeInTheDocument();

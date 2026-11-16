@@ -7,7 +7,9 @@ import {
   type InboxTab
 } from '../../../shared/inbox';
 import type { ConnectionStatus } from '../../../shared/connection';
+import { Tabs, TabsList, TabsTab } from '@ui-sdk/react/tabs';
 import { Icon } from '../icons';
+import { moveRowFocus } from '../shell/row-keys';
 import { IssueLabelChip } from '../issues/IssueLabelChip';
 
 /** A plain message for a failed tab. The main process's detail is for diagnostics, not for the owner. */
@@ -84,19 +86,21 @@ export function Inbox({
 
   return (
     <section className="issue-list" aria-label="Inbox">
-      <div className="repo-view-switch" role="tablist" aria-label="Inbox tabs">
-        {INBOX_TABS.map((candidate) => (
-          <button
-            key={candidate}
-            role="tab"
-            className="secondary-action"
-            aria-selected={tab === candidate}
-            onClick={() => selectTab(candidate)}
-          >
-            {INBOX_TAB_LABELS[candidate]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="repo-view-switch"
+        value={tab}
+        onValueChange={(next) => {
+          if (next !== null) selectTab(next as InboxTab);
+        }}
+      >
+        <TabsList aria-label="Inbox tabs">
+          {INBOX_TABS.map((candidate) => (
+            <TabsTab key={candidate} value={candidate} className="secondary-action">
+              {INBOX_TAB_LABELS[candidate]}
+            </TabsTab>
+          ))}
+        </TabsList>
+      </Tabs>
       {loading && !result && <p role="status">Loading…</p>}
       {error && (
         <div role="alert">
@@ -108,7 +112,11 @@ export function Inbox({
       )}
       {result?.partial && <p role="note">Some items could not be shown; this list may be incomplete.</p>}
       {result && (
-        <ul className="issue-rows" aria-label="Inbox items">
+        <ul
+          className="issue-rows"
+          aria-label="Inbox items"
+          onKeyDown={(event) => moveRowFocus(event, event.currentTarget)}
+        >
           {result.items.map((item) => (
             <li key={`${item.repoFullName}#${item.number}`}>
               <button
