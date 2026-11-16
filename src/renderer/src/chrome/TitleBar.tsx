@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ShellAction, ShellState } from '../../../shared/ipc';
 import { OrbitMark } from '../brand/OrbitMark';
 import { Icon } from '../icons';
@@ -33,6 +33,8 @@ export interface TitleBarProps {
   onToggleTheme(): void;
   onCheckUpdates(): void;
   onSignOut(): void;
+  /** The search field, shown only when signed in. Sits between the menus and the window controls. */
+  search?: ReactNode;
 }
 
 /** Keyboard shortcuts this title bar handles itself. Undo, copy, and paste work in the page already. */
@@ -55,7 +57,8 @@ export function TitleBar({
   nextThemeLabel,
   onToggleTheme,
   onCheckUpdates,
-  onSignOut
+  onSignOut,
+  search
 }: TitleBarProps) {
   const [open, setOpen] = useState<string | null>(null);
   const [shell, setShell] = useState<ShellState>({ maximized: false, fullscreen: false });
@@ -211,6 +214,7 @@ export function TitleBar({
           })}
         </div>
       )}
+      {search && <div className="titlebar-search-slot">{search}</div>}
       <div className="titlebar-spacer" />
       {!mac && (
         <div className="window-controls">
