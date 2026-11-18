@@ -237,7 +237,11 @@ export function createGraphQL(store) {
 
   // -- Field resolvers, by type. -------------------------------------------------------------------------
 
+  const labelsOf = (parent) =>
+    connection((parent._item.labels ?? []).map((label) => ({ name: label.name, color: label.color })));
+
   const pullResolvers = {
+    labels: labelsOf,
     headRefOid: (parent) => parent._item.head.sha,
     isDraft: (parent) => parent._item.draft,
     autoMergeRequest: (parent) => (parent._item.auto_merge ? { mergeMethod: parent._item.auto_merge } : null),
@@ -334,6 +338,7 @@ export function createGraphQL(store) {
       project: (parent) => projectNode(parent._project)
     },
     Issue: {
+      labels: labelsOf,
       url: (parent) =>
         `${store.repos.find((r) => r.name === parent._item.repo).html_url}/issues/${parent._item.number}`,
       repository: (parent) => ({

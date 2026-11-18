@@ -24,6 +24,7 @@ import { RichBody } from './RichBody';
 import { ReviewPanel, ReviewTextBox, describeAnchor } from './PullReview';
 import type { DraftKey } from '../comments/draft-store';
 import { anchorForChange, findChangeForAnchor, fileNote, isLargePatch, parseFileDiff } from './pull-diff';
+import { SectionHead } from './SectionHead';
 
 export interface PullDiffViewProps {
   repoFullName: string;
@@ -225,6 +226,7 @@ export function PullDiffView({
 
   return (
     <section aria-label="Changed files" className={`pull-diff ${variant}`}>
+      <SectionHead icon="commit" title="Changed files" count={filesPage.files.length} />
       {filesPage.partial && <p role="note">Some changed files may not be shown.</p>}
       {threadsPage.partial && <p role="note">Some review threads may not be shown.</p>}
       {threadError && <p role="alert">{threadError}</p>}

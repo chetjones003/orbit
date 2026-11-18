@@ -27,10 +27,10 @@ describe('CustomThemeEditor', () => {
     expect(saved.dark.accent).toBe('#00ff88');
   });
 
-  it('shows derived colours only under Advanced', () => {
+  it('shows every role only under Advanced', () => {
     render(<CustomThemeEditor initial={null} onSave={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.queryByRole('textbox', { name: 'Border hex' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Input border hex' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Advanced' }));
-    expect(screen.getByRole('textbox', { name: 'Border hex' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Input border hex' })).toBeInTheDocument();
   });
 });

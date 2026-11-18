@@ -3,6 +3,7 @@ import type { ProjectField, ProjectFieldInput, ProjectItem } from '../../../shar
 import { ProjectFieldEditor } from './ProjectFieldEditor';
 import type { ItemGroup } from './custom-view-model';
 import { openableKind } from './project-model';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 export interface ProjectTableProps {
   fields: ProjectField[];
@@ -42,6 +43,7 @@ export function ProjectTable({
             <button
               type="button"
               className="link-button"
+              {...hovercardProps(item.repoFullName, item.number, kind)}
               onClick={() => onOpen(item.repoFullName as string, item.number as number, kind)}
             >
               {item.title}

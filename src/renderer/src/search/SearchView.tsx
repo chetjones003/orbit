@@ -22,6 +22,7 @@ import {
 } from '@ui-sdk/react/segmented-control';
 import { Icon } from '../icons';
 import { IssueLabelChip } from '../issues/IssueLabelChip';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 /** Typing settles for this long before a search goes to GitHub. */
 export const SEARCH_DELAY_MS = 250;
@@ -55,6 +56,7 @@ export interface SearchViewProps {
   onOpenItem(item: InboxItem): void;
   /** Closes the search and returns to the section that was open. */
   onClose(): void;
+  showClose?: boolean;
 }
 
 /**
@@ -62,7 +64,15 @@ export interface SearchViewProps {
  * ("open", "pull requests", "in app", "label bug", "@name") show up as chips and in the controls, and the
  * controls write their choice back into the text, so the two always agree.
  */
-export function SearchView({ text, onTextChange, repos, selected, onOpenItem, onClose }: SearchViewProps) {
+export function SearchView({
+  text,
+  onTextChange,
+  repos,
+  selected,
+  onOpenItem,
+  onClose,
+  showClose = true
+}: SearchViewProps) {
   const [chips, setChips] = useState<SearchChips>(DEFAULT_CHIPS);
   const [paging, setPaging] = useState({ key: '', page: 1 });
   const [result, setResult] = useState<SearchPage | null>(null);
@@ -198,9 +208,11 @@ export function SearchView({ text, onTextChange, repos, selected, onOpenItem, on
             ))}
           </select>
         </label>
-        <button type="button" className="secondary-action search-close" onClick={onClose}>
-          Close search
-        </button>
+        {showClose && (
+          <button type="button" className="secondary-action search-close" onClick={onClose}>
+            Close search
+          </button>
+        )}
       </div>
 
       {filters.length > 0 && (
@@ -273,6 +285,7 @@ export function SearchView({ text, onTextChange, repos, selected, onOpenItem, on
               {result.items.map((item) => (
                 <li key={`${item.repoFullName}#${item.number}`}>
                   <button
+                    {...hovercardProps(item.repoFullName, item.number, item.kind)}
                     className={`issue-row ${
                       selected?.repoFullName === item.repoFullName && selected.number === item.number
                         ? 'selected'
@@ -285,11 +298,12 @@ export function SearchView({ text, onTextChange, repos, selected, onOpenItem, on
                     </span>
                     <span className="issue-copy">
                       <span className="issue-title">
-                        {item.title} {item.isDraft && <small>Draft pull request</small>}
+                        {item.title} <span className="issue-number">#{item.number}</span>{' '}
+                        {item.isDraft && <small>Draft pull request</small>}
                       </span>
                       <span className="issue-meta">
-                        {item.repoFullName}#{item.number} · {item.kind === 'pull' ? 'Pull request' : 'Issue'}{' '}
-                        · @{item.authorLogin}
+                        {item.repoFullName} ·{item.kind === 'pull' ? 'Pull request' : 'Issue'} · @
+                        {item.authorLogin}
                       </span>
                       {item.labels.length > 0 && (
                         <span className="issue-labels">

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { IssueLinks as IssueLinksData, LinkedPull } from '../../../shared/issues';
 import { Icon } from '../icons';
+import { hovercardProps } from '../hovercard/hovercard-model';
+import { SectionHead } from './SectionHead';
 
 export interface IssueLinksProps {
   repoFullName: string;
@@ -42,7 +44,11 @@ export function IssueLinks({ repoFullName, number, onOpenPull }: IssueLinksProps
 
   return (
     <>
-      <h3 className="detail-card-title">Pull requests and commits</h3>
+      <SectionHead
+        icon="pull"
+        title="Pull requests and commits"
+        count={links ? links.pulls.length + links.commits.length : null}
+      />
       {error && (
         <p className="detail-muted" role="alert">
           {error}
@@ -68,7 +74,12 @@ export function IssueLinks({ repoFullName, number, onOpenPull }: IssueLinksProps
                   <span className={`linked-state ${pull.merged ? 'merged' : pull.state}`}>
                     {pullStateLabel(pull)}
                   </span>
-                  <button type="button" className="linked-title" onClick={() => onOpenPull(pull.number)}>
+                  <button
+                    type="button"
+                    className="linked-title"
+                    {...hovercardProps(repoFullName, pull.number, 'pull')}
+                    onClick={() => onOpenPull(pull.number)}
+                  >
                     #{pull.number} {pull.title}
                   </button>
                 </div>

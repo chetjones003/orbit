@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 use super::client::WriteOptions;
 use super::util::{s, u};
+use crate::model::issues::IssueLabel;
 use super::write::{ApiError, Reconciled};
 use super::{Ctx, Session};
 
@@ -19,6 +20,8 @@ const MAX_FILTER_CHARS: usize = 1000;
 pub const PROJECT_ITEMS_PAGE_SIZE: u32 = 50;
 pub const PROJECT_ITEMS_PAGE_LIMIT: u32 = 10;
 pub const PROJECT_FIELD_VALUES_PER_ITEM: u32 = 50;
+/// Labels read per issue or pull request, for the cards. More than this are rare and would crowd a card.
+pub const PROJECT_LABELS_PER_ITEM: u32 = 10;
 pub const PROJECT_TEXT_MAX_CHARS: usize = 2048;
 
 const FIELD_SELECTION: &str = r#"
@@ -46,8 +49,8 @@ fn item_selection() -> String {
   type
   content {{
     __typename
-    ... on Issue {{ id number title url state repository {{ nameWithOwner }} }}
-    ... on PullRequest {{ id number title url state isDraft repository {{ nameWithOwner }} }}
+    ... on Issue {{ id number title url state repository {{ nameWithOwner }} labels(first: {PROJECT_LABELS_PER_ITEM}) {{ nodes {{ name color }} }} }}
+    ... on PullRequest {{ id number title url state isDraft repository {{ nameWithOwner }} labels(first: {PROJECT_LABELS_PER_ITEM}) {{ nodes {{ name color }} }} }}
     ... on DraftIssue {{ id title }}
   }}
   fieldValues(first: {PROJECT_FIELD_VALUES_PER_ITEM}) {{ nodes {{ {VALUE_SELECTION} }} }}
@@ -276,6 +279,8 @@ pub struct ProjectItem {
     /// "open", "closed", or "merged".
     pub state: String,
     pub is_draft: bool,
+    /// The issue or pull request's labels. Empty for drafts.
+    pub labels: Vec<IssueLabel>,
     pub field_values: BTreeMap<String, ProjectFieldValue>,
 }
 
@@ -518,6 +523,7 @@ pub fn to_project_item(node: &Value) -> Option<ProjectItem> {
             html_url: None,
             state: "open".into(),
             is_draft: false,
+            labels: Vec::new(),
             field_values,
         });
     }
@@ -542,6 +548,10 @@ pub fn to_project_item(node: &Value) -> Option<ProjectItem> {
         html_url: Some(s(content, "url")?),
         state: state.into(),
         is_draft: typename == "PullRequest" && content.get("isDraft").and_then(Value::as_bool) == Some(true),
+        labels: nodes_of(content.get("labels"))
+            .iter()
+            .filter_map(|label| Some(IssueLabel { name: s(label, "name")?, color: s(label, "color").unwrap_or_default() }))
+            .collect(),
         field_values,
     })
 }
@@ -996,6 +1006,24 @@ mod tests {
         assert_eq!(item.kind, "draft");
         assert_eq!(item.title, "Idea");
         assert!(item.repo_full_name.is_none());
+        assert!(item.labels.is_empty());
+    }
+
+    #[test]
+    fn issue_items_carry_their_labels() {
+        let node = json!({
+            "id": "PVTI_3", "type": "ISSUE",
+            "content": {
+                "__typename": "Issue", "id": "I_1", "number": 7, "title": "Crash", "url": "https://github.com/o/r/issues/7",
+                "state": "OPEN", "repository": {"nameWithOwner": "o/r"},
+                "labels": {"nodes": [{"name": "bug", "color": "d73a4a"}, {"name": "help wanted", "color": "008672"}]}
+            },
+            "fieldValues": {"nodes": []}
+        });
+        let item = to_project_item(&node).unwrap();
+        let names: Vec<&str> = item.labels.iter().map(|label| label.name.as_str()).collect();
+        assert_eq!(names, ["bug", "help wanted"]);
+        assert_eq!(item.labels[0].color, "d73a4a");
     }
 
     #[test]

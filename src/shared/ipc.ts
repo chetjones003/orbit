@@ -188,6 +188,8 @@ export interface OrbitSettings {
   monospaceFont: MonospaceFont;
   monospaceFontSize: MonospaceFontSize;
   wordWrap: boolean;
+  /** How soon an issue or pull request card opens on hover, or never. */
+  hoverCards: HoverCardSpeed;
   /** Closing the window hides Orbit to the tray, when the tray is available. */
   closeToTray: boolean;
   /** Windows notifications for new GitHub activity while the window is hidden or unfocused. */
@@ -207,6 +209,9 @@ export interface OrbitSettings {
 
 /** The two places an issue or pull request can open. */
 export type OpenItemsIn = 'full' | 'side';
+
+/** How soon an issue or pull request card opens on hover, or never. */
+export type HoverCardSpeed = 'off' | 'quick' | 'normal' | 'slow';
 
 /**
  * 'always' (the default) animates the panels whatever Windows says. 'system' follows Windows: when animations are off
@@ -234,6 +239,7 @@ export type SettingsUpdate = Partial<
     | 'monospaceFont'
     | 'monospaceFontSize'
     | 'wordWrap'
+    | 'hoverCards'
     | 'closeToTray'
     | 'desktopNotifications'
     | 'pollMinutes'

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { WorkflowGraphJob, WorkflowJob, WorkflowRun } from '../../../shared/issues';
 import { StatusGlyph, WorkflowGraph } from './WorkflowGraph';
+import { SectionHead } from './SectionHead';
 
 export { formatDuration, groupName, jobTone } from './ci-model';
 
@@ -57,14 +58,13 @@ export function PullCi({ repoFullName, number }: PullCiProps) {
 
   return (
     <div className="ci" aria-label="Workflow runs">
-      <div className="ci-head">
-        <h3 className="detail-card-title">CI</h3>
+      <SectionHead icon="refresh" title="Checks" count={runs?.length ?? null}>
         {runs !== null && (
           <span className={`ci-summary ${active ? 'running' : ''}`}>
             {runs.length === 0 ? 'No workflow runs for this commit.' : active ? 'Running' : 'Finished'}
           </span>
         )}
-      </div>
+      </SectionHead>
       {loadError && (
         <p role="alert" className="session-notice">
           {loadError}

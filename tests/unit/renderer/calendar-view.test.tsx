@@ -138,7 +138,7 @@ describe('CalendarView, month', () => {
 describe('CalendarView, week', () => {
   it('shows only the Monday-to-Sunday week that holds today', () => {
     renderCalendar({ scale: 'week' });
-    expect(screen.getByText('Week of 2026-11-09')).toBeDefined();
+    expect(screen.getByText('Nov 9 – 15, 2026')).toBeDefined();
     expect(screen.getAllByRole('gridcell')).toHaveLength(7);
     expect(day('2026-11-09')).toBeDefined();
     expect(day('2026-11-15')).toBeDefined();
@@ -147,7 +147,7 @@ describe('CalendarView, week', () => {
   it('moves a week at a time', () => {
     renderCalendar({ scale: 'week' });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText('Week of 2026-11-16')).toBeDefined();
+    expect(screen.getByText('Nov 16 – 22, 2026')).toBeDefined();
   });
 });
 

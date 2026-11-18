@@ -3,6 +3,7 @@ import type { PersonalRepo } from '../../../shared/ipc';
 import type { IssueStateFilter, IssueSummary } from '../../../shared/issues';
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 /** Rows shown per repo. The repo itself opens the full, paged list. */
 const ROWS_PER_GROUP = 10;
@@ -126,6 +127,7 @@ function RepoGroup({ kind, repo, state, selected, onOpen, onScope }: RepoGroupPr
               <li key={row.number}>
                 <button
                   type="button"
+                  {...hovercardProps(repo.fullName, row.number, kind)}
                   className={`issue-row ${isSelected ? 'selected' : ''}`}
                   aria-current={isSelected ? 'true' : undefined}
                   onClick={() => onOpen(repo.fullName, row.number, kind)}

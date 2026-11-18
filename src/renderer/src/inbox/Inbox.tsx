@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTab } from '@ui-sdk/react/tabs';
 import { Icon } from '../icons';
 import { moveRowFocus } from '../shell/row-keys';
 import { IssueLabelChip } from '../issues/IssueLabelChip';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 /** A plain message for a failed tab. The main process's detail is for diagnostics, not for the owner. */
 function describeFailure(cause: unknown): string {
@@ -120,6 +121,7 @@ export function Inbox({
           {result.items.map((item) => (
             <li key={`${item.repoFullName}#${item.number}`}>
               <button
+                {...hovercardProps(item.repoFullName, item.number, item.kind)}
                 className={`issue-row ${
                   selected?.repoFullName === item.repoFullName && selected.number === item.number
                     ? 'selected'

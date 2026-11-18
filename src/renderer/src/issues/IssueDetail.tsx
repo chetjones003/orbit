@@ -20,6 +20,8 @@ import { RichBody } from './RichBody';
 import { IssueLabelChip } from './IssueLabelChip';
 import { IssueLinks } from './IssueLinks';
 import { publishItemChange } from '../shell/list-events';
+import { hovercardUrlProps } from '../hovercard/hovercard-model';
+import { SectionHead } from './SectionHead';
 
 /** Reader-facing names for a review's state. */
 function reviewStateLabel(state: string): string {
@@ -258,6 +260,7 @@ export function IssueDetailView({
 
       {kind === 'pull' && pullDetail && (
         <section aria-label="Pull request details" className="detail-card pr-summary">
+          <SectionHead icon="pull" title="Status" />
           <div className="pr-status-row">
             <span className={`pr-pill ${pullDetail.summary.draft ? 'draft' : 'ready'}`}>
               {pullDetail.summary.draft ? 'Draft' : 'Ready for review'}
@@ -277,7 +280,11 @@ export function IssueDetailView({
             <Icon name="chevronRight" size={14} />
             <code>{pullDetail.summary.baseRef}</code>
           </div>
-          <h3 className="detail-card-title">Reviews</h3>
+        </section>
+      )}
+      {kind === 'pull' && pullDetail && (
+        <section aria-label="Reviews" className="detail-card">
+          <SectionHead icon="check" title="Reviews" count={pullDetail.reviews.length} />
           {pullDetail.reviewsPartial && <p className="detail-muted">Some reviews may not be shown.</p>}
           {pullDetail.reviews.length === 0 ? (
             <p className="detail-muted">No reviews yet.</p>
@@ -418,7 +425,7 @@ export function IssueDetailView({
       </div>
 
       <section className="detail-card" aria-label="Description">
-        <h3 className="detail-card-title">Description</h3>
+        <SectionHead icon="menu" title="Description" />
         <RichBody
           html={detail.bodyHtml}
           viewOnGitHubUrl={summary.htmlUrl}
@@ -461,7 +468,8 @@ export function IssueDetailView({
           commentsPartial={detail.commentsPartial}
           viewOnGitHubUrl={summary.htmlUrl}
           onLink={routeLink}
-          canWrite={editable}
+          // Conversation comments work the same on issues and pull requests (GitHub keeps both as issue comments).
+          canWrite
           issueAuthorLogin={summary.authorLogin}
         />
       </div>
@@ -492,7 +500,12 @@ function subProgressPercent(summary: IssueSummary, children: SubIssueRef[]): num
 
 function SubIssueLink({ issue, onOpen }: { issue: SubIssueRef; onOpen(number: number): void }) {
   return (
-    <button type="button" className="sub-issue-link" onClick={() => onOpen(issue.number)}>
+    <button
+      type="button"
+      className="sub-issue-link"
+      {...hovercardUrlProps(issue.htmlUrl)}
+      onClick={() => onOpen(issue.number)}
+    >
       #{issue.number} {issue.title}
     </button>
   );

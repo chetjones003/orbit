@@ -1,10 +1,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, keymap, placeholder } from '@codemirror/view';
+import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
+import { autocompletion, type Completion } from '@codemirror/autocomplete';
 import { indentMore } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { continueList, formatAction, pasteEdit, type FormatKind, type TextEdit } from './markdown-edit';
+import { suggestionSource, type SuggestionContext } from './editor-suggestions';
+import { markColor, markLetters } from '../shell/repo-mark';
 
 /** Operations the composer uses for toolbar buttons. The editor owns the document; this is its surface. */
 export interface CodeEditorHandle {
@@ -27,6 +30,8 @@ export interface CodeEditorProps {
   onFiles?: (files: File[], at: number) => void;
   /** True while the text must not change, such as while it is being sent. The text stays visible. */
   readOnly?: boolean;
+  /** Where `#` and `@` suggestions come from. `/` snippets work without it. */
+  suggestions?: SuggestionContext;
 }
 
 /**
@@ -34,7 +39,7 @@ export interface CodeEditorProps {
  * Ctrl/Cmd+Enter submits; Enter continues lists; Esc then Tab leaves the editor.
  */
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
-  { value, onChange, onSubmit, ariaLabel, placeholder: hint, onFiles, readOnly = false },
+  { value, onChange, onSubmit, ariaLabel, placeholder: hint, onFiles, readOnly = false, suggestions },
   ref
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -42,8 +47,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
   // Read-only is a compartment, so it can change after the editor exists without rebuilding it.
   const editable = useRef(new Compartment());
   // Latest callbacks, so the editor is created once and never rebuilt on each render.
-  const callbacks = useRef({ onChange, onSubmit, onFiles });
-  callbacks.current = { onChange, onSubmit, onFiles };
+  const callbacks = useRef({ onChange, onSubmit, onFiles, suggestions });
+  callbacks.current = { onChange, onSubmit, onFiles, suggestions };
   // Set by Esc. The next Tab then moves focus out instead of indenting.
   const released = useRef(false);
 
@@ -57,7 +62,18 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
           editable.current.of(EditorState.readOnly.of(readOnly)),
           markdown({ extensions: GFM }),
           EditorView.lineWrapping,
+          // The editor draws its own cursor, styled as a block, so it shows in an empty box too.
+          drawSelection({ cursorBlinkRate: 1100 }),
           placeholder(hint ?? ''),
+          autocompletion({
+            override: [suggestionSource(() => callbacks.current.suggestions ?? {})],
+            activateOnTyping: true,
+            maxRenderedOptions: 12,
+            closeOnBlur: true,
+            tooltipClass: () => 'suggest-popup',
+            optionClass: (option) => `suggest-option suggest-${(option.type ?? '').split(' ')[0] ?? ''}`,
+            addToOptions: [{ render: renderAvatar, position: 20 }]
+          }),
           EditorView.contentAttributes.of({ 'aria-label': ariaLabel, 'aria-multiline': 'true' }),
           keymap.of([
             { key: 'Mod-b', run: () => runFormat(editor, 'bold') },
@@ -118,13 +134,22 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
               target.dispatch({ changes: edit.changes, selection: edit.selection });
               return true;
             },
-            // Dragging files over the editor must be allowed, or the browser never delivers the drop.
+            // Dragging files over the editor must be allowed, or the browser never delivers the drop. The box
+            // shows it will take them while they are over it.
             dragover: (event) => {
               if (!callbacks.current.onFiles || !event.dataTransfer?.types.includes('Files')) return false;
               event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+              host.current?.classList.add('drop-ready');
               return true;
             },
+            dragleave: (event) => {
+              if (host.current?.contains(event.relatedTarget as Node | null)) return false;
+              host.current?.classList.remove('drop-ready');
+              return false;
+            },
             drop: (event, target) => {
+              host.current?.classList.remove('drop-ready');
               const files = Array.from(event.dataTransfer?.files ?? []);
               if (files.length === 0 || !callbacks.current.onFiles) return false;
               event.preventDefault();
@@ -178,6 +203,18 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
 
   return <div className="comment-editor" ref={host} />;
 });
+
+/** A person suggestion's avatar: their initials on a colour picked from their login. */
+function renderAvatar(completion: Completion): Node | null {
+  if (completion.type !== 'person') return null;
+  const login = typeof completion.displayLabel === 'string' ? completion.displayLabel : completion.label;
+  const avatar = document.createElement('span');
+  avatar.className = 'suggest-avatar';
+  avatar.textContent = markLetters(login);
+  avatar.style.background = markColor(login);
+  avatar.setAttribute('aria-hidden', 'true');
+  return avatar;
+}
 
 function runFormat(editor: EditorView, kind: FormatKind): boolean {
   const { from, to } = editor.state.selection.main;

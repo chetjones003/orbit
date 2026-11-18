@@ -1,7 +1,9 @@
 import type { ProjectField, ProjectItem } from '../../../shared/projects';
 import { boardColumns, openableKind, type SingleSelectField } from './project-model';
 import { ProjectValueLabel } from './ProjectValueLabel';
+import { ProjectCardLabels } from './ProjectCardLabels';
 import { cardRows, useCardDrag } from './card-drag';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 export interface ProjectBoardProps {
   field: SingleSelectField;
@@ -71,6 +73,7 @@ export function ProjectBoard({ field, items, cardFields, pendingIds, onMove, onO
                     <button
                       type="button"
                       className="link-button"
+                      {...hovercardProps(item.repoFullName, item.number, kind)}
                       onClick={() => onOpen(item.repoFullName as string, item.number as number, kind)}
                     >
                       {item.title}
@@ -84,6 +87,7 @@ export function ProjectBoard({ field, items, cardFields, pendingIds, onMove, onO
                     {item.repoFullName}#{item.number}
                   </p>
                 )}
+                <ProjectCardLabels item={item} />
                 {cardFields
                   .filter((f) => f.id !== field.id && item.fieldValues[f.id] !== undefined)
                   .map((f) => (

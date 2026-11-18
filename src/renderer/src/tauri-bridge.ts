@@ -19,7 +19,7 @@ import type {
 import type { NotificationDelivery, NotificationOpenResult } from '../../shared/notifications';
 import type { ProjectFieldChange } from '../../shared/projects';
 import type { SearchRequest } from '../../shared/search';
-import type { ThemeImportRef, ThemeSearchRequest } from '../../shared/themes';
+import { normalizeCustomThemes, type ThemeImportRef, type ThemeSearchRequest } from '../../shared/themes';
 import type { UpdateStatus } from '../../shared/updates';
 import type {
   AppInfo,
@@ -67,8 +67,8 @@ const ported = {
       subscribe<AuthStatus>('auth:status-changed', listener)
   },
   settings: {
-    get: () => invoke<OrbitSettings>('settings_get'),
-    update: (update: SettingsUpdate) => invoke<OrbitSettings>('settings_update', { update })
+    get: () => invoke<OrbitSettings>('settings_get').then(withThemes),
+    update: (update: SettingsUpdate) => invoke<OrbitSettings>('settings_update', { update }).then(withThemes)
   },
   notifications: {
     open: (threadId: string) => invoke<NotificationOpenResult>('notifications_open', { threadId }),
@@ -251,4 +251,9 @@ export function installTauriBridge(): void {
     }
   });
   window.orbit = api as unknown as OrbitApi;
+}
+
+/** Custom themes come back as stored. Older ones, and any damaged entry, are brought to the current shape here. */
+function withThemes(settings: OrbitSettings): OrbitSettings {
+  return { ...settings, customThemes: normalizeCustomThemes(settings.customThemes) };
 }

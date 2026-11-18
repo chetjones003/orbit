@@ -2,48 +2,115 @@ import { useEffect, useState } from 'react';
 import { Switch } from '@ui-sdk/react/switch';
 import { ChoiceGroup } from './ChoiceGroup';
 import {
+  builtInThemeColors,
   CUSTOM_THEME_NAME_LENGTH,
-  derivedColor,
+  generateThemeColors,
   isCustomThemeId,
   isHexColor,
   newCustomThemeId,
-  ORBIT_CORE_COLORS,
-  type CoreColors,
   type CustomTheme,
-  type DerivedToken,
+  type ThemeColorRole,
   type ThemeColors
 } from '../../../shared/themes';
 import { Icon } from '../icons';
 
 type Variant = 'dark' | 'light';
-type TokenKey = keyof CoreColors | DerivedToken;
-
-const DEFAULT_DARK: ThemeColors = { ...ORBIT_CORE_COLORS.dark, overrides: {} };
-const DEFAULT_LIGHT: ThemeColors = { ...ORBIT_CORE_COLORS.light, overrides: {} };
 
 interface Row {
-  key: TokenKey;
+  role: ThemeColorRole;
   label: string;
-  /** Advanced rows appear only when Advanced is on. */
-  advanced: boolean;
+  /** Basic rows show without Advanced. */
+  basic?: boolean;
 }
 
-const FOUNDATION: Row[] = [
-  { key: 'canvas', label: 'Background', advanced: false },
-  { key: 'surface', label: 'Surface', advanced: false },
-  { key: 'raised', label: 'Raised surface', advanced: true },
-  { key: 'hover', label: 'Overlay', advanced: true },
-  { key: 'text', label: 'Text', advanced: false },
-  { key: 'muted', label: 'Muted text', advanced: true },
-  { key: 'line', label: 'Border', advanced: true }
+/** T3 Code's colour roles, grouped by the part of the app they paint. Terminal roles are kept but not shown. */
+const GROUPS: { title: string; rows: Row[] }[] = [
+  {
+    title: 'Foundation',
+    rows: [
+      { role: 'canvas', label: 'Background', basic: true },
+      { role: 'surface', label: 'Surface', basic: true },
+      { role: 'surfaceRaised', label: 'Raised surface' },
+      { role: 'surfaceOverlay', label: 'Menus and dialogs' },
+      { role: 'border', label: 'Border', basic: true },
+      { role: 'input', label: 'Input border' },
+      { role: 'text', label: 'Text', basic: true },
+      { role: 'textMuted', label: 'Muted text' },
+      { role: 'secondaryLabel', label: 'Secondary label' },
+      { role: 'placeholder', label: 'Placeholder' },
+      { role: 'iconMuted', label: 'Muted icons' }
+    ]
+  },
+  {
+    title: 'Brand & actions',
+    rows: [
+      { role: 'accent', label: 'Accent', basic: true },
+      { role: 'accentForeground', label: 'Text on accent' },
+      { role: 'focus', label: 'Focus ring' },
+      { role: 'messageAction', label: 'Primary button', basic: true },
+      { role: 'messageActionForeground', label: 'Primary button text' },
+      { role: 'messageActionHover', label: 'Primary button hover' },
+      { role: 'accentSurface', label: 'Hover and selection' },
+      { role: 'accentSurfaceForeground', label: 'Text on hover' }
+    ]
+  },
+  {
+    title: 'Sidebar',
+    rows: [
+      { role: 'sidebar', label: 'Sidebar', basic: true },
+      { role: 'sidebarForeground', label: 'Sidebar text' },
+      { role: 'sidebarMutedForeground', label: 'Sidebar muted text' },
+      { role: 'sidebarControlSurface', label: 'Sidebar controls' },
+      { role: 'sidebarRowHover', label: 'Row hover' },
+      { role: 'sidebarRowActive', label: 'Row pressed' },
+      { role: 'sidebarRowSelected', label: 'Row selected' },
+      { role: 'sidebarBorder', label: 'Sidebar border' }
+    ]
+  },
+  {
+    title: 'Title bar',
+    rows: [
+      { role: 'chrome', label: 'Window frame' },
+      { role: 'toolbar', label: 'Toolbar' },
+      { role: 'toolbarForeground', label: 'Toolbar text' },
+      { role: 'toolbarBorder', label: 'Toolbar border' },
+      { role: 'toolbarControl', label: 'Toolbar controls' },
+      { role: 'toolbarControlForeground', label: 'Toolbar control text' },
+      { role: 'toolbarControlHover', label: 'Toolbar control hover' }
+    ]
+  },
+  {
+    title: 'Content',
+    rows: [
+      { role: 'secondary', label: 'Secondary surface' },
+      { role: 'secondaryForeground', label: 'Secondary text' },
+      { role: 'muted', label: 'Muted surface' },
+      { role: 'mutedForeground', label: 'Text on muted surface' },
+      { role: 'messageSurface', label: 'Comment surface' },
+      { role: 'messageForeground', label: 'Comment text' },
+      { role: 'codeBackground', label: 'Code background' },
+      { role: 'codeForeground', label: 'Code text' },
+      { role: 'searchMatchBackground', label: 'Search match' },
+      { role: 'searchMatchForeground', label: 'Search match text' },
+      { role: 'searchMatchActiveBackground', label: 'Current search match' },
+      { role: 'searchMatchActiveForeground', label: 'Current search match text' }
+    ]
+  },
+  {
+    title: 'Status',
+    rows: [
+      { role: 'error', label: 'Error' },
+      { role: 'errorForeground', label: 'Error text' },
+      { role: 'errorSurface', label: 'Error surface' },
+      { role: 'warning', label: 'Warning' },
+      { role: 'warningForeground', label: 'Warning text' },
+      { role: 'warningSurface', label: 'Warning surface' },
+      { role: 'update', label: 'Update' },
+      { role: 'updateForeground', label: 'Update text' },
+      { role: 'updateSurface', label: 'Update surface' }
+    ]
+  }
 ];
-const BRAND: Row[] = [
-  { key: 'accent', label: 'Accent', advanced: false },
-  { key: 'accentSoft', label: 'Accent tint', advanced: true }
-];
-
-const isDerived = (key: TokenKey): key is DerivedToken =>
-  key === 'raised' || key === 'hover' || key === 'muted' || key === 'line' || key === 'accentSoft';
 
 export interface CustomThemeEditorProps {
   /** The theme being edited, or null for a new one. */
@@ -53,33 +120,27 @@ export interface CustomThemeEditorProps {
 }
 
 /**
- * The Create theme sheet. A name, then colours for each variant: the four core colours, and under Advanced every
- * token the palette derives from them. Derived tokens show their mixed value until one is overridden.
+ * The Create theme sheet. A name, then T3 Code's colour roles for each variant. The main roles show by default and
+ * Advanced shows every one. Each row changes only its own role; Generate rebuilds the variant from its background and
+ * accent, the way T3 Code derives a theme.
  */
 export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEditorProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [variant, setVariant] = useState<Variant>('dark');
-  const [dark, setDark] = useState<ThemeColors>(initial?.dark ?? DEFAULT_DARK);
-  const [light, setLight] = useState<ThemeColors>(initial?.light ?? DEFAULT_LIGHT);
+  const [dark, setDark] = useState<ThemeColors>(initial?.dark ?? builtInThemeColors('orbit', 'dark'));
+  const [light, setLight] = useState<ThemeColors>(initial?.light ?? builtInThemeColors('orbit', 'light'));
   const [advanced, setAdvanced] = useState(false);
   const [filter, setFilter] = useState('');
   const trimmed = name.trim();
   const colors = variant === 'dark' ? dark : light;
   const setColors = variant === 'dark' ? setDark : setLight;
 
-  const change = (key: TokenKey, value: string): void => {
-    if (!isHexColor(value)) return;
-    if (isDerived(key)) setColors({ ...colors, overrides: { ...colors.overrides, [key]: value } });
-    else setColors({ ...colors, [key]: value });
+  const change = (role: ThemeColorRole, value: string): void => {
+    if (isHexColor(value)) setColors({ ...colors, [role]: value.toLowerCase() });
   };
-  const reset = (key: DerivedToken): void => {
-    const overrides = { ...colors.overrides };
-    delete overrides[key];
-    setColors({ ...colors, overrides });
-  };
-
+  const query = filter.trim().toLowerCase();
   const visible = (row: Row): boolean =>
-    (advanced || !row.advanced) && row.label.toLowerCase().includes(filter.trim().toLowerCase());
+    (advanced || Boolean(row.basic)) && row.label.toLowerCase().includes(query);
 
   return (
     <form
@@ -131,6 +192,14 @@ export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEdit
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
+          <button
+            type="button"
+            className="secondary-action"
+            title="Rebuild every colour of this appearance from its background and accent"
+            onClick={() => setColors(generateThemeColors(variant, colors.canvas, colors.accent))}
+          >
+            Generate
+          </button>
           <Switch
             className={`theme-advanced ${advanced ? 'on' : ''}`}
             checked={advanced}
@@ -141,20 +210,23 @@ export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEdit
           </Switch>
         </div>
 
-        <ColorGroup
-          title="Foundation"
-          rows={FOUNDATION.filter(visible)}
-          colors={colors}
-          change={change}
-          reset={reset}
-        />
-        <ColorGroup
-          title="Brand & content"
-          rows={BRAND.filter(visible)}
-          colors={colors}
-          change={change}
-          reset={reset}
-        />
+        {GROUPS.map((group) => {
+          const rows = group.rows.filter(visible);
+          if (rows.length === 0) return null;
+          return (
+            <section key={group.title} className="theme-sheet-group">
+              <h4>{group.title}</h4>
+              {rows.map((row) => (
+                <ColorRow
+                  key={row.role}
+                  label={row.label}
+                  value={colors[row.role]}
+                  onChange={(next) => change(row.role, next)}
+                />
+              ))}
+            </section>
+          );
+        })}
       </div>
 
       <footer className="theme-sheet-actions">
@@ -169,54 +241,15 @@ export function CustomThemeEditor({ initial, onSave, onCancel }: CustomThemeEdit
   );
 }
 
-function ColorGroup({
-  title,
-  rows,
-  colors,
-  change,
-  reset
-}: {
-  title: string;
-  rows: Row[];
-  colors: ThemeColors;
-  change(key: TokenKey, value: string): void;
-  reset(key: DerivedToken): void;
-}) {
-  if (rows.length === 0) return null;
-  return (
-    <section className="theme-sheet-group">
-      <h4>{title}</h4>
-      {rows.map((row) => {
-        const value = isDerived(row.key) ? derivedColor(colors, row.key) : colors[row.key];
-        const overridden = isDerived(row.key) && colors.overrides[row.key] !== undefined;
-        return (
-          <ColorRow
-            key={row.key}
-            label={row.label}
-            value={value}
-            overridden={overridden}
-            onChange={(next) => change(row.key, next)}
-            onReset={isDerived(row.key) ? () => reset(row.key as DerivedToken) : undefined}
-          />
-        );
-      })}
-    </section>
-  );
-}
-
 /** One colour: a swatch that opens the picker, and the hex value, which can also be typed. */
 function ColorRow({
   label,
   value,
-  overridden,
-  onChange,
-  onReset
+  onChange
 }: {
   label: string;
   value: string;
-  overridden: boolean;
   onChange(value: string): void;
-  onReset?(): void;
 }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
@@ -242,11 +275,6 @@ function ColorRow({
         }}
         onBlur={() => setDraft(value)}
       />
-      {overridden && onReset && (
-        <button type="button" className="theme-sheet-reset" aria-label={`Reset ${label}`} onClick={onReset}>
-          Reset
-        </button>
-      )}
     </div>
   );
 }
