@@ -30,8 +30,6 @@ export interface SideListProps {
   onContextMenu(item: ItemRef, x: number, y: number): void;
   /** Asks GitHub for the latest repositories. */
   onRefreshRepos(): void;
-  /** Opens the search dialog (also Ctrl+K). */
-  onSearch?(): void;
   /** The state filter chosen in the scope bar. The side list and the scope bar always agree. */
   state: IssueStateFilter;
 }
@@ -48,7 +46,6 @@ export function SideList({
   onOpenFull,
   onContextMenu,
   onRefreshRepos,
-  onSearch,
   state
 }: SideListProps) {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -96,17 +93,6 @@ export function SideList({
         >
           <Icon name="refresh" size={14} />
         </button>
-        {onSearch && (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Search (Ctrl+K)"
-            title="Search (Ctrl+K)"
-            onClick={onSearch}
-          >
-            <Icon name="search" size={14} />
-          </button>
-        )}
       </header>
       {repos.length === 0 && (
         <p className="side-list-empty">Track repositories in Repositories to see them here.</p>

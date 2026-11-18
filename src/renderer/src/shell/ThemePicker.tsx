@@ -1,11 +1,10 @@
 import { useState, type CSSProperties } from 'react';
 import { Radio, RadioGroup } from '@ui-sdk/react/radio';
 import {
-  newCustomThemeId,
-  ORBIT_CORE_COLORS,
   PALETTES,
-  type ThemeImportDraft,
   paletteVariables,
+  themeColorsFor,
+  themeFromImport,
   type ColorScheme,
   type CustomTheme,
   type PaletteId
@@ -50,10 +49,8 @@ export function ThemePicker({
   const [editing, setEditing] = useState<CustomTheme | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const colorsFor = (id: PaletteId, variant: Variant) => {
-    const custom = customThemes.find((theme) => theme.id === id);
-    return custom ? paletteVariables(custom[variant]) : undefined;
-  };
+  const colorsFor = (id: PaletteId, variant: Variant) =>
+    paletteVariables(themeColorsFor(id, customThemes, variant));
 
   return (
     <div className="theme-picker">
@@ -110,7 +107,7 @@ export function ThemePicker({
         <ThemeImportDialog
           onClose={() => setImporting(false)}
           onAdd={(draft) => {
-            const theme = themeFromDraft(draft);
+            const theme = themeFromImport(draft);
             onSaveCustomTheme(theme);
             onPalette(theme.id);
             setImporting(false);
@@ -264,14 +261,4 @@ function ThemeSwatch({
       <span className="theme-swatch-dot" />
     </span>
   );
-}
-
-/** A custom theme from colours read off Open VSX. A variant the extension lacks takes Orbit's own. */
-function themeFromDraft(draft: ThemeImportDraft): CustomTheme {
-  return {
-    id: newCustomThemeId(),
-    name: draft.name,
-    dark: { ...(draft.dark ?? ORBIT_CORE_COLORS.dark), overrides: {} },
-    light: { ...(draft.light ?? ORBIT_CORE_COLORS.light), overrides: {} }
-  };
 }

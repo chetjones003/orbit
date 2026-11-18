@@ -41,6 +41,8 @@ export interface ComposerProps {
   viewOnGitHubUrl: string;
   /** When set, files can be attached to this repo: from the Attach button, a paste, or a drop. */
   attachTo?: { repoFullName: string };
+  /** People in the conversation, suggested first after `@`. The repository's `#` and `@` suggestions come from attachTo. */
+  people?: string[];
 }
 
 type PreviewState =
@@ -96,7 +98,8 @@ export function Composer({
   submitDisabled: blockedByCaller = false,
   onExternalLink,
   viewOnGitHubUrl,
-  attachTo
+  attachTo,
+  people
 }: ComposerProps) {
   const [text, setText] = useState(() => drafts.get(draftKey) ?? initialText ?? '');
   const [tab, setTab] = useState<'write' | 'preview'>('write');
@@ -341,6 +344,7 @@ export function Composer({
               placeholder={placeholder}
               onFiles={attachTo ? attachFiles : undefined}
               readOnly={sending}
+              suggestions={{ repoFullName: attachTo?.repoFullName, people }}
             />
           </>
         ) : (

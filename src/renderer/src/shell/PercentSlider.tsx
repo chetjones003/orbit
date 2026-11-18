@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '../icons';
 import { Slider, SliderControl, SliderIndicator, SliderThumb, SliderTrack } from '@ui-sdk/react/slider';
 
 export interface PercentSliderProps {
@@ -74,7 +75,7 @@ export function PercentSlider({
         disabled={value === defaultValue && dragging === null}
         onClick={reset}
       >
-        ↶
+        <Icon name="reset" size={14} />
       </button>
     </div>
   );

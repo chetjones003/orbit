@@ -39,20 +39,12 @@ pub struct ThemeSearchResult {
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct CoreColors {
-    pub canvas: String,
-    pub surface: String,
-    pub text: String,
-    pub accent: String,
-}
-
-#[derive(Serialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub struct ThemeImportDraft {
     pub name: String,
     pub source: String,
-    pub dark: Option<CoreColors>,
-    pub light: Option<CoreColors>,
+    /// The variant's workbench colours, as written in the theme file. The renderer maps them to Orbit's roles.
+    pub dark: Option<HashMap<String, String>>,
+    pub light: Option<HashMap<String, String>>,
 }
 
 fn client() -> Result<reqwest::Client, String> {
@@ -279,7 +271,7 @@ fn read_include(archive: &[u8], theme_path: &str, include: &str) -> Result<Optio
     }
 }
 
-fn pick_variant(themes: &[(VsCodeTheme, Option<VsCodeTheme>)], dark: bool) -> Option<CoreColors> {
+fn pick_variant(themes: &[(VsCodeTheme, Option<VsCodeTheme>)], dark: bool) -> Option<HashMap<String, String>> {
     for (file, base) in themes {
         if is_dark_ui_theme(file.ui_theme.as_deref()) != dark {
             continue;
@@ -289,8 +281,8 @@ fn pick_variant(themes: &[(VsCodeTheme, Option<VsCodeTheme>)], dark: bool) -> Op
             colors.extend(base.colors.clone());
         }
         colors.extend(file.colors.clone());
-        if let Some(core) = core_colors_from_vscode(&colors, dark) {
-            return Some(core);
+        if let Some(workbench) = workbench_colors(&colors) {
+            return Some(workbench);
         }
     }
     None
@@ -437,44 +429,21 @@ pub fn is_dark_ui_theme(ui_theme: Option<&str>) -> bool {
     !matches!(ui_theme, Some("vs") | Some("hc-light"))
 }
 
-/// A six-digit hex colour, from #rgb, #rrggbb or #rrggbbaa (the alpha is dropped).
-pub fn hex_from_vscode_color(value: &Value) -> Option<String> {
-    let text = value.as_str()?;
-    let digits = text.strip_prefix('#')?;
-    if !digits.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
-    }
-    match digits.len() {
-        3 => {
-            let doubled: String = digits.chars().flat_map(|c| [c, c]).collect();
-            Some(format!("#{}", doubled.to_lowercase()))
-        }
-        6 | 8 => Some(format!("#{}", digits[..6].to_lowercase())),
-        _ => None,
-    }
-}
-
-fn first_hex(colors: &HashMap<String, Value>, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|k| colors.get(*k).and_then(hex_from_vscode_color))
-}
-
-/// The four core colours of a theme. None when there is no background or text colour to build from.
-pub fn core_colors_from_vscode(colors: &HashMap<String, Value>, dark: bool) -> Option<CoreColors> {
-    let canvas = first_hex(colors, &["editor.background", "sideBar.background", "activityBar.background"])?;
-    let text = first_hex(colors, &["editor.foreground", "foreground"])?;
-    let surface = first_hex(colors, &["sideBar.background", "editorWidget.background", "panel.background"])
-        .unwrap_or_else(|| canvas.clone());
-    let accent = first_hex(
-        colors,
-        &["focusBorder", "button.background", "textLink.foreground", "activityBarBadge.background"],
-    )
-    .unwrap_or_else(|| if dark { "#b5a4ff".into() } else { "#6850b9".into() });
-    Some(CoreColors {
-        canvas,
-        surface,
-        text,
-        accent,
-    })
+/// The string colours of a theme, without values that are not strings. None without an editor background, which
+/// every palette is built from.
+pub fn workbench_colors(colors: &HashMap<String, Value>) -> Option<HashMap<String, String>> {
+    let workbench: HashMap<String, String> = colors
+        .iter()
+        .filter_map(|(key, value)| {
+            let text = value.as_str()?.trim();
+            (key.len() <= 80 && !text.is_empty() && text.len() <= 64).then(|| (key.clone(), text.to_string()))
+        })
+        .take(2000)
+        .collect();
+    let has_background = ["editor.background", "editorPane.background"]
+        .iter()
+        .any(|key| workbench.contains_key(*key));
+    has_background.then_some(workbench)
 }
 
 // ---- Zip reading: only the wanted entries, sizes checked before inflating. ----
@@ -585,10 +554,16 @@ mod tests {
     }
 
     #[test]
-    fn hex_colours_are_normalised() {
-        assert_eq!(hex_from_vscode_color(&Value::from("#ABC")).as_deref(), Some("#aabbcc"));
-        assert_eq!(hex_from_vscode_color(&Value::from("#11223380")).as_deref(), Some("#112233"));
-        assert_eq!(hex_from_vscode_color(&Value::from("red")), None);
+    fn workbench_colours_keep_strings_and_need_a_background() {
+        let mut colors: HashMap<String, Value> = HashMap::new();
+        colors.insert("editor.background".into(), Value::from("#191724"));
+        colors.insert("sideBar.background".into(), Value::from("#1f1d2e"));
+        colors.insert("editor.lineHighlightBorder".into(), Value::Null);
+        let workbench = workbench_colors(&colors).expect("has a background");
+        assert_eq!(workbench.get("sideBar.background").map(String::as_str), Some("#1f1d2e"));
+        assert!(!workbench.contains_key("editor.lineHighlightBorder"));
+        colors.remove("editor.background");
+        assert!(workbench_colors(&colors).is_none());
     }
 
     #[test]

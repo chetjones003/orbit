@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { sanitizeIssueHtml } from './sanitize-issue-html';
 import { renderMermaidSvg } from './mermaid-render';
+import { targetFromUrl } from '../hovercard/hovercard-model';
 
 /**
  * Sanitized GitHub HTML. Links are routed through `onLink`; long bodies collapse behind Show full.
@@ -71,6 +72,17 @@ export function RichBody({
     () => withDiagrams(clean, drawn, sourceShown, viewOnGitHubUrl),
     [clean, drawn, sourceShown, viewOnGitHubUrl]
   );
+
+  // Links to issues and pull requests are marked, so they read as references (and open a hover card).
+  useEffect(() => {
+    const node = bodyRef.current;
+    if (!node) return;
+    for (const anchor of node.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+      const target = targetFromUrl(anchor.getAttribute('href') ?? '');
+      if (!target) continue;
+      anchor.classList.add('ref-link', target.kind === 'pull' ? 'ref-pull' : 'ref-issue');
+    }
+  }, [shown]);
 
   // Sanitizing disables every checkbox. Editable bodies re-enable them and report changes natively,
   // because React does not own the markup inside dangerouslySetInnerHTML.

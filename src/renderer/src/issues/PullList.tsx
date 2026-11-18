@@ -4,6 +4,7 @@ import { NewPullForm } from './NewPullForm';
 import { publishItemCreated } from '../shell/list-events';
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 export function PullList({
   repoFullName,
@@ -121,6 +122,7 @@ export function PullList({
         {result?.items.map((pull: PullSummary) => (
           <li key={pull.id}>
             <button
+              {...hovercardProps(repoFullName, pull.number, 'pull')}
               className={`issue-row ${selectedNumber === pull.number ? 'selected' : ''}`}
               onClick={() => onOpenPull(pull.number)}
             >

@@ -84,7 +84,8 @@ describe('CustomViewPanel, Gantt', () => {
       view: view({ startFieldId: 'FLD_start', targetFieldId: 'FLD_due' }),
       items: [item('a', 'Ship it', { FLD_start: date('2026-11-10'), FLD_due: date('2026-11-12') })]
     });
-    expect(screen.getByRole('region', { name: 'Unscheduled' })).toBeDefined();
+    // Every item has dates, so there is no list of items without them.
+    expect(screen.queryByRole('region', { name: 'Unscheduled' })).toBeNull();
     expect(screen.getByLabelText('Ship it, 2026-11-10 to 2026-11-12')).toBeDefined();
   });
 
@@ -120,7 +121,7 @@ describe('CustomViewPanel, Calendar', () => {
       view: view({ layout: 'calendar', calendarFieldId: 'FLD_due', calendarScale: 'week' }),
       items: [item('a', 'Ship it', { FLD_due: date('2026-11-12') })]
     });
-    expect(screen.getByText('Week of 2026-11-09')).toBeDefined();
+    expect(screen.getByText('Nov 9 – 15, 2026')).toBeDefined();
     expect(within(screen.getByRole('gridcell', { name: '2026-11-12' })).getByText('Ship it')).toBeDefined();
   });
 

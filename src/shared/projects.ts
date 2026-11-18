@@ -4,6 +4,8 @@
  * use the table or board layout; roadmap views and custom Orbit views are outside this module.
  */
 
+import type { IssueLabel } from './issues';
+
 export interface ProjectSummary {
   /** GitHub node id. */
   id: string;
@@ -92,6 +94,8 @@ export interface ProjectItem {
   htmlUrl: string | null;
   state: 'open' | 'closed' | 'merged';
   isDraft: boolean;
+  /** The issue or pull request's labels. Empty for drafts. */
+  labels: IssueLabel[];
   /** Field values keyed by field id. A field with no value is absent. */
   fieldValues: Record<string, ProjectFieldValue>;
 }

@@ -170,6 +170,38 @@ describe('GanttView, from start and target dates', () => {
     expect(onEdit.mock.calls[0]?.[2]).toEqual({ kind: 'date', date: '2026-05-08' });
   });
 
+  it('moves a focused bar a day with the arrow keys, and its end with Shift', async () => {
+    const { onEdit } = renderGantt({
+      items: [item('a', 'Write docs', { FLD_start: date('2026-05-04'), FLD_due: date('2026-05-08') })]
+    });
+    const bar = screen.getByLabelText('Write docs, 2026-05-04 to 2026-05-08');
+    fireEvent.keyDown(bar, { key: 'ArrowRight', shiftKey: true });
+    await vi.waitFor(() => expect(onEdit).toHaveBeenCalledTimes(1));
+    expect(onEdit.mock.calls[0]?.[1].id).toBe('FLD_due');
+    expect(onEdit.mock.calls[0]?.[2]).toEqual({ kind: 'date', date: '2026-05-09' });
+  });
+
+  it('schedules an item without dates on the day clicked in its row', async () => {
+    const { onEdit } = renderGantt({
+      items: [item('b', 'Plan release', { FLD_start: date('2026-05-04') })]
+    });
+    const row = screen
+      .getByRole('region', { name: 'Unscheduled' })
+      .querySelector('.gantt-place') as HTMLElement;
+    // The timeline starts three days before today (2026-05-07); the click lands in its third day.
+    fireEvent.click(row, { clientX: 2 * GANTT_DAY_WIDTH + 1 });
+    await vi.waitFor(() => expect(onEdit).toHaveBeenCalledTimes(1));
+    expect(onEdit.mock.calls[0]?.[2]).toEqual({ kind: 'date', date: '2026-05-09' });
+  });
+
+  it('switches zoom between week, month and quarter', () => {
+    renderGantt();
+    const week = screen.getByRole('button', { name: 'Week' });
+    expect(screen.getByRole('button', { name: 'Month' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(week);
+    expect(week.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('stops a multi-field change when the first save fails, so the bar is not half written', async () => {
     const onEdit = vi.fn<GanttViewProps['onEdit']>(async () => null);
     renderGantt({

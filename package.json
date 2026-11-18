@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Orbit: a desktop GitHub issue and PR client for personal repos",
   "private": true,
   "author": "Chet Jones",
@@ -26,6 +26,7 @@
     "fake-check": "node scripts/fake-github/check-dev.mjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "6.20.4",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/language": "6.13.1",

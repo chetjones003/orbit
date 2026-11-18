@@ -105,6 +105,22 @@ function installBridge(
 }
 
 describe('App', () => {
+  it('changes notification settings with the switch controls', async () => {
+    const { api } = installBridge({
+      status: { kind: 'signed-in', sessionId: 1, login: 'chet', persistent: true }
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    const notifications = screen.getByRole('switch', { name: 'Desktop notifications' });
+    fireEvent.click(notifications);
+    await waitFor(() => expect(api.settings.update).toHaveBeenCalledWith({ desktopNotifications: true }));
+    await waitFor(() => expect(notifications).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(notifications);
+    await waitFor(() =>
+      expect(api.settings.update).toHaveBeenLastCalledWith({ desktopNotifications: false })
+    );
+  });
+
   beforeEach(() => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -319,6 +335,12 @@ describe('App', () => {
     expect(api.repos.list).toHaveBeenCalledOnce();
     expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Lists' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: 'Search issues and pull requests' });
+    await waitFor(() => expect(search).toHaveFocus());
+    fireEvent.keyDown(search, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).not.toBeInTheDocument());
   });
 
   it('pins repositories, filters forks and archived repos, and shows archived repositories as read only', async () => {

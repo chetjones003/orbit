@@ -1,7 +1,9 @@
 import type { ProjectField, ProjectFieldInput, ProjectItem } from '../../../shared/projects';
 import { openableKind } from './project-model';
+import { ProjectCardLabels } from './ProjectCardLabels';
 import type { ItemGroup } from './custom-view-model';
 import { cardRows, useCardDrag } from './card-drag';
+import { hovercardProps } from '../hovercard/hovercard-model';
 
 export interface KanbanViewProps {
   /** The field whose values are the columns. */
@@ -128,6 +130,7 @@ export function KanbanView({
                   <button
                     type="button"
                     className="link-button"
+                    {...hovercardProps(item.repoFullName, item.number, kind)}
                     onClick={() => onOpen(item.repoFullName as string, item.number as number, kind)}
                   >
                     {item.title}
@@ -141,6 +144,7 @@ export function KanbanView({
                   {item.repoFullName}#{item.number}
                 </p>
               )}
+              <ProjectCardLabels item={item} />
             </article>
           );
         })}

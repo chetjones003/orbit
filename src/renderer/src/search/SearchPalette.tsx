@@ -13,7 +13,7 @@ export interface SearchPaletteProps {
   repos: RepoRef[];
   selected: SearchSelection | null;
   onOpenItem(item: InboxItem): void;
-  /** Escape, a click outside the dialog, Close search, or choosing a result. Clears the search. */
+  /** Escape, a click outside the dialog, or choosing a result. Clears the search. */
   onClose(): void;
 }
 
@@ -71,7 +71,6 @@ export function SearchPalette({
             onChange={(event) => onTextChange(event.target.value)}
             onKeyDown={onInputKey}
           />
-          <kbd className="search-palette-key">Esc</kbd>
         </div>
         <div className="search-palette-body" ref={bodyRef} onKeyDown={onBodyKey}>
           <SearchView
@@ -84,8 +83,26 @@ export function SearchPalette({
               onClose();
             }}
             onClose={onClose}
+            showClose={false}
           />
         </div>
+        <footer className="search-palette-foot" aria-hidden="true">
+          <span>
+            <kbd>
+              <Icon name="arrowUp" size={12} />
+            </kbd>
+            <kbd>
+              <Icon name="arrowDown" size={12} />
+            </kbd>
+            Navigate
+          </span>
+          <span>
+            <kbd>Enter</kbd> Open
+          </span>
+          <span>
+            <kbd>Esc</kbd> Close
+          </span>
+        </footer>
       </DialogContent>
     </Dialog>
   );

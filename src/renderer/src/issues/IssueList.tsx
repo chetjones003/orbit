@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { IssueListPage, IssueListQuery, IssueStateFilter, IssueSummary } from '../../../shared/issues';
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
+import { hovercardUrlProps } from '../hovercard/hovercard-model';
 
 export interface IssueListProps {
   repoFullName: string;
@@ -180,6 +181,7 @@ function IssueRow({
 }) {
   return (
     <button
+      {...hovercardUrlProps(issue.htmlUrl)}
       className={`issue-row ${selected ? 'selected' : ''}`}
       onClick={onOpen}
       aria-current={selected ? 'true' : undefined}

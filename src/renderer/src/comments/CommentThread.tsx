@@ -9,6 +9,7 @@ import { markColor, markLetters } from '../shell/repo-mark';
 import { Composer } from './Composer';
 import { appToaster, TOAST_MS } from '../toasts/app-toaster';
 import { drafts, type DraftKey } from './draft-store';
+import { SectionHead } from '../issues/SectionHead';
 
 export interface CommentThreadProps {
   repoFullName: string;
@@ -22,7 +23,7 @@ export interface CommentThreadProps {
   viewOnGitHubUrl: string;
   /** Links inside comments and previews go through the same routing as the issue body. */
   onLink: (href: string) => void;
-  /** Writes are offered only where comment support exists (issues in this slice). */
+  /** Whether the composer and Edit/Delete are offered. Issues and pull requests both allow them. */
   canWrite: boolean;
   /** The login of the issue's author, shown as an Author badge on their comments. */
   issueAuthorLogin?: string;
@@ -62,6 +63,10 @@ export function CommentThread({
   const newKey: DraftKey = { login: signedInLogin, repoFullName, kind: 'issue', number, target: 'new' };
   const editKey = (commentId: number): DraftKey => ({ ...newKey, target: { commentId } });
   const previewText = (text: string): Promise<string> => window.orbit.markdown.preview(repoFullName, text);
+  // Everyone in the conversation, newest first, suggested before anyone else after `@`. Not the signed-in user.
+  const people = [
+    ...new Set([...comments.map((comment) => comment.authorLogin).reverse(), issueAuthorLogin ?? ''])
+  ].filter((login) => login !== '' && login !== signedInLogin);
 
   const replace = (next: IssueComment): void =>
     setComments((list) => list.map((item) => (item.id === next.id ? next : item)));
@@ -174,7 +179,7 @@ export function CommentThread({
 
   return (
     <section aria-label="Comments" className="issue-comments">
-      <h3>{count === 1 ? '1 comment' : `${count} comments`}</h3>
+      <SectionHead icon="comment" title="Comments" count={count} />
       {commentsPartial && (
         <p className="session-notice" role="note">
           Only the first 100 comments are shown. Open the issue on GitHub to read the rest.
@@ -187,73 +192,78 @@ export function CommentThread({
         const isOwner = comment.authorLogin === repoFullName.split('/')[0];
         const isAuthor = issueAuthorLogin !== undefined && comment.authorLogin === issueAuthorLogin;
         return (
-          <div className="issue-comment" key={comment.id}>
-            <div className="comment-head">
-              <div className="comment-byline">
-                <RepoMark
-                  letters={markLetters(comment.authorLogin)}
-                  color={markColor(comment.authorLogin)}
-                  size={24}
-                />
-                <strong className="comment-author">@{comment.authorLogin}</strong>
-                {isOwner && <span className="comment-role">Owner</span>}
-                {isAuthor && <span className="comment-role">Author</span>}
-                <span className="comment-action">commented</span>
-                <time
-                  className="comment-time"
-                  dateTime={comment.createdAt}
-                  title={new Date(comment.createdAt).toLocaleString()}
-                >
-                  {relativeTime(comment.createdAt)}
-                </time>
-              </div>
-              {mine && (
-                <CommentMenu
-                  onEdit={() => {
-                    setActionError(null);
-                    setConflict(null);
-                    setEditingId(comment.id);
-                  }}
-                  onDelete={() => void remove(comment)}
-                />
-              )}
-            </div>
-            {editing ? (
-              <div className="comment-edit">
-                <Composer
-                  draftKey={editKey(comment.id)}
-                  initialText={comment.body}
-                  placeholder="Edit this comment"
-                  ariaLabel="Edit comment"
-                  submitLabel="Save edit"
-                  previewText={previewText}
-                  onSubmit={(text) => saveEdit(comment, text)}
-                  onCancel={() => void cancelEdit(comment)}
-                  onExternalLink={onLink}
-                  viewOnGitHubUrl={viewOnGitHubUrl}
-                  attachTo={{ repoFullName }}
-                />
-                {conflict?.commentId === comment.id && (
-                  <ConflictPanel
-                    conflict={conflict}
-                    viewOnGitHubUrl={viewOnGitHubUrl}
-                    onLink={onLink}
-                    onViewTheirs={() => setConflict({ ...conflict, showTheirs: true })}
-                    onOverwrite={() => void overwrite()}
-                    onCopyMine={() => void copyMine()}
+          <div className={`issue-comment${mine ? ' mine' : ''}`} key={comment.id}>
+            <span className="comment-avatar">
+              <RepoMark
+                letters={markLetters(comment.authorLogin)}
+                color={markColor(comment.authorLogin)}
+                size={28}
+              />
+            </span>
+            <div className="comment-card">
+              <div className="comment-head">
+                <div className="comment-byline">
+                  <strong className="comment-author">@{comment.authorLogin}</strong>
+                  {isOwner && <span className="comment-role">Owner</span>}
+                  {isAuthor && <span className="comment-role">Author</span>}
+                  <span className="comment-action">commented</span>
+                  <time
+                    className="comment-time"
+                    dateTime={comment.createdAt}
+                    title={new Date(comment.createdAt).toLocaleString()}
+                  >
+                    {relativeTime(comment.createdAt)}
+                  </time>
+                </div>
+                {mine && (
+                  <CommentMenu
+                    onEdit={() => {
+                      setActionError(null);
+                      setConflict(null);
+                      setEditingId(comment.id);
+                    }}
+                    onDelete={() => void remove(comment)}
                   />
                 )}
               </div>
-            ) : (
-              <>
-                <RichBody
-                  html={comment.bodyHtml}
-                  viewOnGitHubUrl={comment.htmlUrl || viewOnGitHubUrl}
-                  onLink={onLink}
-                  emptyText=""
-                />
-              </>
-            )}
+              {editing ? (
+                <div className="comment-edit">
+                  <Composer
+                    draftKey={editKey(comment.id)}
+                    initialText={comment.body}
+                    placeholder="Edit this comment"
+                    ariaLabel="Edit comment"
+                    submitLabel="Save edit"
+                    previewText={previewText}
+                    onSubmit={(text) => saveEdit(comment, text)}
+                    onCancel={() => void cancelEdit(comment)}
+                    onExternalLink={onLink}
+                    viewOnGitHubUrl={viewOnGitHubUrl}
+                    attachTo={{ repoFullName }}
+                    people={people}
+                  />
+                  {conflict?.commentId === comment.id && (
+                    <ConflictPanel
+                      conflict={conflict}
+                      viewOnGitHubUrl={viewOnGitHubUrl}
+                      onLink={onLink}
+                      onViewTheirs={() => setConflict({ ...conflict, showTheirs: true })}
+                      onOverwrite={() => void overwrite()}
+                      onCopyMine={() => void copyMine()}
+                    />
+                  )}
+                </div>
+              ) : (
+                <>
+                  <RichBody
+                    html={comment.bodyHtml}
+                    viewOnGitHubUrl={comment.htmlUrl || viewOnGitHubUrl}
+                    onLink={onLink}
+                    emptyText=""
+                  />
+                </>
+              )}
+            </div>
           </div>
         );
       })}
@@ -278,6 +288,7 @@ export function CommentThread({
             onExternalLink={onLink}
             viewOnGitHubUrl={viewOnGitHubUrl}
             attachTo={{ repoFullName }}
+            people={people}
           />
         </div>
       )}

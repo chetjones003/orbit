@@ -87,7 +87,11 @@ export function SidePanel({
       <aside className="item-side-panel" aria-label={`${label} #${item.number} in ${item.repoFullName}`}>
         <header className="item-side-head">
           <span className="item-side-ref">
-            {item.repoFullName}#{item.number}
+            <Icon name={item.kind === 'pull' ? 'pull' : 'issue'} size={14} />
+            <span className="item-side-kind">{label}</span>
+            <span className="item-side-repo">
+              {item.repoFullName} <span className="item-side-number">#{item.number}</span>
+            </span>
           </span>
           <button
             type="button"

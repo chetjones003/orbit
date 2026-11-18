@@ -35,6 +35,8 @@ pub struct OrbitSettings {
     pub monospace_font: String,
     pub monospace_font_size: u32,
     pub word_wrap: bool,
+    /// When an issue or pull request card opens on hover: "off", "quick", "normal" or "slow".
+    pub hover_cards: String,
     /// Closing the window hides Orbit to the tray, when the tray is available.
     pub close_to_tray: bool,
     /// Shows a Windows notification for new GitHub activity while the window is hidden or unfocused.
@@ -66,6 +68,7 @@ impl Default for OrbitSettings {
             monospace_font: "code-new-roman".into(),
             monospace_font_size: 13,
             word_wrap: true,
+            hover_cards: "normal".into(),
             close_to_tray: true,
             desktop_notifications: true,
             poll_minutes: 1,
@@ -94,6 +97,7 @@ pub struct SettingsUpdate {
     pub monospace_font: Option<String>,
     pub monospace_font_size: Option<u32>,
     pub word_wrap: Option<bool>,
+    pub hover_cards: Option<String>,
     pub close_to_tray: Option<bool>,
     pub desktop_notifications: Option<bool>,
     pub poll_minutes: Option<u32>,
@@ -183,6 +187,9 @@ impl SettingsStore {
         }
         if let Some(v) = update.word_wrap {
             next.word_wrap = v;
+        }
+        if let Some(v) = update.hover_cards {
+            next.hover_cards = v;
         }
         if let Some(v) = update.close_to_tray {
             next.close_to_tray = v;
@@ -354,6 +361,7 @@ pub fn normalize(value: serde_json::Value) -> OrbitSettings {
         monospace_font: pick("monospaceFont", MONO_FONTS, &defaults.monospace_font),
         monospace_font_size: uint_of("monospaceFontSize", MONO_SIZES, defaults.monospace_font_size),
         word_wrap: obj.get("wordWrap").and_then(|v| v.as_bool()) != Some(false),
+        hover_cards: pick("hoverCards", &["off", "quick", "normal", "slow"], &defaults.hover_cards),
         close_to_tray: obj.get("closeToTray").and_then(|v| v.as_bool()) != Some(false),
         desktop_notifications: obj.get("desktopNotifications").and_then(|v| v.as_bool()) != Some(false),
         poll_minutes: {
@@ -375,6 +383,13 @@ pub fn normalize(value: serde_json::Value) -> OrbitSettings {
 mod tests {
     use super::normalize;
     use serde_json::json;
+
+    #[test]
+    fn hover_cards_keep_a_known_speed_or_fall_back_to_normal() {
+        assert_eq!(normalize(json!({})).hover_cards, "normal");
+        assert_eq!(normalize(json!({ "hoverCards": "off" })).hover_cards, "off");
+        assert_eq!(normalize(json!({ "hoverCards": "instant" })).hover_cards, "normal");
+    }
 
     #[test]
     fn contrast_and_glass_keep_defaults_and_clamp_to_range() {

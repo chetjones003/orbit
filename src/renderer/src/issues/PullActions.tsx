@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { confirm } from '@ui-sdk/react/alert-dialog';
 import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
+import { SectionHead } from './SectionHead';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
   merge: 'Merge commit',
@@ -144,8 +145,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
 
   return (
     <section aria-label="Pull request actions" className="detail-card pull-actions">
-      <div className="pull-actions-head">
-        <h3 className="detail-card-title">Merge</h3>
+      <SectionHead icon="merge" title="Merge">
         {open && (
           <button
             type="button"
@@ -156,7 +156,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
             {actions.draft ? 'Mark ready for review' : 'Convert to draft'}
           </button>
         )}
-      </div>
+      </SectionHead>
       {!open ? (
         <p className="detail-muted">
           {actions.merged ? 'This pull request is merged.' : 'This pull request is closed.'}

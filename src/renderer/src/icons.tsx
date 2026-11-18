@@ -58,6 +58,38 @@ const PATHS = {
   chevronLeft: <path d="M14.5 6 8.5 12l6 6" />,
   chevronDown: <path d="M6 9.5 12 15.5l6-6" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  sliders: (
+    <>
+      <path d="M20 7h-9M14 17H5" />
+      <circle cx="17" cy="17" r="3" />
+      <circle cx="7" cy="7" r="3" />
+    </>
+  ),
+  palette: (
+    <>
+      <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+      <circle cx="13.5" cy="6.5" r="0.6" fill="currentColor" />
+      <circle cx="17.5" cy="10.5" r="0.6" fill="currentColor" />
+      <circle cx="6.5" cy="12.5" r="0.6" fill="currentColor" />
+      <circle cx="8.5" cy="7.5" r="0.6" fill="currentColor" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M7 20.7V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.7" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
+  arrowUp: <path d="M12 19V5M5 12l7-7 7 7" />,
+  arrowDown: <path d="M12 5v14M19 12l-7 7-7-7" />,
+  reset: <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5" />,
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />

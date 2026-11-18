@@ -41,7 +41,7 @@ import { SideList, type ItemRef } from './shell/SideList';
 import { SidePanelStack } from './shell/SidePanelStack';
 import { motionMode, useSystemReducedMotion } from './shell/motion';
 import { resolveColorScheme, useSystemPrefersDark } from './shell/theme';
-import { PALETTE_PROPERTY_NAMES, paletteVariables, type CustomTheme } from '../../shared/themes';
+import { paletteVariables, themeColorsFor, type CustomTheme } from '../../shared/themes';
 import type { IssueStateFilter } from '../../shared/issues';
 import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
@@ -55,6 +55,7 @@ import {
 } from '@ui-sdk/react/segmented-control';
 import { ListResizeHandle } from './shell/ListResizeHandle';
 import { clampListWidth, readStoredListWidth, storeListWidth } from './shell/side-list-width';
+import { HoverCardLayer } from './hovercard/HoverCardLayer';
 
 /** The issue shown in the details panel or the expanded view. */
 interface IssueRef {
@@ -462,18 +463,6 @@ export function App() {
   const resolvedScheme = resolveColorScheme(settings?.colorScheme ?? 'dark', systemPrefersDark);
   const palette = settings?.palette ?? 'orbit';
   const customTheme = settings?.customThemes.find((theme) => theme.id === palette);
-  useEffect(() => {
-    const root = document.documentElement;
-    root.dataset['theme'] = resolvedScheme;
-    root.dataset['palette'] = palette;
-    // A custom theme sets its colours on the page. Clear the last ones first, so a built-in palette shows its own.
-    for (const name of PALETTE_PROPERTY_NAMES) root.style.removeProperty(name);
-    if (customTheme) {
-      for (const [name, value] of Object.entries(paletteVariables(customTheme[resolvedScheme]))) {
-        root.style.setProperty(name, value);
-      }
-    }
-  }, [resolvedScheme, palette, customTheme]);
 
   // The interface font goes on the document as well as the app frame, so dialogs (portalled to the body) use it too.
   const interfaceFont = settings?.interfaceFont ?? 'inter';
@@ -489,48 +478,39 @@ export function App() {
     };
   }, [interfaceFont, interfaceFontSize]);
 
-  // Contrast and glass go on the document, so dialogs and menus (portalled to the body) follow too. This runs after the
-  // theme effect above, so it adjusts the colours that theme has just set.
+  // The palette goes on the document, so dialogs and menus (portalled to the body) follow too. Contrast and glass
+  // adjust the palette's own colours, so all three are applied together.
   useEffect(() => {
     const root = document.documentElement;
-    const computed = getComputedStyle(root);
-    root.style.setProperty('--glass-opacity', String(glassSetting));
-    root.style.setProperty('--glass-blur', `${((100 - glassSetting) * 0.16).toFixed(2)}px`);
-    // Read the theme's own colours before anything below overrides them.
-    const surface = computed.getPropertyValue('--surface').trim();
-    const raised = computed.getPropertyValue('--raised').trim();
-    const properties = contrastProperties(contrastSetting, {
-      line: computed.getPropertyValue('--line').trim(),
-      muted: computed.getPropertyValue('--muted').trim(),
-      subtle: computed.getPropertyValue('--subtle').trim(),
-      text: computed.getPropertyValue('--text').trim(),
+    root.dataset['theme'] = resolvedScheme;
+    root.dataset['palette'] = palette;
+    const colors = themeColorsFor(palette, customTheme ? [customTheme] : [], resolvedScheme);
+    const variables = paletteVariables(colors);
+    const surface = variables['--surface']!;
+    const contrast = contrastProperties(contrastSetting, {
+      line: variables['--line']!,
+      muted: variables['--muted']!,
+      subtle: variables['--subtle']!,
+      text: variables['--text']!,
       surface
     });
     // Surfaces are translucent below 100, so every panel, card and menu that uses them lets the window show through.
-    const glassSurfaces: Record<string, string> = {};
-    const translucentSurface = glassSurface(glassSetting, surface);
-    const translucentRaised = glassSurface(glassSetting, raised);
-    if (translucentSurface) glassSurfaces['--surface'] = translucentSurface;
-    if (translucentRaised) glassSurfaces['--raised'] = translucentRaised;
-    // The solid surface stays opaque under glass, for areas that must hide what scrolls beneath them.
-    if (surface) glassSurfaces['--surface-solid'] = surface;
-    for (const [name, value] of Object.entries({ ...properties, ...glassSurfaces })) {
-      root.style.setProperty(name, value);
+    // The solid surface stays opaque, for areas that must hide what scrolls beneath them.
+    const glass: Record<string, string> = { '--surface-solid': surface };
+    for (const name of ['--surface', '--raised', '--overlay']) {
+      const translucent = glassSurface(glassSetting, variables[name]!);
+      if (translucent) glass[name] = translucent;
     }
+    const applied: Record<string, string> = {
+      ...variables,
+      ...contrast,
+      ...glass,
+      '--glass-opacity': String(glassSetting),
+      '--glass-blur': `${((100 - glassSetting) * 0.16).toFixed(2)}px`
+    };
+    for (const [name, value] of Object.entries(applied)) root.style.setProperty(name, value);
     return () => {
-      for (const name of [
-        '--glass-opacity',
-        '--glass-blur',
-        '--line',
-        '--muted',
-        '--subtle',
-        '--text',
-        '--surface',
-        '--raised',
-        '--surface-solid'
-      ]) {
-        root.style.removeProperty(name);
-      }
+      for (const name of Object.keys(applied)) root.style.removeProperty(name);
     };
   }, [resolvedScheme, palette, customTheme, contrastSetting, glassSetting]);
 
@@ -722,6 +702,16 @@ export function App() {
               width={shownListWidth}
               onResize={(next) => setListWidth(clampListWidth(next, window.innerWidth))}
             />
+            <button
+              type="button"
+              className="sidebar-search"
+              aria-label="Search (Ctrl+K)"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Icon name="search" size={16} />
+              <span>Search</span>
+              <kbd>Ctrl K</kbd>
+            </button>
             <div className="side-list-scroll">
               {view === 'projects' ? (
                 <section className="side-list-body projects-side" aria-label="Projects">
@@ -743,7 +733,6 @@ export function App() {
                   }}
                   onContextMenu={(item, x, y) => setItemMenu({ item, x, y })}
                   onRefreshRepos={refreshNow}
-                  onSearch={() => setSearchOpen(true)}
                   state={stateFilter}
                 />
               )}
@@ -759,39 +748,42 @@ export function App() {
           {status?.kind === 'signed-in' && (view === 'issues' || view === 'pulls') && (
             <div className="scope-bar">
               {import.meta.env.DEV && (
-                <div className="dev-notification-controls">
-                  <button
-                    className="secondary-action"
-                    onClick={() => showToast('This is a simulated success toast.', 'success')}
-                  >
-                    Success toast
-                  </button>
-                  <button
-                    className="secondary-action"
-                    onClick={() => showToast('This is a simulated error toast.', 'error')}
-                  >
-                    Error toast
-                  </button>
-                  <button
-                    className="secondary-action"
-                    onClick={() => showToast('This is a simulated info toast.', 'info')}
-                  >
-                    Info toast
-                  </button>
-                  <button
-                    className="secondary-action"
-                    onClick={() => {
-                      playNotificationSound('info');
-                      if ('Notification' in window)
-                        new Notification('Orbit test notification', {
-                          body: 'This is a simulated system notification.'
-                        });
-                      else showToast('System notifications are unavailable in this environment.', 'info');
-                    }}
-                  >
-                    Simulate system notification
-                  </button>
-                </div>
+                <details className="dev-tools">
+                  <summary>Developer tools</summary>
+                  <div className="dev-notification-controls">
+                    <button
+                      className="secondary-action"
+                      onClick={() => showToast('This is a simulated success toast.', 'success')}
+                    >
+                      Success toast
+                    </button>
+                    <button
+                      className="secondary-action"
+                      onClick={() => showToast('This is a simulated error toast.', 'error')}
+                    >
+                      Error toast
+                    </button>
+                    <button
+                      className="secondary-action"
+                      onClick={() => showToast('This is a simulated info toast.', 'info')}
+                    >
+                      Info toast
+                    </button>
+                    <button
+                      className="secondary-action"
+                      onClick={() => {
+                        playNotificationSound('info');
+                        if ('Notification' in window)
+                          new Notification('Orbit test notification', {
+                            body: 'This is a simulated system notification.'
+                          });
+                        else showToast('System notifications are unavailable in this environment.', 'info');
+                      }}
+                    >
+                      Simulate system notification
+                    </button>
+                  </div>
+                </details>
               )}
               <label className="scope-field">
                 <span>Repository</span>
@@ -1078,6 +1070,10 @@ export function App() {
             />
           )}
           <AppToasts />
+          <HoverCardLayer
+            speed={settings?.hoverCards ?? 'normal'}
+            onOpen={(repoFullName, number, kind) => pickItem({ repoFullName, number, kind })}
+          />
           <OverlayHost />
           <NotificationToasts
             toasts={notificationToasts}
@@ -1136,6 +1132,7 @@ export function App() {
             customThemes={settings.customThemes}
             systemPrefersDark={systemPrefersDark}
             openItemsIn={settings.openItemsIn}
+            hoverCards={settings.hoverCards}
             motion={settings.motion}
             interfaceFont={settings.interfaceFont}
             interfaceFontSize={settings.interfaceFontSize}
@@ -1176,6 +1173,9 @@ export function App() {
             }}
             onOpenItemsIn={(openItemsIn) =>
               void updateSettings({ openItemsIn }).catch(() => setActionError('Could not save this setting.'))
+            }
+            onHoverCards={(hoverCards) =>
+              void updateSettings({ hoverCards }).catch(() => setActionError('Could not save this setting.'))
             }
             onMotion={(motion) =>
               void updateSettings({ motion }).catch(() => setActionError('Could not save this setting.'))

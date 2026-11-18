@@ -292,16 +292,27 @@ describe('IssueDetailView comments', () => {
     expect(screen.getByText('Original text')).toBeInTheDocument();
   });
 
-  it('shows no composer or comment actions on pull requests yet', async () => {
+  it('posts a comment on a pull request, as on an issue', async () => {
     renderView('pull');
     await screen.findByText('Original text');
 
-    expect(screen.queryByRole('textbox', { name: 'Write a comment' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Comment options' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment' }), {
+      target: { value: 'Looks good once CI passes.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByText('Looks good once CI passes.')).toBeInTheDocument();
+    expect(api.comments.create).toHaveBeenCalledWith('orbit-owner/app', 4, 'Looks good once CI passes.');
+  });
+
+  it("offers Edit and Delete on the signed-in user's own pull request comments", async () => {
+    renderView('pull');
+    await screen.findByText('Original text');
+
     expect(
-      within(screen.getByRole('region', { name: 'Comments' })).queryByRole('button', {
+      within(screen.getByRole('region', { name: 'Comments' })).getAllByRole('button', {
         name: 'Comment options'
-      })
-    ).toBeNull();
+      }).length
+    ).toBeGreaterThan(0);
   });
 });
