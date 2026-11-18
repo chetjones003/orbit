@@ -218,6 +218,35 @@ pub fn to_workflow_run(v: &Value) -> Option<WorkflowRun> {
     })
 }
 
+/// GitHub keeps every run a commit ever triggered: runs a newer push or event superseded through a concurrency
+/// group (cancelled, often with no jobs), and runs whose trigger matched but whose `if:` skipped every job. The pull
+/// request page shows one run per workflow, so keep the newest run of each workflow, preferring one that did more
+/// than skip. Order follows the newest kept run first.
+pub fn current_workflow_runs(raw: &[Value]) -> Vec<WorkflowRun> {
+    let mut newest_first: Vec<&Value> = raw.iter().collect();
+    newest_first.sort_by(|a, b| {
+        let key = |v: &Value| (s(v, "created_at").unwrap_or_default(), u(v, "id").unwrap_or(0));
+        key(b).cmp(&key(a))
+    });
+    let mut kept: Vec<(String, &Value)> = Vec::new();
+    for run in newest_first {
+        let workflow = u(run, "workflow_id")
+            .map(|id| id.to_string())
+            .or_else(|| s(run, "name"))
+            .unwrap_or_default();
+        let skipped = s(run, "conclusion").as_deref() == Some("skipped");
+        match kept.iter_mut().find(|(key, _)| *key == workflow) {
+            None => kept.push((workflow, run)),
+            Some((_, current)) => {
+                if s(current, "conclusion").as_deref() == Some("skipped") && !skipped {
+                    *current = run;
+                }
+            }
+        }
+    }
+    kept.into_iter().filter_map(|(_, run)| to_workflow_run(run)).collect()
+}
+
 // ---- Input checks. Run before any request, so a bad value never reaches GitHub. ----
 
 pub fn validate_repo(repo_full_name: &str) -> Result<(String, String), String> {
@@ -397,6 +426,30 @@ pub fn enc(text: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn keeps_the_current_run_of_each_workflow() {
+        let run = |id: u64, workflow: u64, name: &str, created: &str, conclusion: &str| {
+            json!({ "id": id, "workflow_id": workflow, "name": name, "status": "completed",
+                    "conclusion": conclusion, "created_at": created, "html_url": "" })
+        };
+        let raw = vec![
+            run(5, 1, "pr-checks", "2026-11-17T05:00:00Z", "success"),
+            run(4, 1, "pr-checks", "2026-11-17T04:00:00Z", "cancelled"),
+            run(6, 2, "PR Agent", "2026-11-17T06:00:00Z", "skipped"),
+            run(3, 2, "PR Agent", "2026-11-17T03:00:00Z", "success"),
+            run(2, 2, "PR Agent", "2026-11-17T02:00:00Z", "skipped"),
+            run(7, 3, "full-validation", "2026-11-17T07:00:00Z", "cancelled"),
+            run(1, 3, "full-validation", "2026-11-17T01:00:00Z", "success"),
+            run(8, 4, "lint", "2026-11-17T08:00:00Z", "skipped"),
+        ];
+        let kept: Vec<(u64, String)> =
+            current_workflow_runs(&raw).into_iter().map(|r| (r.id, r.name)).collect();
+        assert_eq!(
+            kept,
+            vec![(8, "lint".into()), (7, "full-validation".into()), (3, "PR Agent".into()), (5, "pr-checks".into())]
+        );
+    }
 
     #[test]
     fn repo_names_are_checked() {

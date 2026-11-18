@@ -1405,13 +1405,8 @@ pub async fn get_pull_workflow_runs(ctx: &Ctx, repo_full_name: &str, number: u64
         ),
     )
     .await?;
-    Ok(raw
-        .get("workflow_runs")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(to_workflow_run)
-        .collect())
+    let runs = raw.get("workflow_runs").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    Ok(current_workflow_runs(runs))
 }
 
 /// Re-runs a run, all of it or only failed jobs, only while it still belongs to the reviewed commit. A re-run is not

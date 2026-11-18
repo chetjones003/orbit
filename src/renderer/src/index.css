@@ -6,8 +6,10 @@
   themes: false;
   logs: false;
   /* daisyUI's root scrollbar-color is inherited everywhere, and Chromium then ignores ::-webkit-scrollbar, so it would
-     replace T3 Code's scrollbars (below) with its own brighter ones. */
-  exclude: scrollbar;
+     replace T3 Code's scrollbars (below) with its own brighter ones. Its `diff` component (an image comparison
+     slider) styles every `.diff` as a grid, which is react-diff-view's table class, so the hunks of a pull
+     request diff were laid out as grid cells on top of each other. */
+  exclude: scrollbar, diff;
 }
 /* Match T3 Code's neutral surfaces and blue actions in both schemes. */
 @plugin "daisyui/theme" {
