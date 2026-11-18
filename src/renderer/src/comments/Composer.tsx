@@ -72,7 +72,7 @@ const TOOLBAR: Array<{
   { kind: 'bold', label: 'Bold', glyph: 'B', shortcut: 'Ctrl/Cmd+B' },
   { kind: 'italic', label: 'Italic', glyph: 'I', shortcut: 'Ctrl/Cmd+I' },
   { kind: 'code', label: 'Code', glyph: '<>', shortcut: 'Ctrl/Cmd+E' },
-  { kind: 'link', label: 'Link', icon: 'link', shortcut: 'Ctrl/Cmd+K' },
+  { kind: 'link', label: 'Link', icon: 'link', shortcut: 'Ctrl/Cmd+L' },
   { kind: 'quote', label: 'Quote', icon: 'quote' },
   { kind: 'bullet', label: 'Bulleted list', icon: 'bullet' },
   { kind: 'numbered', label: 'Numbered list', glyph: '1.' },

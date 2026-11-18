@@ -35,7 +35,7 @@ export interface CodeEditorProps {
 }
 
 /**
- * GitHub-flavoured Markdown source editor (CodeMirror 6). Its keys: Ctrl/Cmd+B, I, E, K format;
+ * GitHub-flavoured Markdown source editor (CodeMirror 6). Its keys: Ctrl/Cmd+B, I, E, L format;
  * Ctrl/Cmd+Enter submits; Enter continues lists; Esc then Tab leaves the editor.
  */
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
@@ -79,7 +79,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
             { key: 'Mod-b', run: () => runFormat(editor, 'bold') },
             { key: 'Mod-i', run: () => runFormat(editor, 'italic') },
             { key: 'Mod-e', run: () => runFormat(editor, 'code') },
-            { key: 'Mod-k', run: () => runFormat(editor, 'link') },
+            { key: 'Mod-l', run: () => runFormat(editor, 'link') },
             {
               key: 'Mod-Enter',
               run: () => {

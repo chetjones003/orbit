@@ -172,6 +172,18 @@ _Avoid_: Notification (the word for the GitHub item itself)
 
 **Desktop notification**: A native Windows notification shown only while Orbit is not focused, in place of a toast. Clicking it brings Orbit forward and opens the item.
 
+**Command palette**: The keyboard dialog opened with Ctrl+K to go to a place, issue, or pull request, and with Ctrl+Shift+P to run a command (Cmd on macOS). Text starting with `>` means commands.
+_Avoid_: Search dialog, quick open
+
+**Command**: One action Orbit can run, defined once with its title, shortcut, and availability. The command palette, menu bar, and keyboard shortcuts all use the same definition.
+_Avoid_: Action (a pull request action is a specific GitHub write), menu item
+
+**Place**: Somewhere the command palette can go: a workspace section, settings, a tracked repo, a Project, or a custom view.
+_Avoid_: Destination, location
+
+**Recent**: A command, place, issue, or pull request chosen in the command palette this session. Recents are held in memory only and dropped when the session ends.
+_Avoid_: History
+
 **Tray**: Orbit's system tray icon. Closing the window hides it to the tray instead of quitting, and the tray menu offers Show Orbit, Check for updates, and Quit Orbit.
 _Avoid_: Background mode, minimise
 

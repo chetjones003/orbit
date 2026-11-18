@@ -102,6 +102,7 @@ export function issueJson(store, item, origin, { html = true } = {}) {
     closed_at: item.closed_at,
     html_url: `${repo.html_url}/${item.kind === 'pull' ? 'pull' : 'issues'}/${item.number}`,
     url: `https://api.github.com${base}/issues/${item.number}`,
+    repository_url: `https://api.github.com${base}`,
     body,
     ...(html ? { body_html: renderBody(body, origin) } : {})
   };

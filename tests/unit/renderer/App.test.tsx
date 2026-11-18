@@ -336,11 +336,184 @@ describe('App', () => {
     expect(screen.queryByRole('complementary', { name: 'Repository details' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Lists' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
-    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument();
-    const search = screen.getByRole('searchbox', { name: 'Search issues and pull requests' });
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    const search = screen.getByRole('combobox');
     await waitFor(() => expect(search).toHaveFocus());
     fireEvent.keyDown(search, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+    );
+  });
+
+  describe('command palette', () => {
+    const signedIn: AuthStatus = { kind: 'signed-in', sessionId: 1, login: 'chet', persistent: true };
+    const repo: PersonalRepo = {
+      id: 10,
+      name: 'orbit',
+      fullName: 'chet/orbit',
+      description: null,
+      isPrivate: false,
+      isFork: false,
+      isArchived: false,
+      defaultBranch: 'main',
+      updatedAt: '2026-01-01',
+      htmlUrl: 'https://github.com/chet/orbit'
+    };
+    const dialog = (): HTMLElement | null => screen.queryByRole('dialog', { name: 'Command palette' });
+    const keys = (init: KeyboardEventInit): void => void fireEvent.keyDown(window, init);
+
+    it('uses Ctrl+N and Ctrl+P to move through the open palette without closing it', async () => {
+      installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      keys({ key: 'k', ctrlKey: true });
+      await screen.findByRole('combobox');
+      const selectedRow = (): string | null =>
+        screen.getByRole('option', { selected: true }).getAttribute('data-row-id');
+      expect(selectedRow()).toBe('view:inbox');
+      keys({ key: 'n', ctrlKey: true });
+      await waitFor(() => expect(selectedRow()).toBe('view:issues'));
+      keys({ key: 'p', ctrlKey: true });
+      await waitFor(() => expect(selectedRow()).toBe('view:inbox'));
+      expect(dialog()).toBeInTheDocument();
+    });
+
+    it('keeps Ctrl+P and Ctrl+N from opening anything while the palette is closed', async () => {
+      installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      expect(fireEvent.keyDown(window, { key: 'p', ctrlKey: true })).toBe(false);
+      expect(fireEvent.keyDown(window, { key: 'n', ctrlKey: true })).toBe(false);
+      expect(dialog()).not.toBeInTheDocument();
+    });
+
+    it('opens from each shortcut, switches modes, and closes on the same shortcut', async () => {
+      installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+
+      keys({ key: 'k', ctrlKey: true });
+      const input = await screen.findByRole('combobox');
+      expect(input).toHaveValue('');
+      keys({ key: 'P', ctrlKey: true, shiftKey: true });
+      await waitFor(() => expect(input).toHaveValue('>'));
+      keys({ key: 'k', ctrlKey: true });
+      await waitFor(() => expect(input).toHaveValue(''));
+      keys({ key: 'k', ctrlKey: true });
+      await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+    });
+
+    it('takes the shortcut before an editor can, and stops the browser printing', async () => {
+      installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      const editor = document.createElement('div');
+      const editorKey = vi.fn();
+      editor.addEventListener('keydown', editorKey);
+      document.body.append(editor);
+      const notPrevented = fireEvent.keyDown(editor, { key: 'k', ctrlKey: true });
+      editor.remove();
+      expect(notPrevented).toBe(false);
+      expect(editorKey).not.toHaveBeenCalled();
+      expect(await screen.findByRole('combobox')).toBeInTheDocument();
+    });
+
+    it('offers only app commands while signed out, and still blocks Ctrl+P printing', async () => {
+      installBridge();
+      render(<App />);
+      await screen.findByRole('button', { name: 'Sign in with GitHub' });
+      expect(fireEvent.keyDown(window, { key: 'p', ctrlKey: true })).toBe(false);
+      expect(dialog()).not.toBeInTheDocument();
+
+      keys({ key: 'p', ctrlKey: true, shiftKey: true });
+      await screen.findByRole('combobox');
+      expect(screen.getByRole('option', { name: /Open settings/ })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /Sign out/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /Go to inbox/ })).not.toBeInTheDocument();
+    });
+
+    it('runs a command after closing, and remembers it for this session', async () => {
+      installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      keys({ key: 'p', ctrlKey: true, shiftKey: true });
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: '>open settings' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+      expect(await screen.findByRole('button', { name: 'Account' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+      keys({ key: 'p', ctrlKey: true, shiftKey: true });
+      await screen.findByRole('combobox');
+      expect(screen.getByText('Recent')).toBeInTheDocument();
+      expect(screen.getAllByRole('option')[0]).toHaveTextContent('Open settings');
+    });
+
+    it('creates an issue after choosing a tracked repository in the palette', async () => {
+      const bridge = installBridge({ status: signedIn, repos: [repo] });
+      bridge.settings.pinnedRepoIds = [repo.id];
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      keys({ key: 'p', ctrlKey: true, shiftKey: true });
+      // The issues view has its own repository select, which is a combobox too.
+      const input = await screen.findByRole('combobox', { name: 'Type a command' });
+      fireEvent.change(input, { target: { value: '>new issue' } });
+      await screen.findByRole('option', { name: /New issue/ });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await within(dialog()!).findByRole('option', { name: /chet\/orbit/ });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+      expect(await screen.findByRole('heading', { name: 'chet/orbit' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('button', { name: /Create issue|Submit new issue/ })
+      ).toBeInTheDocument();
+    });
+
+    it('forgets recents when the session ends', async () => {
+      const { listeners } = installBridge({ status: signedIn });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      keys({ key: 'k', ctrlKey: true });
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'projects' } });
+      fireEvent.keyDown(await screen.findByRole('combobox'), { key: 'Enter' });
+      await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+      act(() => {
+        for (const listener of listeners) listener({ kind: 'signed-out' });
+      });
+      await screen.findByRole('button', { name: 'Sign in with GitHub' });
+      act(() => {
+        for (const listener of listeners) listener(signedIn);
+      });
+      await screen.findByRole('navigation', { name: 'Sections' });
+      keys({ key: 'k', ctrlKey: true });
+      await screen.findByRole('combobox');
+      expect(screen.queryByText('Recent')).not.toBeInTheDocument();
+    });
+
+    it('loads projects once for the palette and refreshes them quietly on later opens', async () => {
+      const { api } = installBridge({ status: signedIn });
+      vi.mocked(api.projects.list).mockResolvedValue({
+        projects: [{ id: 'P1', number: 1, title: 'Roadmap', url: 'https://x.test', closed: false }],
+        partial: false
+      });
+      render(<App />);
+      await screen.findByRole('navigation', { name: 'Sections' });
+      expect(api.projects.list).not.toHaveBeenCalled();
+      keys({ key: 'k', ctrlKey: true });
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'roadmap' } });
+      expect(await screen.findByRole('option', { name: /Roadmap/ })).toBeInTheDocument();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+
+      vi.mocked(api.projects.list).mockReturnValue(new Promise(() => undefined));
+      keys({ key: 'k', ctrlKey: true });
+      fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'roadmap' } });
+      expect(screen.getByRole('option', { name: /Roadmap/ })).toBeInTheDocument();
+      expect(api.projects.list).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('pins repositories, filters forks and archived repos, and shows archived repositories as read only', async () => {

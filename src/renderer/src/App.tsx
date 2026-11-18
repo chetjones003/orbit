@@ -30,7 +30,7 @@ import { PullList } from './issues/PullList';
 import { Inbox } from './inbox/Inbox';
 import { NewIssueForm } from './issues/NewIssueForm';
 import { IssueDetailView, type ItemKind } from './issues/IssueDetail';
-import { ProjectsView } from './projects/ProjectsView';
+import { ProjectsView, type ProjectTarget } from './projects/ProjectsView';
 import { drafts } from './comments/draft-store';
 import { UpdateDialog } from './updates/UpdateDialog';
 import type { WorkspaceView } from './chrome/WorkspaceNav';
@@ -49,7 +49,11 @@ import type { UpdateStatus } from '../../shared/updates';
 import { Icon } from './icons';
 import { OrbitMark } from './brand/OrbitMark';
 import { TitleBar } from './chrome/TitleBar';
-import { SearchPalette } from './search/SearchPalette';
+import { buildAppCommands, WORKSPACE_SECTIONS } from './commands/app-commands';
+import { formatShortcut, useCommandShortcuts, type Command } from './commands/commands';
+import { CommandPalette, type PalettePlace } from './palette/CommandPalette';
+import { pushRecent, requestPalette, type PaletteMode, type RecentEntry } from './palette/palette-model';
+import { useProjectPlaces } from './palette/use-project-places';
 import {
   SegmentedControl,
   SegmentedControlIndicator,
@@ -64,6 +68,11 @@ interface IssueRef {
   repoFullName: string;
   number: number;
   kind: ItemKind;
+}
+
+/** A place the palette can go, with what going there does. */
+interface AppPlace extends PalettePlace {
+  open(): void;
 }
 
 const GITHUB_BUTTON = 'Sign in with GitHub';
@@ -144,9 +153,10 @@ export function App() {
   const [sideWidth, setSideWidth] = useState(440);
   // The left panel's width, kept between launches. The window can shrink, so the width is clamped when drawn too.
   const [listWidth, setListWidth] = useState(readStoredListWidth);
-  /** The search text. Ctrl+K opens the search dialog; closing it clears the text. */
-  const [searchText, setSearchText] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+  /** The command palette. Its text starts with > for commands; closing it clears the text. */
+  const [palette, setPalette] = useState({ open: false, text: '' });
+  /** What was chosen in the palette. Held for this session only, and never written to disk. */
+  const [paletteRecents, setPaletteRecents] = useState<RecentEntry[]>([]);
   const systemReducedMotion = useSystemReducedMotion();
   const [itemMenu, setItemMenu] = useState<{ item: ItemRef; x: number; y: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -154,6 +164,12 @@ export function App() {
   const [projectsSlot, setProjectsSlot] = useState<HTMLElement | null>(null);
   /** Whether the new-issue form replaces the issue list for the open repo. */
   const [creatingIssue, setCreatingIssue] = useState(false);
+  /** The repository whose pull request list should open its new pull request form. */
+  const [creatingPullFor, setCreatingPullFor] = useState<string | null>(null);
+  const clearCreatingPull = useCallback(() => setCreatingPullFor(null), []);
+  /** The project the palette asked to show, until the Projects view has taken it. */
+  const [projectTarget, setProjectTarget] = useState<ProjectTarget | null>(null);
+  const clearProjectTarget = useCallback(() => setProjectTarget(null), []);
   /** Which section fills the workspace. The details panel follows the selected item in every section. */
   const [view, setView] = useState<WorkspaceView>('repos');
   const pullMode = view === 'pulls';
@@ -282,6 +298,7 @@ export function App() {
     const previous = sessionOwner.current;
     if (previous && (!current || current.sessionId !== previous.sessionId)) {
       drafts.clearAccount(previous.login);
+      setPaletteRecents([]);
     }
     sessionOwner.current = current ? { sessionId: current.sessionId, login: current.login } : null;
   }, [status]);
@@ -306,8 +323,7 @@ export function App() {
       setIssuesRepo(null);
       setIssueRef(null);
       setIssueExpanded(false);
-      setSearchText('');
-      setSearchOpen(false);
+      setPalette({ open: false, text: '' });
     }
   }, [status, loadRepos]);
 
@@ -463,8 +479,8 @@ export function App() {
   // The page shows the light or dark variant of the chosen palette. System follows Windows.
   const systemPrefersDark = useSystemPrefersDark();
   const resolvedScheme = resolveColorScheme(settings?.colorScheme ?? 'dark', systemPrefersDark);
-  const palette = settings?.palette ?? 'orbit';
-  const customTheme = settings?.customThemes.find((theme) => theme.id === palette);
+  const themePalette = settings?.palette ?? 'orbit';
+  const customTheme = settings?.customThemes.find((theme) => theme.id === themePalette);
 
   // The interface font goes on the document as well as the app frame, so dialogs (portalled to the body) use it too.
   const interfaceFont = settings?.interfaceFont ?? 'inter';
@@ -485,8 +501,8 @@ export function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset['theme'] = resolvedScheme;
-    root.dataset['palette'] = palette;
-    const colors = themeColorsFor(palette, customTheme ? [customTheme] : [], resolvedScheme);
+    root.dataset['palette'] = themePalette;
+    const colors = themeColorsFor(themePalette, customTheme ? [customTheme] : [], resolvedScheme);
     const variables = paletteVariables(colors);
     const surface = variables['--surface']!;
     const contrast = contrastProperties(contrastSetting, {
@@ -514,7 +530,7 @@ export function App() {
     return () => {
       for (const name of Object.keys(applied)) root.style.removeProperty(name);
     };
-  }, [resolvedScheme, palette, customTheme, contrastSetting, glassSetting]);
+  }, [resolvedScheme, themePalette, customTheme, contrastSetting, glassSetting]);
 
   const orderedRepos = useMemo(() => {
     const visible = repos.filter((repo) => showForksAndArchived || (!repo.isFork && !repo.isArchived));
@@ -571,29 +587,16 @@ export function App() {
       : null;
 
   const signedIn = status?.kind === 'signed-in';
-  const changeSearch = (next: string): void => setSearchText(next);
-  /** Escape, a click outside, or choosing a result closes the dialog and clears the text. */
-  const closeSearch = (): void => {
-    setSearchOpen(false);
-    setSearchText('');
+  const mac = info?.platform === 'darwin';
+  const projectPlaces = useProjectPlaces(signedIn, palette.open);
+  const openPalette = (mode: PaletteMode): void => setPalette((current) => requestPalette(current, mode));
+  const closePalette = useCallback(() => setPalette({ open: false, text: '' }), []);
+  /** Closes the palette, then acts, so what the action opens is not fighting the palette for focus. */
+  const leavePalette = (action: () => void): void => {
+    closePalette();
+    window.setTimeout(action, 0);
   };
-  // Ctrl+K (Cmd+K on macOS) opens the search dialog from anywhere in the window, while signed in.
-  useEffect(() => {
-    if (!signedIn) return undefined;
-    const onKey = (event: KeyboardEvent): void => {
-      if (
-        !(event.ctrlKey || event.metaKey) ||
-        event.key.toLowerCase() !== 'k' ||
-        event.shiftKey ||
-        event.altKey
-      )
-        return;
-      event.preventDefault();
-      setSearchOpen(true);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [signedIn]);
+  const remember = (entry: RecentEntry): void => setPaletteRecents((current) => pushRecent(current, entry));
 
   // What the search index is doing, for the small progress line. A missing bridge method leaves the line hidden.
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
@@ -630,17 +633,6 @@ export function App() {
       .then(() => window.orbit.search.warm())
       .catch(() => undefined);
   }, [signedIn]);
-
-  // Ctrl+, (Cmd+, on macOS) opens settings from anywhere in the window.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (!(event.ctrlKey || event.metaKey) || event.key !== ',' || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      setSettingsOpen(true);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const selectRail = (target: RailTarget): void => {
     if (target === 'settings') return setSettingsOpen(true);
@@ -713,6 +705,109 @@ export function App() {
     run(() => window.orbit.auth.signOut());
   };
 
+  const showRepo = (repo: PersonalRepo, kind: 'issue' | 'pull'): void => {
+    setIssuesRepo(repo);
+    setIssueRef(null);
+    setIssueExpanded(false);
+    setCreatingIssue(false);
+    setListKind(kind);
+    setView(kind === 'pull' ? 'pulls' : 'issues');
+  };
+  const withRepo = (fullName: string, action: (repo: PersonalRepo) => void): void => {
+    const repo = repos.find((candidate) => candidate.fullName === fullName);
+    if (repo) action(repo);
+  };
+
+  const commands = buildAppCommands({
+    signedIn,
+    nextThemeLabel: `Switch to ${resolvedScheme === 'dark' ? 'light' : 'dark'} theme`,
+    nextThemeIcon: resolvedScheme === 'dark' ? 'sun' : 'moon',
+    trackedRepos,
+    currentRepoFullName: issuesRepo?.fullName ?? null,
+    openPalette,
+    goTo: (next) => selectRail(next as RailTarget),
+    newIssue: (fullName) =>
+      withRepo(fullName, (repo) => {
+        showRepo(repo, 'issue');
+        setCreatingIssue(true);
+      }),
+    newPull: (fullName) =>
+      withRepo(fullName, (repo) => {
+        showRepo(repo, 'pull');
+        setCreatingPullFor(repo.fullName);
+      }),
+    toggleTheme,
+    openSettings: () => setSettingsOpen(true),
+    refresh: refreshNow,
+    checkUpdates: openUpdates,
+    copyDiagnostics,
+    signOut: () => void signOut(),
+    shell: (action) => void window.orbit.shell.control(action)
+  });
+
+  /** Runs a command from the keyboard or the menu bar. */
+  const runCommand = (command: Command): void => {
+    if (palette.open && !command.keepsPalette) leavePalette(() => command.run?.());
+    else command.run?.();
+  };
+  useCommandShortcuts(commands, mac, runCommand);
+
+  const projectTitles = new Map(projectPlaces.projects.map((project) => [project.id, project.title]));
+  const showProject = (projectId: string, customViewId: string | null): void => {
+    setProjectTarget({ projectId, customViewId });
+    setView('projects');
+  };
+  const places: AppPlace[] = signedIn
+    ? [
+        ...WORKSPACE_SECTIONS.map(({ view: section, title, icon }): AppPlace => ({
+          id: `view:${section}`,
+          title,
+          icon,
+          tag: 'View',
+          main: true,
+          open: () => selectRail(section as RailTarget)
+        })),
+        {
+          id: 'view:settings',
+          title: 'Settings',
+          icon: 'settings',
+          tag: 'View',
+          main: true,
+          open: () => setSettingsOpen(true)
+        },
+        ...trackedRepos.map((repo): AppPlace => ({
+          id: `repo:${repo.fullName}`,
+          title: repo.name,
+          subtitle: repo.fullName,
+          icon: 'repos',
+          tag: 'Repository',
+          open: () => showRepo(repo, 'issue')
+        })),
+        ...projectPlaces.projects.map((project): AppPlace => ({
+          id: `project:${project.id}`,
+          title: project.title,
+          icon: 'projects',
+          tag: 'Project',
+          open: () => showProject(project.id, null)
+        })),
+        ...projectPlaces.customViews.flatMap((custom): AppPlace[] => {
+          const projectTitle = projectTitles.get(custom.projectId);
+          return projectTitle
+            ? [
+                {
+                  id: `custom:${custom.id}`,
+                  title: custom.name,
+                  subtitle: projectTitle,
+                  icon: 'table',
+                  tag: 'Custom view',
+                  open: () => showProject(custom.projectId, custom.id)
+                }
+              ]
+            : [];
+        })
+      ]
+    : [];
+
   return (
     <div
       className="app-frame"
@@ -733,14 +828,7 @@ export function App() {
         Skip to workspace
       </a>
       <IndexProgress status={indexStatus} />
-      <TitleBar
-        platform={info?.platform}
-        signedIn={status?.kind === 'signed-in'}
-        nextThemeLabel={`Switch to ${resolvedScheme === 'dark' ? 'light' : 'dark'} theme`}
-        onToggleTheme={toggleTheme}
-        onCheckUpdates={openUpdates}
-        onSignOut={() => void signOut()}
-      />
+      <TitleBar platform={info?.platform} commands={commands} onRunCommand={runCommand} />
       <main
         className="orbit-shell"
         aria-label="Orbit"
@@ -755,12 +843,12 @@ export function App() {
             <button
               type="button"
               className="sidebar-search"
-              aria-label="Search (Ctrl+K)"
-              onClick={() => setSearchOpen(true)}
+              aria-label={`Search (${formatShortcut({ key: 'k', mod: true }, mac)})`}
+              onClick={() => openPalette('goto')}
             >
               <Icon name="search" size={16} />
               <span>Search</span>
-              <kbd>Ctrl K</kbd>
+              <kbd>{mac ? 'Cmd K' : 'Ctrl K'}</kbd>
             </button>
             <div className="side-list-scroll">
               {view === 'projects' ? (
@@ -929,6 +1017,8 @@ export function App() {
               </div>
               <ProjectsView
                 listSlot={projectsSlot}
+                target={projectTarget}
+                onTargetHandled={clearProjectTarget}
                 onOpenItem={(repoFullName, number, kind) => {
                   openItem({ repoFullName, number, kind });
                   setIssueExpanded(false);
@@ -975,6 +1065,8 @@ export function App() {
                   key={issuesRepo.fullName}
                   repoFullName={issuesRepo.fullName}
                   selectedNumber={issueRef?.kind === 'pull' ? issueRef.number : null}
+                  startCreating={creatingPullFor === issuesRepo.fullName}
+                  onStartHandled={clearCreatingPull}
                   onOpenPull={(number) =>
                     openItem({ repoFullName: issuesRepo.fullName, number, kind: 'pull' })
                   }
@@ -1263,16 +1355,36 @@ export function App() {
             hasUnsavedDrafts={() => drafts.hasDrafts()}
           />
         )}
-        {searchOpen && signedIn && (
-          <SearchPalette
-            text={searchText}
-            onTextChange={changeSearch}
+        {palette.open && (
+          <CommandPalette
+            text={palette.text}
+            onTextChange={(text) => setPalette({ open: true, text })}
+            signedIn={signedIn}
+            mac={mac}
+            commands={commands}
+            places={places}
+            recents={paletteRecents}
             repos={repos}
             selected={issueRef ? { repoFullName: issueRef.repoFullName, number: issueRef.number } : null}
-            onOpenItem={(item) =>
-              pickItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind })
-            }
-            onClose={closeSearch}
+            onRunCommand={(command) => {
+              remember({ kind: 'command', id: command.id });
+              leavePalette(() => command.run?.());
+            }}
+            onChoose={(command, choiceId) => {
+              remember({ kind: 'command', id: command.id });
+              leavePalette(() => command.choose?.run(choiceId));
+            }}
+            onOpenPlace={(place) => {
+              remember({ kind: 'place', id: place.id });
+              leavePalette(place.open);
+            }}
+            onOpenItem={(item) => {
+              remember({ kind: 'item', item });
+              leavePalette(() =>
+                pickItem({ repoFullName: item.repoFullName, number: item.number, kind: item.kind })
+              );
+            }}
+            onClose={closePalette}
           />
         )}
       </main>

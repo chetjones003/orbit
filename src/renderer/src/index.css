@@ -6724,14 +6724,6 @@ code {
   padding: 0 0 16px;
 }
 
-.search-view {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.search-view .scope-field select {
-  min-width: 180px;
-}
 .search-summary,
 .search-count {
   display: flex;
@@ -6754,11 +6746,6 @@ code {
 }
 .search-controls .scope-field {
   flex: 1 1 auto;
-}
-.search-controls .scope-field select {
-  width: 100%;
-  min-width: 140px;
-  height: 28px;
 }
 .scope-state .secondary-action {
   height: 28px;
@@ -6823,22 +6810,6 @@ code {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
-}
-.search-start p {
-  margin: 0;
-}
-.search-start em {
-  color: var(--text);
-  font-style: normal;
-  font-weight: 600;
-}
-.search-examples-label {
-  font-size: 12px;
-}
-.search-examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 /* ui-sdk Tabs wrappers take no box of their own, so the view tabs keep their flex row. */
@@ -7367,69 +7338,96 @@ input:focus-visible,
 .search-palette-body {
   padding: 0 0 8px;
 }
-.search-palette .search-controls {
-  gap: 8px;
-  padding: 0 12px 8px;
+.palette-chips {
+  flex: none;
+  padding: 0 16px 8px;
 }
-.search-palette .search-controls .scope-field > span,
-.search-palette .search-controls .scope-field > label {
+.palette-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
+}
+.palette-section {
+  padding: 10px 8px 4px;
+  color: var(--subtle);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  font-weight: 500;
+}
+.palette-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: calc(var(--ui-font-scale, 1) * 36px);
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.palette-row:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.palette-row.active {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+}
+.palette-row.current .palette-row-title {
+  color: var(--action);
+}
+.palette-row-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: var(--muted);
+}
+.palette-row .issue-state {
+  flex: none;
+  width: 16px;
+}
+.palette-row-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.palette-row-title,
+.palette-row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-row-title small {
+  color: var(--muted);
+}
+.palette-row-subtitle {
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.palette-row-tag {
+  flex: none;
   color: var(--subtle);
   font-size: calc(var(--ui-font-scale, 1) * 12px);
 }
-/* T3 Code's segmented toggle: a faint input-coloured track, borderless segments, and the pressed one filled in. */
-.search-palette .scope-state {
-  gap: 2px;
-  padding: 2px;
-  border: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--input) 40%, transparent);
-}
-.search-palette .scope-state [role='radio'] {
-  min-height: calc(var(--ui-font-scale, 1) * 26px);
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
+.palette-row-key {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--muted);
-  font-weight: 500;
-  box-shadow: none;
+  font-family: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
 }
-.search-palette .scope-state [role='radio']:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--input) 32%, transparent);
-  color: var(--text);
-}
-.search-palette .scope-state [role='radio'][aria-checked='true'] {
-  background: color-mix(in srgb, var(--input) 72%, transparent);
-  color: var(--text);
-}
-:root[data-theme='light'] .search-palette .scope-state [role='radio'][aria-checked='true'] {
-  background: var(--canvas);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
-}
-.search-palette .scope-state > [role='presentation'] {
-  display: none;
+.palette-message {
+  padding: 12px 16px;
 }
 .search-palette .issue-number {
   color: var(--muted);
   font-weight: 400;
 }
-.search-palette .search-start {
-  padding: 8px 16px;
-}
 .search-palette .search-count {
-  padding: 4px 16px;
+  padding: 8px 16px 0;
   color: var(--subtle);
   font-size: calc(var(--ui-font-scale, 1) * 12px);
-}
-.search-palette .issue-rows {
-  padding: 0 8px;
-}
-.search-palette .issue-row {
-  border-radius: 8px;
-}
-.search-palette .issue-row:hover,
-.search-palette .issue-row:focus-visible {
-  outline: none;
-  background: var(--hover);
 }
 .search-palette-foot {
   display: flex;
@@ -7445,6 +7443,9 @@ input:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.search-palette-foot .palette-foot-end {
+  margin-left: auto;
 }
 .search-palette-foot kbd {
   display: inline-grid;
