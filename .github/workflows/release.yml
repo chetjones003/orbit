@@ -40,7 +40,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       # publish below builds and signs the installers, so the checks skip their own unsigned builds.
-      package: false
+      skip_package: true
 
   publish:
     name: Build, sign, and publish (${{ matrix.label }})

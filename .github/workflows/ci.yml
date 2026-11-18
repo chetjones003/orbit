@@ -6,13 +6,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # The release workflow reuses these checks before it publishes a tag. It passes package: false,
+  # The release workflow reuses these checks before it publishes a tag. It passes skip_package: true,
   # because publish builds and signs the installers itself.
   workflow_call:
     inputs:
-      package:
+      skip_package:
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -54,7 +54,9 @@ jobs:
   package:
     name: Package (${{ matrix.label }})
     # Runs in parallel with the checks: a failed check still reports, and the build is not gated on lint.
-    if: ${{ inputs.package != false }}
+    # An absent input is null, which is falsy, so pull requests and dispatches build. Do not compare
+    # with false here: null and false both coerce to 0 in expressions, so the comparison skips the job.
+    if: ${{ !inputs.skip_package }}
     strategy:
       fail-fast: false
       matrix:
