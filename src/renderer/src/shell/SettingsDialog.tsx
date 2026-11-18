@@ -17,6 +17,7 @@ import type {
   MonospaceFont,
   MonospaceFontSize,
   OpenItemsIn,
+  EditorKeys,
   HoverCardSpeed
 } from '../../../shared/ipc';
 import type { ColorScheme, CustomTheme, PaletteId } from '../../../shared/themes';
@@ -45,6 +46,9 @@ export interface SettingsDialogProps {
   openItemsIn: OpenItemsIn;
   /** How soon item cards open on hover. */
   hoverCards?: HoverCardSpeed;
+  /** Standard editing or Vim keys in the file editor. */
+  editorKeys?: EditorKeys;
+  editorWordWrap?: boolean;
   motion: MotionSetting;
   interfaceFont: InterfaceFont;
   interfaceFontSize: InterfaceFontSize;
@@ -77,6 +81,8 @@ export interface SettingsDialogProps {
   onDeleteCustomTheme(id: string): void;
   onOpenItemsIn(value: OpenItemsIn): void;
   onHoverCards?(value: HoverCardSpeed): void;
+  onEditorKeys?(value: EditorKeys): void;
+  onEditorWordWrap?(value: boolean): void;
   onMotion(value: MotionSetting): void;
   onTypography(update: {
     interfaceFont?: InterfaceFont;
@@ -98,6 +104,8 @@ export function SettingsDialog({
   systemPrefersDark,
   openItemsIn,
   hoverCards = 'normal',
+  editorKeys = 'standard',
+  editorWordWrap = false,
   motion,
   interfaceFont,
   interfaceFontSize,
@@ -121,6 +129,8 @@ export function SettingsDialog({
   onDeleteCustomTheme,
   onOpenItemsIn,
   onHoverCards,
+  onEditorKeys,
+  onEditorWordWrap,
   onMotion,
   onTypography,
   onCheckUpdates,
@@ -303,6 +313,42 @@ export function SettingsDialog({
                         ]}
                         onChange={(value) => onGeneral({ pollMinutes: Number(value) })}
                       />
+                    </div>
+                  </SettingsSection>
+                  <SettingsSection id="settings-editor" title="Editor">
+                    <div className="settings-field-row">
+                      <div className="typography-label">
+                        <strong>Editing keys</strong>
+                        <p>
+                          The editor that resolves merge conflicts. Standard editing works like a text box.
+                          Vim adds modes: press Esc for normal mode, i to insert.
+                        </p>
+                      </div>
+                      <ChoiceGroup
+                        label="Editing keys"
+                        value={editorKeys}
+                        options={[
+                          ['standard', 'Standard'],
+                          ['vim', 'Vim']
+                        ]}
+                        onChange={(value) => onEditorKeys?.(value)}
+                      />
+                    </div>
+                    <div className="settings-switch-row">
+                      <div className="typography-label">
+                        <strong id="settings-editor-word-wrap">Word wrap</strong>
+                        <p>
+                          Long lines wrap onto the next line in the editor, instead of running off to the
+                          side.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={editorWordWrap}
+                        onCheckedChange={(checked) => onEditorWordWrap?.(checked)}
+                        aria-labelledby="settings-editor-word-wrap"
+                      >
+                        <SwitchThumb />
+                      </Switch>
                     </div>
                   </SettingsSection>
                 </>

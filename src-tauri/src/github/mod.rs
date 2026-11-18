@@ -2,6 +2,7 @@
 //! reads is persisted: results go straight back to the caller.
 
 pub mod client;
+pub mod conflicts;
 pub mod inbox;
 pub mod issues;
 pub mod links;
@@ -10,6 +11,7 @@ pub mod pulls;
 pub mod refresh;
 pub mod repos;
 pub mod search;
+pub mod search_index;
 pub mod util;
 pub mod write;
 pub mod notifications;

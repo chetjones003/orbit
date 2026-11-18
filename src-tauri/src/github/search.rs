@@ -2,15 +2,19 @@
 //! The text parsing that turns typed words into these structured fields lives in the renderer, so GitHub never
 //! receives raw search syntax.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::client::GitHubError;
+use super::repos::RepoService;
+use super::search_index::SearchIndex;
 use super::inbox::{to_inbox_item, InboxItem, SEARCH_RESULT_CAP};
 use super::util::{enc, repo_path};
 use super::write::ApiError;
 use super::{get_json, Ctx};
 
-const SEARCH_PER_PAGE: u64 = 30;
+pub const SEARCH_PER_PAGE: u64 = 30;
 const LOOKUP_BATCH: usize = 6;
 const SEARCH_TEXT_MAX: usize = 256;
 const SEARCH_LABELS_MAX: usize = 5;
@@ -108,7 +112,7 @@ fn is_number_only(terms: &str, number: u64) -> bool {
     !words.is_empty() && words.iter().all(|w| w.trim_start_matches('#') == number.to_string())
 }
 
-fn matches_filters(item: &InboxItem, request: &SearchRequest) -> bool {
+pub fn matches_filters(item: &InboxItem, request: &SearchRequest) -> bool {
     if request.kind == "issue" && item.kind != "issue" {
         return false;
     }
@@ -134,7 +138,19 @@ fn item_key(item: &InboxItem) -> String {
     format!("{}#{}", item.repo_full_name, item.number)
 }
 
-pub async fn search(ctx: &Ctx, repos: &super::repos::RepoService, request: &SearchRequest) -> Result<SearchPage, ApiError> {
+/// Starts reading the account's items into the index, so later searches can answer from it. Cheap to call often.
+pub fn warm(ctx: &Ctx, repos: &Arc<RepoService>, index: &Arc<SearchIndex>) {
+    if let Ok((login, _)) = ctx.signed_in() {
+        index.refresh(ctx, repos, &login);
+    }
+}
+
+pub async fn search(
+    ctx: &Ctx,
+    repos: &Arc<RepoService>,
+    index: &Arc<SearchIndex>,
+    request: &SearchRequest,
+) -> Result<SearchPage, ApiError> {
     if request.terms.chars().count() > SEARCH_TEXT_MAX {
         return Err(ApiError::msg(format!(
             "Search text must be {SEARCH_TEXT_MAX} characters or fewer."
@@ -165,8 +181,13 @@ pub async fn search(ctx: &Ctx, repos: &super::repos::RepoService, request: &Sear
     let (login, session_id) = ctx
         .signed_in()
         .map_err(|_| ApiError::msg("Sign in to GitHub to search."))?;
-    let session = ctx.session().await?;
     let _ = session_id;
+    // The index answers once it has read every repo. Until then, and for anything it cannot answer, GitHub search runs.
+    index.refresh(ctx, repos, &login);
+    if let Some(page) = index.query(&login, request) {
+        return Ok(page);
+    }
+    let session = ctx.session().await?;
 
     let (q, sort) = build_search_query(request, &login)?;
 

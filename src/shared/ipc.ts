@@ -2,8 +2,9 @@ import type { AuthStatus } from './auth';
 import type { AttachmentFile, AttachmentUploadResult } from './attachments';
 import type { ConnectionStatus, RefreshStart } from './connection';
 import type { InboxPage, InboxQuery } from './inbox';
-import type { SearchPage, SearchRequest } from './search';
+import type { IndexStatus, SearchPage, SearchRequest } from './search';
 import type { WorkflowGraphJob, WorkflowJob } from './issues';
+import type { ConflictCommitInput, ConflictCommitResult, ConflictSet } from './conflicts';
 import type {
   ColorScheme,
   CustomTheme,
@@ -111,6 +112,7 @@ export const IpcChannels = {
   inboxList: 'inbox:list',
   /** Cross-repo search of issues and pull requests in the signed-in account's personal repos. */
   searchQuery: 'search:query',
+  searchWarm: 'search:warm',
   projectsList: 'projects:list',
   projectsDetail: 'projects:detail',
   projectsItems: 'projects:items',
@@ -120,6 +122,8 @@ export const IpcChannels = {
   projectsMoveItem: 'projects:move-item',
   projectsSetField: 'projects:set-field',
   pullsBranches: 'pulls:branches',
+  pullsConflicts: 'pulls:conflicts',
+  pullsResolveConflicts: 'pulls:resolve-conflicts',
   markdownPreview: 'markdown:preview',
   commentsCreate: 'comments:create',
   commentsUpdate: 'comments:update',
@@ -190,6 +194,10 @@ export interface OrbitSettings {
   wordWrap: boolean;
   /** How soon an issue or pull request card opens on hover, or never. */
   hoverCards: HoverCardSpeed;
+  /** Keys in the file editor: standard editing, or Vim. */
+  editorKeys: EditorKeys;
+  /** Long lines wrap in the file editor, rather than running off to the side. */
+  editorWordWrap: boolean;
   /** Closing the window hides Orbit to the tray, when the tray is available. */
   closeToTray: boolean;
   /** Windows notifications for new GitHub activity while the window is hidden or unfocused. */
@@ -212,6 +220,9 @@ export type OpenItemsIn = 'full' | 'side';
 
 /** How soon an issue or pull request card opens on hover, or never. */
 export type HoverCardSpeed = 'off' | 'quick' | 'normal' | 'slow';
+
+/** Standard editing, or Vim keys, in the file editor. */
+export type EditorKeys = 'standard' | 'vim';
 
 /**
  * 'always' (the default) animates the panels whatever Windows says. 'system' follows Windows: when animations are off
@@ -240,6 +251,8 @@ export type SettingsUpdate = Partial<
     | 'monospaceFontSize'
     | 'wordWrap'
     | 'hoverCards'
+    | 'editorKeys'
+    | 'editorWordWrap'
     | 'closeToTray'
     | 'desktopNotifications'
     | 'pollMinutes'
@@ -453,6 +466,14 @@ export interface OrbitApi {
     /** Opens a pull request from a branch in one of the user's personal repos. */
     create(repoFullName: string, input: PullCreateInput): Promise<PullSummary>;
     branches(repoFullName: string): Promise<string[]>;
+    /** The head's conflicts with its base: each path both sides changed, with the three versions. */
+    conflicts(repoFullName: string, number: number): Promise<ConflictSet>;
+    /** Commits the resolved files as a merge of the base into the head. Refused if either branch moved. */
+    resolveConflicts(
+      repoFullName: string,
+      number: number,
+      input: ConflictCommitInput
+    ): Promise<ConflictCommitResult>;
   };
   inbox: {
     /** One fixed inbox tab across the signed-in account's personal repos. */
@@ -461,6 +482,12 @@ export interface OrbitApi {
   search: {
     /** Issues and pull requests across the signed-in account's personal repos, filtered and paged. */
     query(request: SearchRequest): Promise<SearchPage>;
+    /** Starts loading the account's issues and pull requests into the search index. Safe to call often. */
+    warm(): Promise<void>;
+    /** What the search index is doing right now. */
+    indexStatus(): Promise<IndexStatus>;
+    /** Called whenever the search index starts, advances, or finishes reading. Returns an unsubscribe. */
+    onIndexStatusChanged(listener: (status: IndexStatus) => void): () => void;
   };
   projects: {
     /** Projects the signed-in account owns. */

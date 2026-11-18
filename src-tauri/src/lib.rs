@@ -197,12 +197,18 @@ pub fn run() {
                 .tray_available
                 .store(tray_ok, Ordering::SeqCst);
 
+            let index_handle = app.handle().clone();
             let services = Services {
                 settings,
                 auth: Arc::clone(&auth),
                 client,
                 writes,
                 repos,
+                search_index: github::search_index::SearchIndex::new(Arc::new(
+                    move |status: github::search_index::IndexStatus| {
+                        let _ = index_handle.emit("search:index-status", status);
+                    },
+                )),
                 projects: github::projects::ProjectsService::default(),
                 notifications: notification_service,
                 notification_center,
@@ -248,6 +254,8 @@ pub fn run() {
             commands::notifications_open,
             commands::inbox_list,
             commands::search_query,
+            commands::search_warm,
+            commands::search_index_status,
             commands::themes_search,
             commands::themes_import,
             commands::updates_get_status,
@@ -276,6 +284,8 @@ pub fn run() {
             commands::pulls_review_submit,
             commands::pulls_actions,
             commands::pulls_merge,
+            commands::pulls_conflicts,
+            commands::pulls_resolve_conflicts,
             commands::pulls_auto_merge,
             commands::pulls_draft,
             commands::pulls_runs,
