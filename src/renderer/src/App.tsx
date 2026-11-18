@@ -37,6 +37,8 @@ import type { WorkspaceView } from './chrome/WorkspaceNav';
 import { BottomRail, type RailTarget } from './shell/BottomRail';
 import { ItemMenu } from './shell/ItemMenu';
 import { SettingsDialog } from './shell/SettingsDialog';
+import { IndexProgress } from './search/IndexProgress';
+import type { IndexStatus } from '../../shared/search';
 import { SideList, type ItemRef } from './shell/SideList';
 import { SidePanelStack } from './shell/SidePanelStack';
 import { motionMode, useSystemReducedMotion } from './shell/motion';
@@ -593,6 +595,53 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [signedIn]);
 
+  // What the search index is doing, for the small progress line. A missing bridge method leaves the line hidden.
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  useEffect(() => {
+    if (!signedIn) {
+      setIndexStatus(null);
+      return undefined;
+    }
+    let cancelled = false;
+    let unsubscribe = (): void => undefined;
+    try {
+      unsubscribe = window.orbit.search.onIndexStatusChanged((next) => {
+        if (!cancelled) setIndexStatus(next);
+      });
+      void window.orbit.search.indexStatus().then(
+        (next) => {
+          if (!cancelled) setIndexStatus(next);
+        },
+        () => undefined
+      );
+    } catch {
+      // The search bridge is not available here, so the progress line stays hidden.
+    }
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [signedIn]);
+
+  // Search reads the account's items into an index in the background, so the first search is already fast.
+  useEffect(() => {
+    if (!signedIn) return;
+    void Promise.resolve()
+      .then(() => window.orbit.search.warm())
+      .catch(() => undefined);
+  }, [signedIn]);
+
+  // Ctrl+, (Cmd+, on macOS) opens settings from anywhere in the window.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || event.key !== ',' || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      setSettingsOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const selectRail = (target: RailTarget): void => {
     if (target === 'settings') return setSettingsOpen(true);
     if (target === 'update') {
@@ -683,6 +732,7 @@ export function App() {
       <a className="skip-link" href="#workspace">
         Skip to workspace
       </a>
+      <IndexProgress status={indexStatus} />
       <TitleBar
         platform={info?.platform}
         signedIn={status?.kind === 'signed-in'}
@@ -828,7 +878,7 @@ export function App() {
             </div>
           )}
 
-          {!status || status.kind !== 'signed-in' ? (
+          {status === null ? null : status.kind !== 'signed-in' ? (
             <div className="welcome-state">
               <div className="welcome-orbit">
                 <OrbitMark size={34} />
@@ -1133,6 +1183,8 @@ export function App() {
             systemPrefersDark={systemPrefersDark}
             openItemsIn={settings.openItemsIn}
             hoverCards={settings.hoverCards}
+            editorKeys={settings.editorKeys}
+            editorWordWrap={settings.editorWordWrap}
             motion={settings.motion}
             interfaceFont={settings.interfaceFont}
             interfaceFontSize={settings.interfaceFontSize}
@@ -1176,6 +1228,14 @@ export function App() {
             }
             onHoverCards={(hoverCards) =>
               void updateSettings({ hoverCards }).catch(() => setActionError('Could not save this setting.'))
+            }
+            onEditorWordWrap={(editorWordWrap) =>
+              void updateSettings({ editorWordWrap }).catch(() =>
+                setActionError('Could not save this setting.')
+              )
+            }
+            onEditorKeys={(editorKeys) =>
+              void updateSettings({ editorKeys }).catch(() => setActionError('Could not save this setting.'))
             }
             onMotion={(motion) =>
               void updateSettings({ motion }).catch(() => setActionError('Could not save this setting.'))

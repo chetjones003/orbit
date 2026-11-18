@@ -2,6 +2,7 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AuthStatus } from '../../shared/auth';
 import type { AttachmentFile } from '../../shared/attachments';
+import type { ConflictCommitInput, ConflictCommitResult } from '../../shared/conflicts';
 import type { ConnectionStatus, RefreshStart } from '../../shared/connection';
 import type { InboxQuery } from '../../shared/inbox';
 import type {
@@ -18,7 +19,7 @@ import type {
 } from '../../shared/issues';
 import type { NotificationDelivery, NotificationOpenResult } from '../../shared/notifications';
 import type { ProjectFieldChange } from '../../shared/projects';
-import type { SearchRequest } from '../../shared/search';
+import type { IndexStatus, SearchRequest } from '../../shared/search';
 import { normalizeCustomThemes, type ThemeImportRef, type ThemeSearchRequest } from '../../shared/themes';
 import type { UpdateStatus } from '../../shared/updates';
 import type {
@@ -151,6 +152,9 @@ const ported = {
       input: { event: ReviewEvent; body: string; reviewedHeadSha: string }
     ) => invoke('pulls_review_submit', { repoFullName, number, input }),
     actions: (repoFullName: string, number: number) => invoke('pulls_actions', { repoFullName, number }),
+    conflicts: (repoFullName: string, number: number) => invoke('pulls_conflicts', { repoFullName, number }),
+    resolveConflicts: (repoFullName: string, number: number, input: ConflictCommitInput) =>
+      invoke<ConflictCommitResult>('pulls_resolve_conflicts', { repoFullName, number, input }),
     merge: (
       repoFullName: string,
       number: number,
@@ -173,7 +177,11 @@ const ported = {
     list: (query: InboxQuery) => invoke('inbox_list', { query })
   },
   search: {
-    query: (request: SearchRequest) => invoke('search_query', { request })
+    query: (request: SearchRequest) => invoke('search_query', { request }),
+    warm: () => invoke('search_warm'),
+    indexStatus: () => invoke<IndexStatus>('search_index_status'),
+    onIndexStatusChanged: (listener: (status: IndexStatus) => void) =>
+      subscribe<IndexStatus>('search:index-status', listener)
   },
   projects: {
     list: () => invoke('projects_list'),

@@ -1,6 +1,6 @@
 [package]
 name = "orbit"
-version = "0.5.3"
+version = "0.5.4"
 description = "Orbit: a desktop GitHub issue and PR client for personal repos"
 authors = ["Chet Jones"]
 license = "GPL-3.0-only"

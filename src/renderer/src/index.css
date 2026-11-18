@@ -9673,3 +9673,286 @@ button.hovercard-title:focus-visible {
   padding-left: 0;
   font-size: calc(var(--ui-font-scale, 1) * 12px);
 }
+
+/* Merge conflicts: the resolver that replaces a pull request's detail, and the file editor it uses. */
+.pr-conflicts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+.pr-conflicts p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.conflict-resolver {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  min-height: 0;
+}
+.conflict-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.conflict-head h3 {
+  margin: 0;
+  font-size: calc(var(--ui-font-scale, 1) * 16px);
+}
+.conflict-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 420px;
+}
+.conflict-files {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+}
+.conflict-files-head {
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.conflict-files ul {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+.conflict-file {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.conflict-file:hover {
+  background: var(--hover);
+}
+.conflict-file[aria-pressed='true'] {
+  background: var(--hover);
+  outline: 1px solid var(--line);
+}
+.conflict-file-path {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono-font-family, ui-monospace, Consolas, monospace);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.conflict-file-status {
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+}
+.conflict-file.conflict .conflict-file-status {
+  color: var(--danger);
+}
+.conflict-file.blocked .conflict-file-status {
+  color: var(--danger);
+}
+.conflict-file.merged .conflict-file-status {
+  color: var(--success);
+}
+.conflict-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.conflict-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.conflict-path {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono-font-family, ui-monospace, Consolas, monospace);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.conflict-keys {
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+}
+.conflict-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+.conflict-blocked p {
+  margin: 0;
+}
+.file-editor {
+  flex: 1 1 auto;
+  min-height: 360px;
+  height: 52vh;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input);
+}
+.file-editor .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--text);
+}
+.file-editor .cm-scroller {
+  font-family: var(--mono-font-family, ui-monospace, Consolas, monospace);
+  font-size: var(--mono-font-size, 13px);
+  line-height: 1.5;
+}
+.file-editor .cm-gutters {
+  background: transparent;
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+.file-editor .cm-activeLine,
+.file-editor .cm-activeLineGutter {
+  background: var(--hover);
+}
+.file-editor .cm-focused {
+  outline: none;
+}
+.conflict-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.conflict-footnote {
+  margin: 0 auto 0 0;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.conflict-footer .session-notice {
+  flex-basis: 100%;
+  margin: 0;
+}
+.conflict-done {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--success);
+  border-radius: 8px;
+}
+.conflict-done p {
+  margin: 0;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .conflict-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.conflict-sides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conflict-sides [aria-pressed='true'] {
+  outline: 2px solid var(--primary, var(--text));
+  outline-offset: 1px;
+}
+/* Conflict blocks inside the file editor: the head's lines, the base's lines, and their markers. */
+.file-editor .cm-line.cm-conflict-head {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+.file-editor .cm-line.cm-conflict-base {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.file-editor .cm-line.cm-conflict-marker {
+  background: color-mix(in srgb, var(--accent, var(--muted)) 28%, transparent);
+  font-weight: 600;
+}
+.file-editor .cm-line.cm-conflict-marker-head,
+.file-editor .cm-line.cm-conflict-marker-base {
+  color: var(--text);
+}
+.file-editor .cm-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--accent, #7aa2f7);
+  background: var(--surface-2, rgba(127, 138, 153, 0.12));
+  font-family: inherit;
+}
+
+.file-editor .cm-conflict-keep {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.file-editor .cm-conflict-keep:hover {
+  background: var(--surface-3, rgba(127, 138, 153, 0.2));
+}
+
+.file-editor .cm-foldPlaceholder {
+  margin: 0 4px;
+  padding: 0 6px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* Search index progress: a quiet line in the bottom corner, out of the way of the work. */
+.index-progress {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.index-progress .ci-spinner {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  border-width: 1.5px;
+}
+.loading-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

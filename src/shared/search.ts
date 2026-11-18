@@ -14,6 +14,14 @@ export type SearchKind = (typeof SEARCH_KINDS)[number];
 export const SEARCH_STATES = ['open', 'closed', 'all'] as const;
 export type SearchState = (typeof SEARCH_STATES)[number];
 
+/** What the search index is doing. `reposTotal` is 0 until the repo list has come back. */
+export interface IndexStatus {
+  syncing: boolean;
+  ready: boolean;
+  reposRead: number;
+  reposTotal: number;
+}
+
 /** Longest search text Orbit accepts. */
 export const SEARCH_TEXT_MAX = 256;
 /** Most labels one search may require. */

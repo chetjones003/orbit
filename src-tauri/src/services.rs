@@ -20,6 +20,7 @@ pub struct Services {
     pub client: Arc<GitHubClient>,
     pub writes: Arc<WriteCoordinator>,
     pub repos: Arc<RepoService>,
+    pub search_index: Arc<crate::github::search_index::SearchIndex>,
     pub projects: ProjectsService,
     pub notifications: Arc<NotificationService>,
     pub notification_center: Arc<NotificationCenter>,

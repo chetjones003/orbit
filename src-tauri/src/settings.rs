@@ -37,6 +37,10 @@ pub struct OrbitSettings {
     pub word_wrap: bool,
     /// When an issue or pull request card opens on hover: "off", "quick", "normal" or "slow".
     pub hover_cards: String,
+    /// Keys in the file editor: "standard" or "vim".
+    pub editor_keys: String,
+    /// Long lines wrap onto the next line in the file editor, rather than running off to the side.
+    pub editor_word_wrap: bool,
     /// Closing the window hides Orbit to the tray, when the tray is available.
     pub close_to_tray: bool,
     /// Shows a Windows notification for new GitHub activity while the window is hidden or unfocused.
@@ -69,6 +73,8 @@ impl Default for OrbitSettings {
             monospace_font_size: 13,
             word_wrap: true,
             hover_cards: "normal".into(),
+            editor_keys: "standard".into(),
+            editor_word_wrap: false,
             close_to_tray: true,
             desktop_notifications: true,
             poll_minutes: 1,
@@ -98,6 +104,8 @@ pub struct SettingsUpdate {
     pub monospace_font_size: Option<u32>,
     pub word_wrap: Option<bool>,
     pub hover_cards: Option<String>,
+    pub editor_keys: Option<String>,
+    pub editor_word_wrap: Option<bool>,
     pub close_to_tray: Option<bool>,
     pub desktop_notifications: Option<bool>,
     pub poll_minutes: Option<u32>,
@@ -190,6 +198,12 @@ impl SettingsStore {
         }
         if let Some(v) = update.hover_cards {
             next.hover_cards = v;
+        }
+        if let Some(v) = update.editor_keys {
+            next.editor_keys = v;
+        }
+        if let Some(v) = update.editor_word_wrap {
+            next.editor_word_wrap = v;
         }
         if let Some(v) = update.close_to_tray {
             next.close_to_tray = v;
@@ -362,6 +376,8 @@ pub fn normalize(value: serde_json::Value) -> OrbitSettings {
         monospace_font_size: uint_of("monospaceFontSize", MONO_SIZES, defaults.monospace_font_size),
         word_wrap: obj.get("wordWrap").and_then(|v| v.as_bool()) != Some(false),
         hover_cards: pick("hoverCards", &["off", "quick", "normal", "slow"], &defaults.hover_cards),
+        editor_keys: pick("editorKeys", &["standard", "vim"], &defaults.editor_keys),
+        editor_word_wrap: obj.get("editorWordWrap").and_then(|v| v.as_bool()) == Some(true),
         close_to_tray: obj.get("closeToTray").and_then(|v| v.as_bool()) != Some(false),
         desktop_notifications: obj.get("desktopNotifications").and_then(|v| v.as_bool()) != Some(false),
         poll_minutes: {
@@ -383,6 +399,15 @@ pub fn normalize(value: serde_json::Value) -> OrbitSettings {
 mod tests {
     use super::normalize;
     use serde_json::json;
+
+    #[test]
+    fn editor_keys_are_standard_or_vim() {
+        assert_eq!(normalize(json!({})).editor_keys, "standard");
+        assert_eq!(normalize(json!({ "editorKeys": "vim" })).editor_keys, "vim");
+        assert_eq!(normalize(json!({ "editorKeys": "emacs" })).editor_keys, "standard");
+        assert!(!normalize(json!({})).editor_word_wrap);
+        assert!(normalize(json!({ "editorWordWrap": true })).editor_word_wrap);
+    }
 
     #[test]
     fn hover_cards_keep_a_known_speed_or_fall_back_to_normal() {

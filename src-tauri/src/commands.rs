@@ -7,6 +7,7 @@ use tauri::State;
 
 use crate::auth::AuthStatus;
 use crate::github::attachments::{self, AttachmentUploadResult};
+use crate::github::conflicts::{self, ConflictCommitInput, ConflictCommitResult, ConflictSet};
 use crate::github::inbox::{self, InboxPage, InboxQuery};
 use crate::github::issues;
 use crate::github::notifications::{parse_thread_id, NotificationOpenResult};
@@ -105,7 +106,18 @@ pub async fn inbox_list(state: Svc<'_>, query: InboxQuery) -> Result<InboxPage, 
 
 #[tauri::command]
 pub async fn search_query(state: Svc<'_>, request: SearchRequest) -> Result<SearchPage, String> {
-    search::search(&state.ctx(), &state.repos, &request).await.map_err(err)
+    search::search(&state.ctx(), &state.repos, &state.search_index, &request).await.map_err(err)
+}
+
+#[tauri::command]
+pub fn search_index_status(state: Svc<'_>) -> crate::github::search_index::IndexStatus {
+    state.search_index.status()
+}
+
+#[tauri::command]
+pub async fn search_warm(state: Svc<'_>) -> Result<(), String> {
+    search::warm(&state.ctx(), &state.repos, &state.search_index);
+    Ok(())
 }
 
 // ---- Themes. ----
@@ -355,6 +367,21 @@ pub async fn pulls_merge(state: Svc<'_>, repo_full_name: String, number: u64, in
     pulls::merge_pull(&state.ctx(), &repo_full_name, number, &input.method, input.delete_branch, &input.expected_head_sha)
         .await
         .map_err(err)
+}
+
+#[tauri::command]
+pub async fn pulls_conflicts(state: Svc<'_>, repo_full_name: String, number: u64) -> Result<ConflictSet, String> {
+    conflicts::read_conflicts(&state.ctx(), &repo_full_name, number).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn pulls_resolve_conflicts(
+    state: Svc<'_>,
+    repo_full_name: String,
+    number: u64,
+    input: ConflictCommitInput,
+) -> Result<ConflictCommitResult, String> {
+    conflicts::commit_resolution(&state.ctx(), &repo_full_name, number, input).await.map_err(err)
 }
 
 #[derive(Deserialize)]

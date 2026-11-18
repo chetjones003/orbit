@@ -1,5 +1,5 @@
 import { Icon } from '../icons';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type {
   IssueCloseReason,
   IssueDetail as IssueDetailData,
@@ -15,6 +15,12 @@ import { IssueFields } from './IssueFields';
 import { ItemProjects } from '../projects/ItemProjects';
 import { PullActionsPanel } from './PullActions';
 import { PullCi } from './PullCi';
+import { prefetchConflicts } from '../conflicts/conflict-cache';
+
+// The resolver and its editor are only needed once someone resolves conflicts, so they load on demand.
+const ConflictResolver = lazy(() =>
+  import('../conflicts/ConflictResolver').then((module) => ({ default: module.ConflictResolver }))
+);
 import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 import { IssueLabelChip } from './IssueLabelChip';
@@ -83,6 +89,7 @@ export function IssueDetailView({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
   const editable = kind === 'issue';
 
@@ -91,6 +98,7 @@ export function IssueDetailView({
     setDetail(null);
     setPullDetail(null);
     setError(null);
+    setResolving(false);
   }, [repoFullName, number, kind]);
 
   useEffect(() => {
@@ -112,6 +120,11 @@ export function IssueDetailView({
               mergeableState: (next as PullDetail).mergeableState ?? 'unknown',
               merged: (next as PullDetail).merged ?? false
             });
+          // A conflicted open pull request is likely to be resolved, so its conflicts and editor load now.
+          if ((next as PullDetail).mergeable === false && (next as PullDetail).summary.state === 'open') {
+            prefetchConflicts(repoFullName, number);
+            void import('../conflicts/ConflictResolver');
+          }
         }
       },
       (cause: unknown) => {
@@ -202,6 +215,28 @@ export function IssueDetailView({
     );
   }
 
+  if (kind === 'pull' && resolving) {
+    return (
+      <article className={`issue-detail ${variant}`}>
+        <Suspense
+          fallback={
+            <p className="empty-state loading-line" role="status">
+              <span className="ci-spinner" aria-hidden="true" />
+              Loading conflicts…
+            </p>
+          }
+        >
+          <ConflictResolver
+            repoFullName={repoFullName}
+            number={number}
+            onClose={() => setResolving(false)}
+            onResolved={reload}
+          />
+        </Suspense>
+      </article>
+    );
+  }
+
   const { summary } = detail;
   return (
     <article className={`issue-detail ${variant}`}>
@@ -272,7 +307,7 @@ export function IssueDetailView({
                 ? 'Checking mergeability'
                 : pullDetail.mergeable
                   ? `Mergeable · ${pullDetail.mergeableState}`
-                  : 'Has conflicts'}
+                  : `Has conflicts with ${pullDetail.summary.baseRef}`}
             </span>
           </div>
           <div className="pr-branches">
@@ -280,6 +315,17 @@ export function IssueDetailView({
             <Icon name="chevronRight" size={14} />
             <code>{pullDetail.summary.baseRef}</code>
           </div>
+          {pullDetail.mergeable === false && pullDetail.summary.state === 'open' && (
+            <div className="pr-conflicts">
+              <p className="detail-muted">
+                Both branches changed the same lines. GitHub cannot merge this until they are resolved, and
+                checks may not run on this commit.
+              </p>
+              <button type="button" className="primary-action" onClick={() => setResolving(true)}>
+                Resolve conflicts
+              </button>
+            </div>
+          )}
         </section>
       )}
       {kind === 'pull' && pullDetail && (
