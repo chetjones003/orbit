@@ -31,6 +31,14 @@ export interface ProjectsViewProps {
   onOpenItem: (repoFullName: string, number: number, kind: 'issue' | 'pull') => void;
   /** The left panel's slot for the project list. The list is drawn there, so the workspace keeps the full width. */
   listSlot: HTMLElement | null;
+  /** A project, and optionally one of its custom views, to show now. */
+  target?: ProjectTarget | null;
+  onTargetHandled?: () => void;
+}
+
+export interface ProjectTarget {
+  projectId: string;
+  customViewId: string | null;
 }
 
 /**
@@ -38,7 +46,7 @@ export interface ProjectsViewProps {
  * items each view shows. Edits save one at a time per item; GitHub's version of an item replaces the
  * local copy whenever a save answers, so a failed save shows what is actually stored.
  */
-export function ProjectsView({ onOpenItem, listSlot }: ProjectsViewProps) {
+export function ProjectsView({ onOpenItem, listSlot, target = null, onTargetHandled }: ProjectsViewProps) {
   const [list, setList] = useState<ProjectListPage | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -68,6 +76,22 @@ export function ProjectsView({ onOpenItem, listSlot }: ProjectsViewProps) {
   }, [projectId]);
   // The filter of the view on screen now. Saves and adds read it when they finish, not when they start.
   const filterRef = useRef('');
+  // The custom view to show once the project being opened has loaded.
+  const pendingCustomId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!target) return;
+    if (target.projectId === projectIdRef.current) {
+      if (target.customViewId) {
+        setCustomId(target.customViewId);
+        setViewId(null);
+      }
+    } else {
+      pendingCustomId.current = target.customViewId;
+      setProjectId(target.projectId);
+    }
+    onTargetHandled?.();
+  }, [target, onTargetHandled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,7 +129,10 @@ export function ProjectsView({ onOpenItem, listSlot }: ProjectsViewProps) {
       (next) => {
         if (cancelled) return;
         setDetail(next);
-        setViewId(next.views[0]?.id ?? null);
+        const pending = pendingCustomId.current;
+        pendingCustomId.current = null;
+        if (pending) setCustomId(pending);
+        else setViewId(next.views[0]?.id ?? null);
       },
       (error: unknown) => !cancelled && setMessage(messageOf(error, 'This project could not be opened.'))
     );

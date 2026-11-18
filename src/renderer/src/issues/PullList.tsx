@@ -9,11 +9,16 @@ import { hovercardProps } from '../hovercard/hovercard-model';
 export function PullList({
   repoFullName,
   selectedNumber,
-  onOpenPull
+  onOpenPull,
+  startCreating = false,
+  onStartHandled
 }: {
   repoFullName: string;
   selectedNumber: number | null;
   onOpenPull: (number: number) => void;
+  /** Opens the new pull request form, for a command run from outside the list. */
+  startCreating?: boolean;
+  onStartHandled?: () => void;
 }) {
   const [state, setState] = useState<PullStateFilter>('open');
   const [label, setLabel] = useState('');
@@ -24,6 +29,11 @@ export function PullList({
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  useEffect(() => {
+    if (!startCreating) return;
+    setCreating(true);
+    onStartHandled?.();
+  }, [startCreating, onStartHandled]);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);

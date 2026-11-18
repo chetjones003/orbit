@@ -29,7 +29,7 @@ export function wrapSelection(doc: string, from: number, to: number, marker: str
 }
 
 /**
- * Ctrl/Cmd+K. With text selected, the cursor lands in the URL slot. With nothing selected,
+ * Ctrl/Cmd+L. With text selected, the cursor lands in the URL slot. With nothing selected,
  * the cursor lands in the link text, which the user types first.
  */
 export function linkAroundSelection(doc: string, from: number, to: number): TextEdit {

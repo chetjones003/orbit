@@ -38,7 +38,7 @@ describe('wrapSelection (bold, italic, code)', () => {
   });
 });
 
-describe('linkAroundSelection (Ctrl/Cmd+K)', () => {
+describe('linkAroundSelection (Ctrl/Cmd+L)', () => {
   it('wraps the selection as a link and puts the cursor in the URL slot', () => {
     const edit = linkAroundSelection('see here', 4, 8);
 
