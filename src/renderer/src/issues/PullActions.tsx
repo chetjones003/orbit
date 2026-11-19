@@ -77,18 +77,21 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
   };
 
   const confirmMergeAction = async (): Promise<void> => {
+    const currentActions = actions;
+    const currentMethod = method;
+    if (!currentActions || currentMethod === '') return;
     setConfirmMerge(false);
     return run(async () => {
       const result = await window.orbit.pulls.merge(repoFullName, number, {
-        method,
+        method: currentMethod,
         deleteBranch,
-        expectedHeadSha: actions.headSha
+        expectedHeadSha: currentActions.headSha
       });
       if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
-      if (result.branchDeleted) return `Merged and deleted ${actions.headRef}.`;
+      if (result.branchDeleted) return `Merged and deleted ${currentActions.headRef}.`;
       return deleteBranch ? 'Merged. The branch was not deleted.' : 'Merged.';
     });
   };
@@ -244,7 +247,11 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
         </p>
       )}
       {confirmMerge && (
-        <Modal title="Merge this pull request?" onClose={() => setConfirmMerge(false)} className="merge-confirm-modal">
+        <Modal
+          title="Merge this pull request?"
+          onClose={() => setConfirmMerge(false)}
+          className="merge-confirm-modal"
+        >
           <p className="detail-muted merge-confirm-description">
             {deleteBranch
               ? 'This merges the pull request into its base branch and deletes the head branch.'
