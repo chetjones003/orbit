@@ -2762,28 +2762,61 @@ input:focus-visible,
 }
 .issue-body {
   font-size: calc(var(--ui-font-scale, 1) * 12.5px);
-  line-height: 1.65;
+  max-width: 92ch;
+  line-height: 1.75;
+  color: var(--text);
 }
 .issue-body p {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
+}
+.issue-body h1,
+.issue-body h2,
+.issue-body h3,
+.issue-body h4,
+.issue-body h5,
+.issue-body h6 {
+  margin: 1.6em 0 0.55em;
+  line-height: 1.35;
+  font-weight: 650;
+}
+.issue-body h1 {
+  font-size: calc(var(--ui-font-scale, 1) * 19px);
 }
 .issue-body h2 {
-  margin: 16px 0 6px;
-  font-size: calc(var(--ui-font-scale, 1) * 14px);
-  font-weight: 650;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--line);
+  font-size: calc(var(--ui-font-scale, 1) * 16px);
 }
 .issue-body h3 {
-  margin: 14px 0 6px;
+  font-size: calc(var(--ui-font-scale, 1) * 14px);
+}
+.issue-body h4,
+.issue-body h5,
+.issue-body h6 {
   font-size: calc(var(--ui-font-scale, 1) * 13px);
-  font-weight: 650;
+}
+.issue-body > :first-child {
+  margin-top: 0;
+}
+.issue-body > :last-child {
+  margin-bottom: 0;
 }
 .issue-body ul,
 .issue-body ol {
-  margin: 0 0 10px;
-  padding-left: 20px;
+  margin: 0 0 14px;
+  padding-left: 24px;
+}
+.issue-body ul {
+  list-style: disc outside;
+}
+.issue-body ol {
+  list-style: decimal outside;
 }
 .issue-body li {
-  margin: 2px 0;
+  margin: 4px 0;
+}
+.issue-body li > p {
+  margin: 0 0 6px;
 }
 .issue-body li.task-list-item {
   list-style: none;
