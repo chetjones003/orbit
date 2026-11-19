@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WorkflowGraphJob, WorkflowJob } from '../../../shared/issues';
 import { Icon } from '../icons';
+import { subscribeItemsRefresh } from '../shell/list-events';
 import {
   buildGraph,
   formatDuration,
@@ -229,6 +230,7 @@ function JobLog({
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  useEffect(() => subscribeItemsRefresh(() => setVersion((value) => value + 1)), []);
   const tone = jobTone(job);
   const running = tone === 'running';
 

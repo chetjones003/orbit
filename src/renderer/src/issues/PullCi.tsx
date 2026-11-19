@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { WorkflowGraphJob, WorkflowJob, WorkflowRun } from '../../../shared/issues';
 import { StatusGlyph, WorkflowGraph } from './WorkflowGraph';
 import { SectionHead } from './SectionHead';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 export { formatDuration, groupName, jobTone } from './ci-model';
 
@@ -21,6 +22,7 @@ export function PullCi({ repoFullName, number }: PullCiProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  useEffect(() => subscribeItemsRefresh(() => setVersion((value) => value + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +110,7 @@ function RunBlock({ run, repoFullName, headSha, now, onChanged }: RunBlockProps)
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
   const runActive = run.status !== 'completed';
+  useEffect(() => subscribeItemsRefresh(() => setVersion((value) => value + 1)), []);
 
   useEffect(() => {
     let cancelled = false;

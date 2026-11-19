@@ -3,6 +3,7 @@ import type { IssueListPage, IssueListQuery, IssueStateFilter, IssueSummary } fr
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
 import { hovercardUrlProps } from '../hovercard/hovercard-model';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 export interface IssueListProps {
   repoFullName: string;
@@ -62,6 +63,8 @@ export function IssueList({ repoFullName, selectedNumber, onOpenIssue }: IssueLi
     setPageNumber(1);
     void load(EMPTY_FILTERS, 1);
   }, [repoFullName, load]);
+
+  useEffect(() => subscribeItemsRefresh(() => void load(applied, pageNumber)), [load, applied, pageNumber]);
 
   const apply = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();

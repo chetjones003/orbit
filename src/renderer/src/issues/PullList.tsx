@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PullListPage, PullListQuery, PullStateFilter, PullSummary } from '../../../shared/issues';
 import { NewPullForm } from './NewPullForm';
-import { publishItemCreated } from '../shell/list-events';
+import { publishItemCreated, subscribeItemsRefresh } from '../shell/list-events';
 import { Icon } from '../icons';
 import { IssueLabelChip } from './IssueLabelChip';
 import { hovercardProps } from '../hovercard/hovercard-model';
@@ -29,6 +29,7 @@ export function PullList({
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  useEffect(() => subscribeItemsRefresh(() => setRefreshVersion((version) => version + 1)), []);
   useEffect(() => {
     if (!startCreating) return;
     setCreating(true);

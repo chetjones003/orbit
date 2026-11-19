@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
 import { Modal } from '../chrome/Modal';
 import { SectionHead } from './SectionHead';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
   merge: 'Merge commit',
@@ -31,6 +32,8 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
   const [busy, setBusy] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
   const [confirmMerge, setConfirmMerge] = useState(false);
+
+  useEffect(() => subscribeItemsRefresh(() => setLoadVersion((version) => version + 1)), []);
 
   useEffect(() => {
     let cancelled = false;

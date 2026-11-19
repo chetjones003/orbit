@@ -135,18 +135,24 @@ export function layoutGraph(nodes: GraphNode[], expanded: Set<string>): GraphLay
 }
 
 export interface LogLine {
-  kind: 'group' | 'line' | 'error';
+  kind: 'group' | 'line' | 'warning' | 'error';
   text: string;
 }
 
-/** A job's log with the runner's markers turned into titles and error lines. */
+/** A job's log with the runner's markers turned into titles and annotated lines. */
 export function parseLogLines(text: string): LogLine[] {
   const lines: LogLine[] = [];
   for (const raw of text.split('\n')) {
-    if (raw.startsWith('##[endgroup]')) continue;
-    if (raw.startsWith('##[group]')) lines.push({ kind: 'group', text: raw.slice('##[group]'.length) });
-    else if (raw.startsWith('##[error]')) lines.push({ kind: 'error', text: raw.slice('##[error]'.length) });
-    else lines.push({ kind: 'line', text: raw });
+    const marker = /##\[(endgroup|group|warning|error)\]/.exec(raw);
+    if (!marker) {
+      lines.push({ kind: 'line', text: raw });
+      continue;
+    }
+    const prefix = raw.slice(0, marker.index);
+    const message = raw.slice(marker.index + marker[0].length);
+    if (marker[1] === 'endgroup') continue;
+    if (marker[1] === 'group') lines.push({ kind: 'group', text: prefix + message });
+    else lines.push({ kind: marker[1] === 'warning' ? 'warning' : 'error', text: prefix + message });
   }
   return lines;
 }

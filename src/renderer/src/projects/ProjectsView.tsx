@@ -16,6 +16,7 @@ import { ProjectViewTabs, type ProjectViewTabItem } from './ProjectViewTabs';
 import { ProjectBoard } from './ProjectBoard';
 import { ProjectTable } from './ProjectTable';
 import { groupingField, matchesKeyword, parseItemRef, withFieldValue } from './project-model';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 /** Reader-facing names for the layouts GitHub saved views and Orbit custom views use. */
 const LAYOUT_LABELS: Record<string, string> = {
@@ -74,6 +75,15 @@ export function ProjectsView({ onOpenItem, listSlot, target = null, onTargetHand
   useEffect(() => {
     projectIdRef.current = projectId;
   }, [projectId]);
+  useEffect(
+    () =>
+      subscribeItemsRefresh(() => {
+        setReloadKey((key) => key + 1);
+        void window.orbit.projects.list().then(setList, () => undefined);
+        if (projectId) void window.orbit.projects.detail(projectId).then(setDetail, () => undefined);
+      }),
+    [projectId]
+  );
   // The filter of the view on screen now. Saves and adds read it when they finish, not when they start.
   const filterRef = useRef('');
   // The custom view to show once the project being opened has loaded.

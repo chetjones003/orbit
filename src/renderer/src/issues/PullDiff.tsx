@@ -25,6 +25,7 @@ import { ReviewPanel, ReviewTextBox, describeAnchor } from './PullReview';
 import type { DraftKey } from '../comments/draft-store';
 import { anchorForChange, findChangeForAnchor, fileNote, isLargePatch, parseFileDiff } from './pull-diff';
 import { SectionHead } from './SectionHead';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 export interface PullDiffViewProps {
   repoFullName: string;
@@ -161,6 +162,8 @@ export function PullDiffView({
       await loadThreads().catch(() => setThreadError(THREAD_ERROR));
     })();
   }, [loadReview, loadFiles, loadThreads]);
+
+  useEffect(() => subscribeItemsRefresh(refreshReview), [refreshReview]);
 
   if (error) return <p role="alert">{error}</p>;
   if (!filesPage || !threadsPage) {
