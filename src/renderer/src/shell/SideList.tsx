@@ -2,7 +2,12 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { PersonalRepo } from '../../../shared/ipc';
 import type { IssueStateFilter, IssueSummary } from '../../../shared/issues';
 import { Icon } from '../icons';
-import { publishItemsRefresh, subscribeItemChanges, subscribeItemCreated } from './list-events';
+import {
+  publishItemsRefresh,
+  subscribeItemChanges,
+  subscribeItemCreated,
+  subscribeItemsRefresh
+} from './list-events';
 import { markColor, markLetters } from './repo-mark';
 import { RepoMark } from './RepoMark';
 
@@ -52,6 +57,8 @@ export function SideList({
   const pendingPick = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noun = kind === 'pull' ? 'Pull requests' : 'Issues';
 
+  useEffect(() => subscribeItemsRefresh(() => setRefreshKey((key) => key + 1)), []);
+
   const cancelPick = (): void => {
     if (pendingPick.current !== null) clearTimeout(pendingPick.current);
     pendingPick.current = null;
@@ -81,7 +88,6 @@ export function SideList({
           aria-label={`Refresh ${noun.toLowerCase()}`}
           title="Refresh"
           onClick={() => {
-            setRefreshKey((key) => key + 1);
             publishItemsRefresh();
           }}
         >

@@ -11,6 +11,7 @@ import type {
 import { Icon } from '../icons';
 import { ProjectFieldEditor } from './ProjectFieldEditor';
 import { describeValue, withFieldValue } from './project-model';
+import { subscribeItemsRefresh } from '../shell/list-events';
 
 export interface ItemProjectsProps {
   repoFullName: string;
@@ -32,6 +33,14 @@ export function ItemProjects({ repoFullName, number }: ItemProjectsProps) {
   const [reloadKey, setReloadKey] = useState(0);
   // Each project is a disclosure: collapsed by default, so an issue with several projects stays compact.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  useEffect(
+    () =>
+      subscribeItemsRefresh(() => {
+        setReloadKey((key) => key + 1);
+        void window.orbit.projects.list().then(setAllProjects, () => undefined);
+      }),
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
