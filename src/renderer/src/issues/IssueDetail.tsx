@@ -25,7 +25,7 @@ import { PullDiffView } from './PullDiff';
 import { RichBody } from './RichBody';
 import { IssueLabelChip } from './IssueLabelChip';
 import { IssueLinks } from './IssueLinks';
-import { publishItemChange } from '../shell/list-events';
+import { publishItemChange, subscribeItemChanges, subscribeItemsRefresh } from '../shell/list-events';
 import { hovercardUrlProps } from '../hovercard/hovercard-model';
 import { SectionHead } from './SectionHead';
 
@@ -86,6 +86,29 @@ export function IssueDetailView({
   useEffect(() => {
     if (detail) publishItemChange({ repoFullName, number, summary: detail.summary });
   }, [detail, repoFullName, number]);
+  useEffect(
+    () => subscribeItemsRefresh(() => setLoadVersion((version) => version + 1)),
+    [repoFullName, number]
+  );
+  // A child issue opened in another panel can close while its parent remains open. Keep the parent's child rows current.
+  useEffect(
+    () =>
+      subscribeItemChanges((change) => {
+        if (change.repoFullName !== repoFullName || change.number === number) return;
+        setDetail((current) => {
+          if (!current?.subIssues?.some((child) => child.number === change.number)) return current;
+          return {
+            ...current,
+            subIssues: current.subIssues.map((child) =>
+              child.number === change.number
+                ? { ...child, title: change.summary.title, state: change.summary.state }
+                : child
+            )
+          };
+        });
+      }),
+    [repoFullName, number]
+  );
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -435,12 +458,11 @@ export function IssueDetailView({
               >
                 <span className="sub-issues-name">Sub-issues</span>
                 <span className="sub-progress" aria-hidden="true">
-                  <span style={{ width: `${subProgressPercent(summary, detail.subIssues)}%` }} />
+                  <span style={{ width: `${subProgressPercent(detail.subIssues)}%` }} />
                 </span>
                 <span className="sub-issues-progress">
-                  {summary.subIssues
-                    ? `${summary.subIssues.completed} of ${summary.subIssues.total} done`
-                    : `${detail.subIssues.filter((entry) => entry.state === 'closed').length} of ${detail.subIssues.length} done`}
+                  {detail.subIssues.filter((entry) => entry.state === 'closed').length} of{' '}
+                  {detail.subIssues.length} done
                 </span>
                 <span className={`item-project-chevron ${subIssuesOpen ? 'open' : ''}`} aria-hidden="true">
                   <Icon name="chevronDown" size={14} />
@@ -534,13 +556,10 @@ export function IssueDetailView({
   );
 }
 
-/** A parent or sub-issue, shown as a link. Opening it replaces the current item, like any other pick. */
-/** The share of sub-issues that are done, as a whole percentage. GitHub's count wins when it is there. */
-function subProgressPercent(summary: IssueSummary, children: SubIssueRef[]): number {
-  const total = summary.subIssues?.total ?? children.length;
-  const done = summary.subIssues
-    ? summary.subIssues.completed
-    : children.filter((entry) => entry.state === 'closed').length;
+/** The share of loaded sub-issues that are done, as a whole percentage. */
+function subProgressPercent(children: SubIssueRef[]): number {
+  const total = children.length;
+  const done = children.filter((entry) => entry.state === 'closed').length;
   return total > 0 ? Math.round((done / total) * 100) : 0;
 }
 

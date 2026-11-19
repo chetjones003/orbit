@@ -72,7 +72,7 @@ describe('PullActionsPanel', () => {
 
     fireEvent.change(screen.getByLabelText('Merge method'), { target: { value: 'squash' } });
     fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Merge' }));
 
     await waitFor(() =>
       expect(pulls.merge).toHaveBeenCalledWith('orbit-owner/app', 7, {
@@ -96,7 +96,7 @@ describe('PullActionsPanel', () => {
       </>
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
-    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Merge' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/changed since you opened it/i);
     expect(onChanged).toHaveBeenCalled();

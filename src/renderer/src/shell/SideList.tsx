@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { PersonalRepo } from '../../../shared/ipc';
 import type { IssueStateFilter, IssueSummary } from '../../../shared/issues';
 import { Icon } from '../icons';
+import { publishItemsRefresh, subscribeItemChanges, subscribeItemCreated } from './list-events';
 import { markColor, markLetters } from './repo-mark';
 import { RepoMark } from './RepoMark';
-import { subscribeItemChanges, subscribeItemCreated } from './list-events';
 
 /**
  * How long a single click waits for a second one. A double click then opens full screen, and does not open a side
@@ -80,7 +80,10 @@ export function SideList({
           className="icon-button"
           aria-label={`Refresh ${noun.toLowerCase()}`}
           title="Refresh"
-          onClick={() => setRefreshKey((key) => key + 1)}
+          onClick={() => {
+            setRefreshKey((key) => key + 1);
+            publishItemsRefresh();
+          }}
         >
           <Icon name="refresh" size={14} />
         </button>

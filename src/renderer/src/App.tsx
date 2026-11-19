@@ -7,7 +7,7 @@ import type { ConnectionStatus } from '../../shared/connection';
 import { isRateLimitedAt, writesAllowed } from '../../shared/connection';
 import { ConnectionBanner, InlineError } from './Feedback';
 import { AppToasts } from './toasts/AppToasts';
-import { publishItemCreated } from './shell/list-events';
+import { publishItemCreated, publishItemsRefresh } from './shell/list-events';
 import { RepoMark } from './shell/RepoMark';
 import { markColor, markLetters } from './shell/repo-mark';
 import { confirm } from '@ui-sdk/react/alert-dialog';
@@ -330,7 +330,10 @@ export function App() {
   // Each successful background or manual refresh pushes a new lastSuccessAt; reload the list then.
   const lastSuccessAt = refreshStatus?.lastSuccessAt ?? null;
   useEffect(() => {
-    if (status?.kind === 'signed-in' && lastSuccessAt !== null) void loadRepos();
+    if (status?.kind === 'signed-in' && lastSuccessAt !== null) {
+      void loadRepos();
+      publishItemsRefresh();
+    }
   }, [lastSuccessAt]);
 
   // Banner timings ("Last updated", "Retrying in") only move while the status is not fresh; tick them.

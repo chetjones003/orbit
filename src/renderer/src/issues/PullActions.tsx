@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { confirm } from '@ui-sdk/react/alert-dialog';
 import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
+import { Modal } from '../chrome/Modal';
 import { SectionHead } from './SectionHead';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
@@ -30,6 +30,7 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
+  const [confirmMerge, setConfirmMerge] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,28 +71,27 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     }
   };
 
-  const merge = async (): Promise<void> => {
+  const merge = (): void => {
     if (!actions || method === '') return;
-    // Merging changes the base branch, so it needs an explicit yes, not a single click.
-    const agreed = await confirm({
-      title: 'Merge this pull request?',
-      description: deleteBranch
-        ? 'The pull request merges into its base branch, and the head branch is deleted.'
-        : 'The pull request merges into its base branch.',
-      confirmLabel: 'Merge'
-    });
-    if (!agreed) return;
+    setConfirmMerge(true);
+  };
+
+  const confirmMergeAction = async (): Promise<void> => {
+    const currentActions = actions;
+    const currentMethod = method;
+    if (!currentActions || currentMethod === '') return;
+    setConfirmMerge(false);
     return run(async () => {
       const result = await window.orbit.pulls.merge(repoFullName, number, {
-        method,
+        method: currentMethod,
         deleteBranch,
-        expectedHeadSha: actions.headSha
+        expectedHeadSha: currentActions.headSha
       });
       if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
-      if (result.branchDeleted) return `Merged and deleted ${actions.headRef}.`;
+      if (result.branchDeleted) return `Merged and deleted ${currentActions.headRef}.`;
       return deleteBranch ? 'Merged. The branch was not deleted.' : 'Merged.';
     });
   };
@@ -245,6 +245,27 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
         <p role="alert" className="session-notice">
           {error}
         </p>
+      )}
+      {confirmMerge && (
+        <Modal
+          title="Merge this pull request?"
+          onClose={() => setConfirmMerge(false)}
+          className="merge-confirm-modal"
+        >
+          <p className="detail-muted merge-confirm-description">
+            {deleteBranch
+              ? 'This merges the pull request into its base branch and deletes the head branch.'
+              : 'This merges the pull request into its base branch.'}
+          </p>
+          <div className="merge-confirm-actions">
+            <button type="button" className="secondary-action" onClick={() => setConfirmMerge(false)}>
+              Cancel
+            </button>
+            <button type="button" className="primary-action" onClick={() => void confirmMergeAction()}>
+              Merge
+            </button>
+          </div>
+        </Modal>
       )}
     </section>
   );
