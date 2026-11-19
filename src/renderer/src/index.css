@@ -2329,6 +2329,19 @@ input:focus-visible,
   overflow-y: auto;
   padding: 14px 18px 18px;
 }
+.merge-confirm-modal {
+  width: min(460px, calc(100vw - 48px));
+}
+.merge-confirm-description {
+  margin: 0;
+  line-height: 1.5;
+}
+.merge-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
 
 /* Window chrome: Orbit's own title bar and menu bar, in the app palette. */
 .app-frame {
