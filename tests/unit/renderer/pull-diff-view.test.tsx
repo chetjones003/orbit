@@ -72,6 +72,38 @@ describe('PullDiffView', () => {
     expect(screen.queryByRole('button', { name: 'Split view' })).toBeNull();
   });
 
+  it('collapses and expands the changed files from the section title', async () => {
+    mockPull([file()]);
+    render(
+      <PullDiffView signedInLogin="orbit-owner" repoFullName="orbit-owner/app" number={7} onLink={vi.fn()} />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /Changed files/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('navigation', { name: 'File navigator' })).toBeNull();
+    fireEvent.click(toggle);
+    expect(await screen.findByRole('navigation', { name: 'File navigator' })).toBeTruthy();
+  });
+
+  it('starts folded when asked, as the pull request page does', async () => {
+    mockPull([file()]);
+    render(
+      <PullDiffView
+        signedInLogin="orbit-owner"
+        repoFullName="orbit-owner/app"
+        number={7}
+        onLink={vi.fn()}
+        defaultExpanded={false}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /Changed files/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('navigation', { name: 'File navigator' })).toBeNull();
+  });
+
   it('shows a split toggle only in the expanded view', async () => {
     mockPull([file()]);
     render(

@@ -3,7 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { OverlayHost } from '@ui-sdk/react/overlays';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PullCi } from '../../../src/renderer/src/issues/PullCi';
-import { PullActionsPanel } from '../../../src/renderer/src/issues/PullActions';
+import {
+  MergeSplitButton,
+  PullActionNotices,
+  usePullActions
+} from '../../../src/renderer/src/issues/PullActions';
 import { NewPullForm } from '../../../src/renderer/src/issues/NewPullForm';
 import type { PullActions, WorkflowRun } from '../../../src/shared/issues';
 
@@ -52,27 +56,38 @@ function installApi(overrides: Record<string, unknown> = {}) {
   return pulls;
 }
 
-describe('PullActionsPanel', () => {
+function MergeHarness({ onChanged = () => {} }: { onChanged?: () => void }) {
+  const state = usePullActions('orbit-owner/app', 7, onChanged);
+  return (
+    <>
+      <MergeSplitButton state={state} />
+      <PullActionNotices state={state} />
+      <OverlayHost />
+    </>
+  );
+}
+
+describe('Merge split button', () => {
   beforeEach(() => {
+    // jsdom has no layout; the menu scrolls its highlighted item into view.
+    Element.prototype.scrollIntoView ??= () => {};
     installApi();
   });
   afterEach(() => {
     cleanup();
   });
 
-  it('merges with the chosen method, pinned to the head the user is looking at', async () => {
+  it('merges with the method chosen from the dropdown, pinned to the head the user is looking at', async () => {
     const pulls = installApi();
-    render(
-      <>
-        <PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />
-        <OverlayHost />
-      </>
-    );
+    render(<MergeHarness />);
     await screen.findByRole('button', { name: 'Merge' });
 
-    fireEvent.change(screen.getByLabelText('Merge method'), { target: { value: 'squash' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Merge' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge options' }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Squash and merge/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Squash and merge' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Squash and merge' })
+    );
 
     await waitFor(() =>
       expect(pulls.merge).toHaveBeenCalledWith('orbit-owner/app', 7, {
@@ -84,17 +99,25 @@ describe('PullActionsPanel', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/merged/i);
   });
 
+  it('offers every method, and disables the ones the repo does not allow', async () => {
+    render(<MergeHarness />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge options' }));
+    expect(await screen.findByRole('menuitemradio', { name: /Rebase and merge/ })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    expect(screen.getByRole('menuitemradio', { name: /Merge commit/ })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+  });
+
   it('says the pull request changed and merges nothing when the head moved', async () => {
     const pulls = installApi({
       merge: vi.fn(async () => ({ kind: 'new-commits', headSha: 'head-2' }))
     });
     const onChanged = vi.fn();
-    render(
-      <>
-        <PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={onChanged} />
-        <OverlayHost />
-      </>
-    );
+    render(<MergeHarness onChanged={onChanged} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Merge' }));
 
@@ -105,22 +128,23 @@ describe('PullActionsPanel', () => {
 
   it('keeps Merge disabled for a draft pull request', async () => {
     installApi({ actions: vi.fn(async () => actions({ draft: true })) });
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
+    render(<MergeHarness />);
     expect(await screen.findByRole('button', { name: 'Merge' })).toBeDisabled();
   });
 
-  it('marks a draft ready for review', async () => {
+  it('marks a draft ready for review from the dropdown', async () => {
     const pulls = installApi({ actions: vi.fn(async () => actions({ draft: true })) });
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark ready for review' }));
+    render(<MergeHarness />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Mark ready for review/ }));
     await waitFor(() => expect(pulls.setDraft).toHaveBeenCalledWith('orbit-owner/app', 7, false, 'head-1'));
   });
 
   it('turns auto-merge on with the chosen method, pinned to the head', async () => {
     const pulls = installApi();
-    render(<PullActionsPanel repoFullName="orbit-owner/app" number={7} onChanged={() => {}} />);
-    fireEvent.change(await screen.findByLabelText('Merge method'), { target: { value: 'merge' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enable auto-merge' }));
+    render(<MergeHarness />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Enable auto-merge/ }));
     await waitFor(() =>
       expect(pulls.setAutoMerge).toHaveBeenCalledWith('orbit-owner/app', 7, {
         enabled: true,
@@ -128,6 +152,28 @@ describe('PullActionsPanel', () => {
         expectedHeadSha: 'head-1'
       })
     );
+  });
+
+  it('deletes the branch after merge when that option is checked', async () => {
+    const pulls = installApi();
+    render(<MergeHarness />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge options' }));
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: /Delete branch after merge/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Merge' }));
+    await waitFor(() =>
+      expect(pulls.merge).toHaveBeenCalledWith('orbit-owner/app', 7, {
+        method: 'merge',
+        deleteBranch: true,
+        expectedHeadSha: 'head-1'
+      })
+    );
+  });
+});
+
+describe('PullCi', () => {
+  afterEach(() => {
+    cleanup();
   });
 
   it('re-runs only the failed jobs or the whole workflow run', async () => {

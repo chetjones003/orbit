@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuContent,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger
+} from '@ui-sdk/react/menu';
 import type { MergeMethod, PullActions as PullActionsData } from '../../../shared/issues';
 import { Modal } from '../chrome/Modal';
-import { SectionHead } from './SectionHead';
+import { Icon } from '../icons';
 import { subscribeItemsRefresh } from '../shell/list-events';
+import type { MergeReadiness } from './merge-readiness';
 
 const METHOD_LABELS: Record<MergeMethod, string> = {
   merge: 'Merge commit',
@@ -10,20 +21,46 @@ const METHOD_LABELS: Record<MergeMethod, string> = {
   rebase: 'Rebase and merge'
 };
 
-export interface PullActionsPanelProps {
-  repoFullName: string;
-  number: number;
-  /** Called after a change, so the pull request's details can be reloaded. */
-  onChanged: () => void;
-}
+/** The button text for each method: what pressing it does. */
+const METHOD_ACTIONS: Record<MergeMethod, string> = {
+  merge: 'Merge',
+  squash: 'Squash and merge',
+  rebase: 'Rebase and merge'
+};
+
+const METHOD_HINTS: Record<MergeMethod, string> = {
+  merge: 'All commits are added to the base branch with a merge commit.',
+  squash: 'All commits are combined into one commit on the base branch.',
+  rebase: 'All commits are rebased and added to the base branch.'
+};
+
+const ALL_METHODS: MergeMethod[] = ['merge', 'squash', 'rebase'];
 
 const STALE_MESSAGE = 'This pull request changed since you opened it. Review the new head, then try again.';
 
+export interface PullActionsState {
+  actions: PullActionsData | null;
+  method: MergeMethod | '';
+  setMethod: (method: MergeMethod) => void;
+  deleteBranch: boolean;
+  setDeleteBranch: (value: boolean) => void;
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+  merge: () => Promise<void>;
+  toggleAutoMerge: (enabled: boolean) => Promise<void>;
+  toggleDraft: () => Promise<void>;
+}
+
 /**
- * Merge, auto-merge, and draft state for one pull request. Every action is pinned to the head commit the panel
- * loaded, so a head that moved since is refused, not merged. Workflow runs live in the CI section.
+ * Merge, auto-merge, and draft state for one pull request. Every action is pinned to the head commit that was
+ * loaded, so a head that moved since is refused, not merged.
  */
-export function PullActionsPanel({ repoFullName, number, onChanged }: PullActionsPanelProps) {
+export function usePullActions(
+  repoFullName: string,
+  number: number,
+  onChanged: () => void
+): PullActionsState {
   const [actions, setActions] = useState<PullActionsData | null>(null);
   const [method, setMethod] = useState<MergeMethod | ''>('');
   const [deleteBranch, setDeleteBranch] = useState(false);
@@ -31,7 +68,6 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
-  const [confirmMerge, setConfirmMerge] = useState(false);
 
   useEffect(() => subscribeItemsRefresh(() => setLoadVersion((version) => version + 1)), []);
 
@@ -49,7 +85,8 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
         setDeleteBranch(next.deleteBranchOnMerge && next.headInRepo);
       },
       (cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load the actions.');
+        if (!cancelled)
+          setError(cause instanceof Error ? cause.message : 'Could not load the merge options.');
       }
     );
     return () => {
@@ -74,170 +111,255 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
     }
   };
 
-  const merge = (): void => {
-    if (!actions || method === '') return;
-    setConfirmMerge(true);
-  };
-
-  const confirmMergeAction = async (): Promise<void> => {
-    const currentActions = actions;
-    const currentMethod = method;
-    if (!currentActions || currentMethod === '') return;
-    setConfirmMerge(false);
+  const merge = (): Promise<void> => {
+    const current = actions;
+    const chosen = method;
+    if (!current || chosen === '') return Promise.resolve();
     return run(async () => {
       const result = await window.orbit.pulls.merge(repoFullName, number, {
-        method: currentMethod,
+        method: chosen,
         deleteBranch,
-        expectedHeadSha: currentActions.headSha
+        expectedHeadSha: current.headSha
       });
       if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
-      if (result.branchDeleted) return `Merged and deleted ${currentActions.headRef}.`;
+      if (result.branchDeleted) return `Merged and deleted ${current.headRef}.`;
       return deleteBranch ? 'Merged. The branch was not deleted.' : 'Merged.';
     });
   };
 
   const toggleAutoMerge = (enabled: boolean): Promise<void> => {
     if (!actions) return Promise.resolve();
+    const headSha = actions.headSha;
     return run(async () => {
       const result = await window.orbit.pulls.setAutoMerge(repoFullName, number, {
         enabled,
         ...(enabled && method !== '' ? { method } : {}),
-        expectedHeadSha: actions.headSha
+        expectedHeadSha: headSha
       });
       if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
-      return enabled ? 'Auto-merge is on.' : 'Auto-merge is off.';
+      return enabled ? 'Auto-merge is on. It merges once the checks pass.' : 'Auto-merge is off.';
     });
   };
 
   const toggleDraft = (): Promise<void> => {
     if (!actions) return Promise.resolve();
+    const { draft, headSha } = actions;
     return run(async () => {
-      const result = await window.orbit.pulls.setDraft(repoFullName, number, !actions.draft, actions.headSha);
+      const result = await window.orbit.pulls.setDraft(repoFullName, number, !draft, headSha);
       if (result.kind === 'new-commits') {
         setError(STALE_MESSAGE);
         return null;
       }
-      return actions.draft ? 'Marked ready for review.' : 'Converted to draft.';
+      return draft ? 'Marked ready for review.' : 'Converted to draft.';
     });
   };
 
-  if (error && !actions) {
+  return {
+    actions,
+    method,
+    setMethod,
+    deleteBranch,
+    setDeleteBranch,
+    busy,
+    status,
+    error,
+    merge,
+    toggleAutoMerge,
+    toggleDraft
+  };
+}
+
+/**
+ * A split button for a section header: the main half merges with the chosen method, after a confirmation; the
+ * arrow opens the merge options (method, branch cleanup, auto-merge, draft).
+ */
+export function MergeSplitButton({
+  state,
+  readiness
+}: {
+  state: PullActionsState;
+  /** Colours the button: green when ready, neutral when only optional items are open, red when blocked. */
+  readiness?: MergeReadiness;
+}) {
+  const { actions, method, busy } = state;
+  const [confirming, setConfirming] = useState(false);
+
+  if (!actions) {
     return (
-      <p role="alert" className="session-notice">
-        {error}
-      </p>
+      <span className="merge-split loading" aria-busy="true">
+        Loading…
+      </span>
     );
   }
-  if (!actions) {
-    return <p className="detail-muted">Loading actions…</p>;
+  if (actions.merged || actions.state !== 'open') {
+    return <span className="merge-split-note">{actions.merged ? 'Merged' : 'Closed'}</span>;
   }
 
-  const canMerge =
-    !busy &&
-    !actions.draft &&
-    !actions.merged &&
-    actions.state === 'open' &&
-    actions.allowedMergeMethods.length > 0;
-  const open = !actions.merged && actions.state === 'open';
+  const allowed = actions.allowedMergeMethods;
+  const canMerge = !busy && !actions.draft && method !== '';
+  const label = method === '' ? 'Merge' : METHOD_ACTIONS[method];
+  const disabledReason = actions.draft
+    ? 'Mark the pull request ready for review before merging.'
+    : allowed.length === 0
+      ? 'No merge method is allowed in this repo.'
+      : undefined;
+
+  const onAction = (value: string): void => {
+    if (value === 'auto-on') void state.toggleAutoMerge(true);
+    else if (value === 'auto-off') void state.toggleAutoMerge(false);
+    else if (value === 'draft') void state.toggleDraft();
+  };
 
   return (
-    <section aria-label="Pull request actions" className="detail-card pull-actions">
-      <SectionHead icon="merge" title="Merge">
-        {open && (
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={busy}
-            onClick={() => void toggleDraft()}
+    <div className={`merge-split ${readiness?.tone ?? 'caution'}`} data-tone={readiness?.tone ?? 'caution'}>
+      <button
+        type="button"
+        className="merge-split-main"
+        disabled={!canMerge}
+        title={
+          disabledReason ??
+          (readiness && readiness.reasons.length > 0 ? readiness.reasons.join(' · ') : undefined)
+        }
+        onClick={() => setConfirming(true)}
+      >
+        <Icon name="merge" size={14} />
+        {label}
+      </button>
+      <Menu onAction={onAction}>
+        <MenuTrigger className="merge-split-toggle" aria-label="Merge options" disabled={busy}>
+          <Icon name="chevronDown" size={14} />
+        </MenuTrigger>
+        <MenuContent
+          className="merge-menu"
+          aria-label="Merge options"
+          side="bottom"
+          align="end"
+          sideOffset={6}
+        >
+          <div className="merge-menu-label">Merge method</div>
+          <MenuRadioGroup<MergeMethod>
+            value={method === '' ? undefined : method}
+            onValueChange={(value) => state.setMethod(value)}
           >
-            {actions.draft ? 'Mark ready for review' : 'Convert to draft'}
-          </button>
-        )}
-      </SectionHead>
-      {!open ? (
-        <p className="detail-muted">
-          {actions.merged ? 'This pull request is merged.' : 'This pull request is closed.'}
-        </p>
-      ) : (
-        <>
-          <div className="merge-row">
-            <label className="merge-field">
-              <span>Method</span>
-              <select
-                aria-label="Merge method"
-                value={method}
-                disabled={busy || actions.allowedMergeMethods.length === 0}
-                onChange={(event) => setMethod(event.target.value as MergeMethod)}
-              >
-                {actions.allowedMergeMethods.length === 0 && (
-                  <option value="">No merge method is allowed</option>
-                )}
-                {actions.allowedMergeMethods.map((allowed) => (
-                  <option key={allowed} value={allowed}>
-                    {METHOD_LABELS[allowed]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="merge-check">
-              <input
-                type="checkbox"
-                checked={deleteBranch}
-                disabled={busy || !actions.headInRepo}
-                onChange={(event) => setDeleteBranch(event.target.checked)}
-              />
-              <span>Delete branch after merge</span>
-            </label>
-          </div>
-          <button
-            type="button"
-            className="primary-action merge-button"
-            disabled={!canMerge}
-            onClick={() => void merge()}
-          >
-            Merge
-          </button>
-          {actions.draft && (
-            <p className="detail-muted">Mark the pull request ready for review before merging.</p>
-          )}
-          <div className="merge-auto">
-            {actions.autoMergeMethod ? (
-              <>
-                <span className="merge-auto-note">Auto-merge is on. It merges once the checks pass.</span>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={busy}
-                  onClick={() => void toggleAutoMerge(false)}
+            {ALL_METHODS.map((candidate) => {
+              const enabled = allowed.includes(candidate);
+              return (
+                <MenuRadioItem
+                  key={candidate}
+                  value={candidate}
+                  disabled={!enabled}
+                  closeOnSelect
+                  className="merge-menu-item merge-menu-method"
                 >
-                  Disable auto-merge
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="merge-auto-note">
+                  <span className="merge-menu-check" aria-hidden="true">
+                    {method === candidate && <Icon name="check" size={13} />}
+                  </span>
+                  <span className="merge-menu-text">
+                    <strong>{METHOD_LABELS[candidate]}</strong>
+                    <span>{enabled ? METHOD_HINTS[candidate] : 'Not allowed in this repo.'}</span>
+                  </span>
+                </MenuRadioItem>
+              );
+            })}
+          </MenuRadioGroup>
+          <MenuSeparator className="menu-separator" />
+          <MenuCheckboxItem
+            value="delete-branch"
+            checked={state.deleteBranch}
+            disabled={!actions.headInRepo}
+            closeOnSelect={false}
+            onCheckedChange={(checked) => state.setDeleteBranch(checked)}
+            className="merge-menu-item"
+          >
+            <span className="merge-menu-check" aria-hidden="true">
+              {state.deleteBranch && <Icon name="check" size={13} />}
+            </span>
+            <span className="merge-menu-text">
+              <strong>Delete branch after merge</strong>
+            </span>
+          </MenuCheckboxItem>
+          <MenuSeparator className="menu-separator" />
+          {actions.autoMergeMethod ? (
+            <MenuItem value="auto-off" className="merge-menu-item">
+              <span className="merge-menu-check" aria-hidden="true" />
+              <span className="merge-menu-text">
+                <strong>Disable auto-merge</strong>
+              </span>
+            </MenuItem>
+          ) : (
+            <MenuItem
+              value="auto-on"
+              disabled={!actions.allowAutoMerge || method === ''}
+              className="merge-menu-item"
+            >
+              <span className="merge-menu-check" aria-hidden="true" />
+              <span className="merge-menu-text">
+                <strong>Enable auto-merge</strong>
+                <span>
                   {actions.allowAutoMerge
                     ? 'Merge automatically once the checks pass.'
-                    : 'Auto-merge is not allowed in this repo.'}
+                    : 'Not allowed in this repo.'}
                 </span>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={busy || !actions.allowAutoMerge || method === ''}
-                  onClick={() => void toggleAutoMerge(true)}
-                >
-                  Enable auto-merge
-                </button>
-              </>
-            )}
+              </span>
+            </MenuItem>
+          )}
+          <MenuItem value="draft" className="merge-menu-item">
+            <span className="merge-menu-check" aria-hidden="true" />
+            <span className="merge-menu-text">
+              <strong>{actions.draft ? 'Mark ready for review' : 'Convert to draft'}</strong>
+            </span>
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+      {confirming && method !== '' && (
+        <Modal
+          title={`${METHOD_LABELS[method]}?`}
+          onClose={() => setConfirming(false)}
+          className="merge-confirm-modal"
+        >
+          <p className="detail-muted merge-confirm-description">
+            {METHOD_HINTS[method]}
+            {state.deleteBranch ? ` The ${actions.headRef} branch is deleted afterwards.` : ''}
+          </p>
+          <div className="merge-confirm-actions">
+            <button type="button" className="secondary-action" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => {
+                setConfirming(false);
+                void state.merge();
+              }}
+            >
+              {label}
+            </button>
           </div>
-        </>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/** What the last merge action did, or why it failed. Shown in the section body under the header. */
+export function PullActionNotices({ state }: { state: PullActionsState }) {
+  const { actions, status, error } = state;
+  return (
+    <>
+      {actions?.autoMergeMethod && !actions.merged && (
+        <p className="detail-muted merge-auto-note">
+          Auto-merge is on ({METHOD_LABELS[actions.autoMergeMethod]}). It merges once the checks pass.
+        </p>
+      )}
+      {actions?.draft && actions.state === 'open' && (
+        <p className="detail-muted">Mark the pull request ready for review before merging.</p>
       )}
       {status && (
         <p role="status" className="session-notice">
@@ -249,27 +371,6 @@ export function PullActionsPanel({ repoFullName, number, onChanged }: PullAction
           {error}
         </p>
       )}
-      {confirmMerge && (
-        <Modal
-          title="Merge this pull request?"
-          onClose={() => setConfirmMerge(false)}
-          className="merge-confirm-modal"
-        >
-          <p className="detail-muted merge-confirm-description">
-            {deleteBranch
-              ? 'This merges the pull request into its base branch and deletes the head branch.'
-              : 'This merges the pull request into its base branch.'}
-          </p>
-          <div className="merge-confirm-actions">
-            <button type="button" className="secondary-action" onClick={() => setConfirmMerge(false)}>
-              Cancel
-            </button>
-            <button type="button" className="primary-action" onClick={() => void confirmMergeAction()}>
-              Merge
-            </button>
-          </div>
-        </Modal>
-      )}
-    </section>
+    </>
   );
 }
