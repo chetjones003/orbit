@@ -872,7 +872,9 @@ input:focus-visible,
   border-radius: 0.75rem;
   background: color-mix(in srgb, var(--raised) 94%, var(--text));
   color: var(--text);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.38), 0 2px 8px rgb(0 0 0 / 0.22);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.38),
+    0 2px 8px rgb(0 0 0 / 0.22);
   translate: var(--toast-swipe-x, 0px) calc(var(--toast-offset) + var(--toast-swipe-y, 0px));
   transition-property: translate, opacity, height, scale;
   transition-duration: 320ms;
