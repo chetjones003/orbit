@@ -1,0 +1,116 @@
+name: Daily GitHub storage cleanup
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep only the newest release, current CI artifacts, and cache generations
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const api = github.rest;
+
+            // Keep the newest published stable release and its installer assets.
+            const releases = await github.paginate(api.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const stableReleases = releases
+              .filter((release) => !release.draft && !release.prerelease)
+              .sort((a, b) => Date.parse(b.published_at ?? b.created_at) - Date.parse(a.published_at ?? a.created_at));
+            const latestRelease = stableReleases[0];
+            if (!latestRelease) core.warning('No published stable release found; skipping release cleanup.');
+
+            if (latestRelease) {
+              for (const release of stableReleases) {
+                if (release.id === latestRelease.id) continue;
+                await api.repos.deleteRelease({ owner, repo, release_id: release.id });
+                if (/^v\d+\.\d+\.\d+$/.test(release.tag_name)) {
+                  try {
+                    await api.git.deleteRef({ owner, repo, ref: `tags/${release.tag_name}` });
+                  } catch (error) {
+                    if (error.status !== 404) throw error;
+                  }
+                }
+                core.info(`Deleted release ${release.tag_name}`);
+              }
+            }
+
+            // Keep artifacts/logs for the newest successful main CI run, and the run
+            // that produced the retained release. Remove completed historical runs.
+            const workflows = await github.paginate(api.actions.listRepoWorkflows, {
+              owner, repo, per_page: 100,
+            });
+            const ci = workflows.find((workflow) => workflow.path === '.github/workflows/ci.yml');
+            const releaseWorkflow = workflows.find((workflow) => workflow.path === '.github/workflows/release.yml');
+            const keepRunIds = new Set([Number(context.runId)]);
+
+            if (ci) {
+              const runs = await github.paginate(api.actions.listWorkflowRuns, {
+                owner, repo, workflow_id: ci.id, branch: 'main', per_page: 100,
+              });
+              const newestCi = runs
+                .filter((run) => run.conclusion === 'success')
+                .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+              if (newestCi) keepRunIds.add(newestCi.id);
+            }
+            if (releaseWorkflow && latestRelease) {
+              const runs = await github.paginate(api.actions.listWorkflowRuns, {
+                owner, repo, workflow_id: releaseWorkflow.id, branch: latestRelease.tag_name,
+                per_page: 100,
+              });
+              const releaseRun = runs
+                .filter((run) => run.conclusion === 'success')
+                .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+              if (releaseRun) keepRunIds.add(releaseRun.id);
+            }
+
+            for (const workflow of workflows) {
+              const runs = await github.paginate(api.actions.listWorkflowRuns, {
+                owner, repo, workflow_id: workflow.id, per_page: 100,
+              });
+              for (const run of runs) {
+                if (keepRunIds.has(run.id) || run.status !== 'completed') continue;
+                await api.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+                core.info(`Deleted ${workflow.name} run ${run.id} (${run.head_branch})`);
+              }
+            }
+
+            // GitHub caches are immutable. Keep the most recently created cache
+            // for each platform/toolchain family, and delete older generations.
+            const caches = await github.paginate(api.actions.getActionsCacheList, {
+              owner, repo, per_page: 100,
+            });
+            const familyFor = (key) => {
+              const parts = key.split('-');
+              if (key.startsWith('node-cache-')) return parts.slice(0, 4).join('-');
+              if (/^v\d+-rust-/.test(key)) return parts.slice(0, 5).join('-');
+              return parts.slice(0, 2).join('-');
+            };
+            const newestByFamily = new Map();
+            for (const cache of caches) {
+              const family = familyFor(cache.key);
+              const current = newestByFamily.get(family);
+              if (!current || Date.parse(cache.created_at) > Date.parse(current.created_at)) {
+                newestByFamily.set(family, cache);
+              }
+            }
+            const retainedCacheIds = new Set([...newestByFamily.values()].map((cache) => cache.id));
+            for (const cache of caches) {
+              if (retainedCacheIds.has(cache.id)) continue;
+              await api.actions.deleteActionsCache({ owner, repo, cache_id: cache.id });
+              core.info(`Deleted cache ${cache.key} (${cache.id})`);
+            }
+
+            core.info(`Retained release: ${latestRelease?.tag_name ?? 'none'}`);
+            core.info(`Retained workflow runs: ${[...keepRunIds].join(', ')}`);
+            core.info(`Retained cache families: ${newestByFamily.size}`);
