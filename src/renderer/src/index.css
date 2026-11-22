@@ -853,6 +853,7 @@ input:focus-visible,
 .app-toasts {
   position: fixed;
   top: 3rem;
+  left: auto;
   right: 1rem;
   z-index: 100;
   width: min(24rem, calc(100vw - 2rem));
@@ -866,20 +867,29 @@ input:focus-visible,
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: var(--raised);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--line) 65%, var(--text));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--raised) 94%, var(--text));
   color: var(--text);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.38),
+    0 2px 8px rgb(0 0 0 / 0.22);
   translate: var(--toast-swipe-x, 0px) calc(var(--toast-offset) + var(--toast-swipe-y, 0px));
-  transition-property: translate, opacity, height;
-  transition-duration: 220ms;
+  transition-property: translate, opacity, height, scale;
+  transition-duration: 320ms;
+  transition-timing-function: cubic-bezier(0.2, 0.85, 0.25, 1);
   user-select: none;
 }
-.app-toast[data-starting-style],
+.app-toast[data-starting-style] {
+  opacity: 0;
+  translate: calc(1.25rem + var(--toast-swipe-x, 0px)) calc(var(--toast-offset) + var(--toast-swipe-y, 0px));
+  scale: 0.96;
+}
 .app-toast[data-ending-style] {
   opacity: 0;
+  translate: calc(1rem + var(--toast-swipe-x, 0px)) calc(var(--toast-offset) + var(--toast-swipe-y, 0px));
+  scale: 0.97;
 }
 .app-toast[data-swiping] {
   transition: none;
@@ -892,12 +902,15 @@ input:focus-visible,
 }
 .app-toast-success {
   border-left-color: var(--success);
+  background: color-mix(in srgb, var(--raised) 91%, var(--success));
 }
 .app-toast-error {
   border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--raised) 88%, var(--danger));
 }
 .app-toast-info {
   border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--raised) 91%, var(--accent));
 }
 .app-toast-success::before,
 .app-toast-error::before,
@@ -955,6 +968,7 @@ input:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .app-toast {
     transition-property: opacity;
+    transition-duration: 120ms;
   }
 }
 
