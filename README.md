@@ -6,6 +6,8 @@
 
 <p align="center">A desktop client for GitHub issues, pull requests, projects, and CI.</p>
 
+<p align="center"><em>A vibe-coded piece of junk, usable for how I like to work. Feel free to play around with it.</em></p>
+
 <p align="center">
   <a href="https://github.com/chetjones003/orbit/releases"><strong>Download</strong></a> ·
   <a href="https://github.com/chetjones003/orbit/issues">Issues</a> ·
