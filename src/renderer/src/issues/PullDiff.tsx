@@ -1,5 +1,5 @@
 import { Icon } from '../icons';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, useId, type ReactNode } from 'react';
 import {
   Diff,
   Hunk,
@@ -37,6 +37,8 @@ export interface PullDiffViewProps {
   signedInLogin: string;
   /** False once the pull request is merged or closed: reviews can no longer be submitted. */
   open?: boolean;
+  /** Whether the changed files start unfolded. The pull request page starts them folded. */
+  defaultExpanded?: boolean;
 }
 
 const LOAD_ERROR = 'The changed files could not be loaded. Try again later.';
@@ -70,7 +72,8 @@ export function PullDiffView({
   variant = 'panel',
   onLink,
   signedInLogin,
-  open = true
+  open = true,
+  defaultExpanded = true
 }: PullDiffViewProps) {
   const [filesPage, setFilesPage] = useState<PullFilesPage | null>(null);
   const [threadsPage, setThreadsPage] = useState<PullReviewThreadsPage | null>(null);
@@ -90,6 +93,8 @@ export function PullDiffView({
   const [filesStale, setFilesStale] = useState(false);
   /** The head the loaded files were read after. Only that head can be acknowledged. */
   const [filesHeadSha, setFilesHeadSha] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const bodyId = useId();
 
   const loadThreads = useCallback(async () => {
     setThreadsPage(await window.orbit.pulls.threads(repoFullName, number));
@@ -229,82 +234,89 @@ export function PullDiffView({
 
   return (
     <section aria-label="Changed files" className={`pull-diff ${variant}`}>
-      <SectionHead icon="commit" title="Changed files" count={filesPage.files.length} />
-      {filesPage.partial && <p role="note">Some changed files may not be shown.</p>}
-      {threadsPage.partial && <p role="note">Some review threads may not be shown.</p>}
-      {threadError && <p role="alert">{threadError}</p>}
-      {filesStale && (
-        <p role="alert">
-          The changed files could not be reloaded. Refresh again before acknowledging new commits.
-        </p>
-      )}
-      <ReviewPanel
-        repoFullName={repoFullName}
-        signedInLogin={signedInLogin}
-        number={number}
-        review={review}
-        reviewError={reviewError}
-        partialComments={review?.pending?.commentsPartial ?? false}
-        newCommits={newCommits}
-        reviewedHeadSha={reviewedHeadSha}
-        acknowledgeDisabled={refreshing || filesStale || filesHeadSha !== (review?.headSha ?? null)}
-        onAcknowledge={() => setReviewedHeadSha(review?.headSha ?? null)}
-        onRefresh={refreshReview}
-        onSubmitted={refreshReview}
-        open={open}
+      <SectionHead
+        icon="commit"
+        title="Changed files"
+        count={filesPage.files.length}
+        collapsible={{ open: expanded, onToggle: () => setExpanded((value) => !value), controls: bodyId }}
       />
-      <div className="pull-diff-layout">
-        <nav aria-label="File navigator">
-          <ul>
-            {filesPage.files.map((candidate, index) => (
-              <li key={candidate.filename}>
+      <div id={bodyId} className="pull-diff-body" hidden={!expanded}>
+        {filesPage.partial && <p role="note">Some changed files may not be shown.</p>}
+        {threadsPage.partial && <p role="note">Some review threads may not be shown.</p>}
+        {threadError && <p role="alert">{threadError}</p>}
+        {filesStale && (
+          <p role="alert">
+            The changed files could not be reloaded. Refresh again before acknowledging new commits.
+          </p>
+        )}
+        <ReviewPanel
+          repoFullName={repoFullName}
+          signedInLogin={signedInLogin}
+          number={number}
+          review={review}
+          reviewError={reviewError}
+          partialComments={review?.pending?.commentsPartial ?? false}
+          newCommits={newCommits}
+          reviewedHeadSha={reviewedHeadSha}
+          acknowledgeDisabled={refreshing || filesStale || filesHeadSha !== (review?.headSha ?? null)}
+          onAcknowledge={() => setReviewedHeadSha(review?.headSha ?? null)}
+          onRefresh={refreshReview}
+          onSubmitted={refreshReview}
+          open={open}
+        />
+        <div className="pull-diff-layout">
+          <nav aria-label="File navigator">
+            <ul>
+              {filesPage.files.map((candidate, index) => (
+                <li key={candidate.filename}>
+                  <button
+                    className="secondary-action"
+                    aria-current={index === selected ? 'true' : undefined}
+                    onClick={() => setSelected(index)}
+                  >
+                    <span className="pull-file-name">{candidate.filename}</span>
+                    <span className="pull-file-add" aria-label="additions">
+                      +{candidate.additions}
+                    </span>
+                    <span className="pull-file-del" aria-label="deletions">
+                      −{candidate.deletions}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <div className="pull-diff-file">
+            <div className="pull-diff-toolbar">
+              <h3>{file.filename}</h3>
+              {variant === 'expanded' && (
                 <button
                   className="secondary-action"
-                  aria-current={index === selected ? 'true' : undefined}
-                  onClick={() => setSelected(index)}
+                  onClick={() => setViewType((current) => (current === 'unified' ? 'split' : 'unified'))}
                 >
-                  <span className="pull-file-name">{candidate.filename}</span>
-                  <span className="pull-file-add" aria-label="additions">
-                    +{candidate.additions}
-                  </span>
-                  <span className="pull-file-del" aria-label="deletions">
-                    −{candidate.deletions}
-                  </span>
+                  {viewType === 'unified' ? 'Split view' : 'Unified view'}
                 </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="pull-diff-file">
-          <div className="pull-diff-toolbar">
-            <h3>{file.filename}</h3>
-            {variant === 'expanded' && (
-              <button
-                className="secondary-action"
-                onClick={() => setViewType((current) => (current === 'unified' ? 'split' : 'unified'))}
-              >
-                {viewType === 'unified' ? 'Split view' : 'Unified view'}
-              </button>
+              )}
+            </div>
+            {note && <p className="pull-diff-note">{note}</p>}
+            {actions.enabled && (
+              <p className="pull-diff-hint">Click a line number to start a review comment on that line.</p>
             )}
+            <FileBody
+              file={file}
+              viewType={viewType}
+              loaded={loadedLarge.has(file.filename)}
+              onLoad={() => setLoadedLarge((current) => new Set(current).add(file.filename))}
+              threads={threadsForFile}
+              repoFullName={repoFullName}
+              number={number}
+              onLink={onLink}
+              actions={{
+                ...actions,
+                composing: composing?.path === file.filename ? composing : null
+              }}
+            />
           </div>
-          {note && <p className="pull-diff-note">{note}</p>}
-          {actions.enabled && (
-            <p className="pull-diff-hint">Click a line number to start a review comment on that line.</p>
-          )}
-          <FileBody
-            file={file}
-            viewType={viewType}
-            loaded={loadedLarge.has(file.filename)}
-            onLoad={() => setLoadedLarge((current) => new Set(current).add(file.filename))}
-            threads={threadsForFile}
-            repoFullName={repoFullName}
-            number={number}
-            onLink={onLink}
-            actions={{
-              ...actions,
-              composing: composing?.path === file.filename ? composing : null
-            }}
-          />
         </div>
       </div>
     </section>

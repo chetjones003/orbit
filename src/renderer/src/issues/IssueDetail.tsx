@@ -13,7 +13,7 @@ import { classifyLink } from './classify-link';
 import { IssueEditor } from './IssueEditor';
 import { IssueFields } from './IssueFields';
 import { ItemProjects } from '../projects/ItemProjects';
-import { PullActionsPanel } from './PullActions';
+import { PullStatusCard } from './PullStatus';
 import { PullCi } from './PullCi';
 import { prefetchConflicts } from '../conflicts/conflict-cache';
 
@@ -264,9 +264,12 @@ export function IssueDetailView({
   return (
     <article className={`issue-detail ${variant}`}>
       <section className="detail-card detail-head" aria-label="Summary">
-        <p className="eyebrow">
-          {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
-        </p>
+        <div className="detail-eyebrow">
+          <p className="eyebrow">
+            {kind === 'pull' ? 'Pull request' : 'Issue'} · {repoFullName} · #{summary.number}
+          </p>
+          <CopyReference reference={`${repoFullName}#${summary.number}`} />
+        </div>
         <h2>{summary.title}</h2>
         <p className="issue-meta">
           <span className={`issue-state-pill ${summary.state}`}>
@@ -317,64 +320,37 @@ export function IssueDetailView({
       )}
 
       {kind === 'pull' && pullDetail && (
-        <section aria-label="Pull request details" className="detail-card pr-summary">
-          <SectionHead icon="pull" title="Status" />
-          <div className="pr-status-row">
-            <span className={`pr-pill ${pullDetail.summary.draft ? 'draft' : 'ready'}`}>
-              {pullDetail.summary.draft ? 'Draft' : 'Ready for review'}
-            </span>
-            <span
-              className={`pr-pill ${pullDetail.mergeable === null ? 'checking' : pullDetail.mergeable ? 'ok' : 'bad'}`}
-            >
-              {pullDetail.mergeable === null
-                ? 'Checking mergeability'
-                : pullDetail.mergeable
-                  ? `Mergeable · ${pullDetail.mergeableState}`
-                  : `Has conflicts with ${pullDetail.summary.baseRef}`}
-            </span>
-          </div>
-          <div className="pr-branches">
-            <code>{pullDetail.summary.headRef}</code>
-            <Icon name="chevronRight" size={14} />
-            <code>{pullDetail.summary.baseRef}</code>
-          </div>
-          {pullDetail.mergeable === false && pullDetail.summary.state === 'open' && (
-            <div className="pr-conflicts">
-              <p className="detail-muted">
-                Both branches changed the same lines. GitHub cannot merge this until they are resolved, and
-                checks may not run on this commit.
-              </p>
-              <button type="button" className="primary-action" onClick={() => setResolving(true)}>
-                Resolve conflicts
-              </button>
-            </div>
-          )}
-        </section>
+        <div className="pr-overview">
+          <PullStatusCard
+            repoFullName={repoFullName}
+            number={number}
+            pullDetail={pullDetail}
+            onChanged={reload}
+            onResolve={() => setResolving(true)}
+          />
+          <section aria-label="Reviews" className="detail-card pr-reviews">
+            <SectionHead icon="check" title="Reviews" count={pullDetail.reviews.length} />
+            {pullDetail.reviewsPartial && <p className="detail-muted">Some reviews may not be shown.</p>}
+            {pullDetail.reviews.length === 0 ? (
+              <p className="detail-muted">No reviews yet.</p>
+            ) : (
+              <ul className="review-list">
+                {pullDetail.reviews.map((review) => (
+                  <li key={review.id} className="review-item">
+                    <span className={`review-state ${review.state.toLowerCase()}`}>
+                      {reviewStateLabel(review.state)}
+                    </span>
+                    <strong>@{review.authorLogin}</strong>
+                    {review.body && <p>{review.body}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       )}
-      {kind === 'pull' && pullDetail && (
-        <section aria-label="Reviews" className="detail-card">
-          <SectionHead icon="check" title="Reviews" count={pullDetail.reviews.length} />
-          {pullDetail.reviewsPartial && <p className="detail-muted">Some reviews may not be shown.</p>}
-          {pullDetail.reviews.length === 0 ? (
-            <p className="detail-muted">No reviews yet.</p>
-          ) : (
-            <ul className="review-list">
-              {pullDetail.reviews.map((review) => (
-                <li key={review.id} className="review-item">
-                  <span className={`review-state ${review.state.toLowerCase()}`}>
-                    {reviewStateLabel(review.state)}
-                  </span>
-                  <strong>@{review.authorLogin}</strong>
-                  {review.body && <p>{review.body}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-      {kind === 'pull' && <PullActionsPanel repoFullName={repoFullName} number={number} onChanged={reload} />}
       {kind === 'pull' && (
-        <section className="detail-card" aria-label="Continuous integration">
+        <section className="detail-card pr-checks" aria-label="Continuous integration">
           <PullCi repoFullName={repoFullName} number={number} />
         </section>
       )}
@@ -521,6 +497,7 @@ export function IssueDetailView({
             variant={variant}
             onLink={routeLink}
             signedInLogin={signedInLogin}
+            defaultExpanded={false}
             open={pullDetail ? pullDetail.summary.state === 'open' && !pullDetail.merged : true}
           />
         </section>
@@ -572,6 +549,37 @@ function SubIssueLink({ issue, onOpen }: { issue: SubIssueRef; onOpen(number: nu
       onClick={() => onOpen(issue.number)}
     >
       #{issue.number} {issue.title}
+    </button>
+  );
+}
+
+/** Copies `owner/repo#123` to the clipboard, the form other tools (such as T3 Code) take for an issue or PR. */
+function CopyReference({ reference }: { reference: string }) {
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  useEffect(() => {
+    if (copied === null) return;
+    const timer = window.setTimeout(() => setCopied(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return (
+    <button
+      type="button"
+      className={`copy-reference ${copied ?? ''}`}
+      title={`Copy ${reference}`}
+      aria-label={`Copy ${reference}`}
+      onClick={() =>
+        void navigator.clipboard.writeText(reference).then(
+          () => setCopied('ok'),
+          () => setCopied('failed')
+        )
+      }
+    >
+      <Icon name={copied === 'ok' ? 'check' : 'copy'} size={13} />
+      {copied && (
+        <span className="copy-reference-note" role="status">
+          {copied === 'ok' ? 'Copied' : 'Copy failed'}
+        </span>
+      )}
     </button>
   );
 }

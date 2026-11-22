@@ -178,6 +178,24 @@ describe('IssueDetailView', () => {
 
     expect(api.app.openExternal).toHaveBeenCalledWith('https://github.com/orbit-owner/app/issues/4');
   });
+
+  it('copies the repo and number as owner/repo#number', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(
+      <IssueDetailView
+        repoFullName="orbit-owner/app"
+        number={4}
+        signedInLogin="orbit-owner"
+        onOpenIssue={vi.fn()}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy orbit-owner/app#4' }));
+
+    expect(writeText).toHaveBeenCalledWith('orbit-owner/app#4');
+    expect(await screen.findByText('Copied')).toBeTruthy();
+  });
 });
 
 describe('IssueDetailView notice links', () => {

@@ -128,9 +128,15 @@ export function sanitizeIssueHtml(html: string, options: SanitizeOptions): strin
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const body = doc.body;
 
-  for (const code of [...body.querySelectorAll('code.language-mermaid')]) {
-    const block = code.closest('pre') ?? code;
-    const source = block.textContent ?? '';
+  // GitHub's API wraps a diagram in an enrichment section (a raw `<pre lang="mermaid">` plus a loading
+  // spinner); Markdown rendered elsewhere uses `code.language-mermaid`. Each becomes one notice.
+  for (const code of [
+    ...body.querySelectorAll('section[data-type="mermaid"], pre[lang="mermaid"], code.language-mermaid')
+  ]) {
+    if (!code.isConnected) continue;
+    const block = code.closest('section[data-type="mermaid"]') ?? code.closest('pre') ?? code;
+    const raw = block.matches('section') ? (block.querySelector('pre') ?? block) : block;
+    const source = (raw.textContent ?? '').replace(/^\n+/, '').trimEnd();
     const notice = sourceNotice(doc, 'Mermaid diagram', source, options.viewOnGitHubUrl, true);
     // The renderer draws the diagram in place of this notice. The source stays on it as the fallback. It is
     // URI-encoded because sanitizers drop attributes that contain markup-like text, such as the arrows in a diagram.

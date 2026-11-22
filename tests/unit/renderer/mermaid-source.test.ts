@@ -11,4 +11,20 @@ describe('mermaid source on the fallback notice', () => {
     expect(notice).not.toBeNull();
     expect(decodeURIComponent(notice?.getAttribute('data-mermaid-source') ?? '')).toBe('graph TD\n  A-->B');
   });
+
+  it('reads the diagram out of the enrichment section the GitHub API returns, dropping its loading spinner', () => {
+    const html =
+      '<section class="js-render-needs-enrichment render-needs-enrichment" data-type="mermaid">' +
+      '<div class="js-render-enrichment-target" data-plain="xychart-beta">' +
+      '<div class="render-plaintext-hidden"><pre lang="mermaid" aria-label="Raw mermaid code">xychart-beta\n  line [1, 2]\n</pre></div>' +
+      '</div><span class="js-render-enrichment-loader"><svg aria-label="Loading"></svg></span></section>';
+    const clean = sanitizeIssueHtml(html, { viewOnGitHubUrl: 'https://github.com/o/r/pull/1' });
+    const doc = new DOMParser().parseFromString(clean, 'text/html');
+    const notices = doc.querySelectorAll('[data-mermaid-source]');
+    expect(notices).toHaveLength(1);
+    expect(decodeURIComponent(notices[0]?.getAttribute('data-mermaid-source') ?? '')).toBe(
+      'xychart-beta\n  line [1, 2]'
+    );
+    expect(doc.body.textContent).not.toContain('Loading');
+  });
 });

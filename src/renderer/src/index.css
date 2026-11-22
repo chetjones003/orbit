@@ -2948,6 +2948,45 @@ input:focus-visible,
   font-size: calc(var(--ui-font-scale, 1) * 12px);
   font-weight: 500;
 }
+.detail-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+}
+.detail-eyebrow .eyebrow {
+  margin: 0;
+}
+.copy-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.copy-reference:hover,
+.copy-reference:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+}
+.copy-reference.ok {
+  color: var(--success);
+}
+.copy-reference.failed {
+  color: var(--danger);
+}
 .detail-head h2 {
   margin: 4px 0 8px;
   font-size: calc(var(--ui-font-scale, 1) * 17px);
@@ -3398,76 +3437,6 @@ input:focus-visible,
 .review-state.changes_requested {
   border-color: color-mix(in srgb, var(--danger) 50%, transparent);
   color: var(--danger);
-}
-
-/* Merge: method and branch options on one row, the merge button full width, auto-merge below. */
-.pull-actions-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.pull-actions-head .detail-card-title {
-  margin: 0;
-}
-.merge-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-.merge-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--muted);
-  font-size: calc(var(--ui-font-scale, 1) * 11px);
-}
-.merge-field select {
-  height: 30px;
-  min-width: 200px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--canvas);
-  color: var(--text);
-  font: inherit;
-  font-size: calc(var(--ui-font-scale, 1) * 12px);
-}
-.merge-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  font-size: calc(var(--ui-font-scale, 1) * 12px);
-  cursor: pointer;
-}
-.merge-check input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-.merge-button {
-  width: 100%;
-  height: 34px;
-  font-size: calc(var(--ui-font-scale, 1) * 12.5px);
-}
-.merge-auto {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  font-size: calc(var(--ui-font-scale, 1) * 12px);
-}
-.merge-auto-note {
-  color: var(--muted);
 }
 
 /* CI: each workflow run is a card; its jobs are grouped, timed, and open to their logs. */
@@ -9353,6 +9322,193 @@ button.hovercard-title:focus-visible {
   border-color: var(--section-line);
   border-radius: 10px;
 }
+.pr-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.pr-overview .pr-summary,
+.pr-overview .pr-reviews {
+  min-width: 0;
+  margin: 0;
+}
+.pr-overview .pr-reviews {
+  align-self: start;
+}
+.pr-checks {
+  padding-bottom: 8px;
+}
+.issue-detail.expanded .pr-overview {
+  grid-template-columns: minmax(0, 1.6fr) minmax(240px, 0.6fr);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .issue-detail.expanded .pr-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Merge: a split button in the Status header. The main half merges; the arrow opens the options. */
+.merge-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  height: 30px;
+}
+.merge-split {
+  --merge-tone: var(--muted);
+}
+.merge-split.ready {
+  --merge-tone: var(--success);
+}
+.merge-split.blocked {
+  --merge-tone: var(--danger);
+}
+.merge-split-main,
+.merge-split-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--merge-tone) 55%, transparent);
+  background: color-mix(in srgb, var(--merge-tone) 22%, var(--surface));
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  font-weight: 600;
+  cursor: pointer;
+}
+.merge-split.caution .merge-split-main,
+.merge-split.caution .merge-split-toggle {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+}
+.merge-split-main {
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 8px 0 0 8px;
+}
+.merge-split-toggle {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+  border-left-color: color-mix(in srgb, var(--merge-tone) 35%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+.merge-split-main:hover:not(:disabled),
+.merge-split-toggle:hover:not(:disabled),
+.merge-split-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--merge-tone) 32%, var(--surface));
+}
+.merge-split-main:disabled,
+.merge-split-toggle:disabled {
+  border-color: var(--line);
+  background: var(--canvas);
+  color: var(--subtle);
+  cursor: default;
+}
+.merge-split-main:disabled + .merge-split-toggle:not(:disabled) {
+  border-color: var(--line);
+  background: var(--canvas);
+}
+.merge-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.merge-reasons li::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--subtle);
+  vertical-align: middle;
+}
+.merge-reasons.blocked li {
+  color: var(--danger);
+}
+.merge-reasons.blocked li::before {
+  background: var(--danger);
+}
+.merge-split.loading,
+.merge-split-note {
+  align-items: center;
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.merge-menu {
+  z-index: 30;
+  width: 300px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+}
+.merge-menu-label {
+  padding: 6px 10px 4px;
+  color: var(--subtle);
+  font-size: calc(var(--ui-font-scale, 1) * 10.5px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.merge-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--ui-font-scale, 1) * 12px);
+  text-align: left;
+  cursor: pointer;
+}
+.merge-menu-item:hover:not([aria-disabled='true']):not(:disabled),
+.merge-menu-item[data-highlighted] {
+  background: var(--hover);
+}
+.merge-menu-item[aria-disabled='true'],
+.merge-menu-item:disabled {
+  color: var(--subtle);
+  cursor: default;
+}
+.merge-menu-check {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  padding-top: 1px;
+  color: var(--accent);
+}
+.merge-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.merge-menu-text strong {
+  font-weight: 600;
+}
+.merge-menu-text span {
+  color: var(--muted);
+  font-size: calc(var(--ui-font-scale, 1) * 11px);
+  line-height: 1.4;
+}
+.merge-auto-note {
+  margin: 10px 0 0;
+}
+
 .section-head {
   display: flex;
   align-items: center;
@@ -9403,6 +9559,39 @@ button.hovercard-title:focus-visible {
   height: 28px;
   padding: 0 10px;
   font-size: calc(var(--ui-font-scale, 1) * 12px);
+}
+.section-head-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.section-head-chevron {
+  display: inline-flex;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+.section-head.collapsed .section-head-chevron {
+  transform: rotate(-90deg);
+}
+.section-head.collapsible.collapsed {
+  margin-bottom: -14px !important;
+  border-bottom-color: transparent;
+  border-radius: 9px;
+}
+.pull-diff-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.pull-diff-body[hidden] {
+  display: none;
 }
 /* Sections whose content already spaces itself with a gap. */
 .issue-comments > .section-head,
