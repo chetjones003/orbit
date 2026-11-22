@@ -107,7 +107,7 @@ jobs:
             const retainedCacheIds = new Set([...newestByFamily.values()].map((cache) => cache.id));
             for (const cache of caches) {
               if (retainedCacheIds.has(cache.id)) continue;
-              await api.actions.deleteActionsCache({ owner, repo, cache_id: cache.id });
+              await api.actions.deleteActionsCacheById({ owner, repo, cache_id: cache.id });
               core.info(`Deleted cache ${cache.key} (${cache.id})`);
             }
 
